@@ -45,7 +45,7 @@ void readImagesRK(const string& dataFolder, vector<string>& files) {
 
 int main(int argc, char **argv)
 {
-    //! Initialize
+    //! ROS Initialize
     ros::init(argc, argv, "test_vn");
     ros::start();
 
@@ -92,16 +92,16 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
-    cerr << "Finish test..." << endl;
+    cout << "Finish test..." << endl;
 
     system.requestFinish();
     system.waitForFinish();
 
     ros::shutdown();
 
-    cerr << "Rec close..." << endl;
+    cout << "Rec close..." << endl;
     rec.close();
-    cerr << "Exit test..." << endl;
+    cout << "Exit test..." << endl;
     return 0;
 
 }

@@ -139,7 +139,7 @@ void Track::mTrack(const Mat &img, const Se2& odo){
     int nTrackedOld = doTriangulate();
 
     // Need new KeyFrame decision
-    if( needNewKF(nTrackedOld, nMatched) ) {
+    if (needNewKF(nTrackedOld, nMatched)) {
 
         // Insert KeyFrame
         PtrKeyFrame pKF = make_shared<KeyFrame>(mFrame);

@@ -82,8 +82,7 @@ const int PATCH_SIZE = 31;
 const int HALF_PATCH_SIZE = 15;
 const int EDGE_THRESHOLD = 16;
 
-static void
-HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize, float harris_k)
+static void HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize, float harris_k)
 {
     CV_Assert( img.type() == CV_8UC1 && blockSize*blockSize <= 2048 );
 
@@ -579,7 +578,7 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint> >& allKeypoints)
                 if(hY<=0)
                     continue;
             }
-            
+
             float hX = cellW + 6;
 
             for(int j=0; j<levelCols; j++)
@@ -726,18 +725,19 @@ static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Ma
 
 void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                       OutputArray _descriptors)
-{ 
+{
     if(_image.empty())
         return;
 
     Mat image = _image.getMat(), mask = _mask.getMat();
     assert(image.type() == CV_8UC1 );
 
-    // Pre-compute the scale pyramids
+    // Pre-compute the scale pyramids 构建高斯金字塔
     ComputePyramid(image, mask);
 
-    vector < vector<KeyPoint> > allKeypoints;
-    ComputeKeyPoints(allKeypoints);
+    vector<vector<KeyPoint> > allKeypoints;
+    ComputeKeyPoints(allKeypoints);     //@Vance:这里没有用八叉树存储
+//    ComputeKeyPointsOctTree(allKeypoints);
 
     Mat descriptors;
 
@@ -755,20 +755,20 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
     _keypoints.clear();
     _keypoints.reserve(nkeypoints);
 
+    //计算每个特征点对应的描述子
     int offset = 0;
-    for (int level = 0; level < nlevels; ++level)
-    {
+    for (int level = 0; level < nlevels; ++level) {
         vector<KeyPoint>& keypoints = allKeypoints[level];
         int nkeypointsLevel = (int)keypoints.size();
 
         if(nkeypointsLevel==0)
             continue;
 
-        // preprocess the resized image
+        // preprocess the resized image 高斯模糊
         Mat& workingMat = mvImagePyramid[level];
         GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
 
-        // Compute the descriptors
+        // Compute the descriptors 计算描述子
         Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
         computeDescriptors(workingMat, keypoints, desc, pattern);
 
@@ -830,4 +830,329 @@ void ORBextractor::ComputePyramid(cv::Mat image, cv::Mat Mask)
 
 }
 
+void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)
+{
+    allKeypoints.resize(nlevels);
+
+    const float W = 30; //每个cell的大小
+
+    // 对每一层图像做处理
+    for (int level = 0; level < nlevels; ++level) {
+        const int minBorderX = EDGE_THRESHOLD-3;
+        const int minBorderY = minBorderX;
+        const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
+        const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
+
+        vector<cv::KeyPoint> vToDistributeKeys;
+        vToDistributeKeys.reserve(nfeatures*10);
+
+        const float width = (maxBorderX-minBorderX);
+        const float height = (maxBorderY-minBorderY);
+
+        const int nCols = width/W;
+        const int nRows = height/W;
+        const int wCell = ceil(width/nCols);    //重新计算每个cell的大小
+        const int hCell = ceil(height/nRows);
+
+        for (int i=0; i<nRows; i++)
+        {
+            const float iniY =minBorderY+i*hCell;
+            float maxY = iniY+hCell+6;
+
+            if(iniY>=maxBorderY-3)
+                continue;
+            if(maxY>maxBorderY)
+                maxY = maxBorderY;
+
+            for(int j=0; j<nCols; j++)
+            {
+                const float iniX =minBorderX+j*wCell;
+                float maxX = iniX+wCell+6;
+                if(iniX>=maxBorderX-6)
+                    continue;
+                if(maxX>maxBorderX)
+                    maxX = maxBorderX;
+
+                // FAST提取兴趣点, 自适应阈值
+                vector<cv::KeyPoint> vKeysCell;
+                FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+                     vKeysCell,iniThFAST,true);
+
+                //如果检测为空就降低阈值再进行检测
+                if(vKeysCell.empty())
+                {
+                    FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+                         vKeysCell,minThFAST,true);
+                }
+
+                if(!vKeysCell.empty())
+                {
+                    for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
+                    {
+                        (*vit).pt.x+=j*wCell;
+                        (*vit).pt.y+=i*hCell;
+                        vToDistributeKeys.push_back(*vit);
+                    }
+                }
+
+            }
+        }
+
+        vector<KeyPoint> & keypoints = allKeypoints[level];
+        keypoints.reserve(nfeatures);
+
+        // 根据mnFeaturesPerLevel,即该层的兴趣点数,对特征点进行剔除
+        keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
+                                      minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
+
+        const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
+
+        // Add border to coordinates and scale information
+        const int nkps = keypoints.size();
+        for(int i=0; i<nkps ; i++)
+        {
+            keypoints[i].pt.x+=minBorderX;
+            keypoints[i].pt.y+=minBorderY;
+            keypoints[i].octave=level;
+            keypoints[i].size = scaledPatchSize;
+        }
+    }
+
+    // compute orientations
+    for (int level = 0; level < nlevels; ++level)
+        computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
+}
+
+/*
+vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
+    const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
+{
+    // Compute how many initial nodes
+    const int nIni = round(static_cast<float>(maxX-minX)/(maxY-minY));
+
+    const float hX = static_cast<float>(maxX-minX)/nIni;
+
+    list<ExtractorNode> lNodes;
+
+    vector<ExtractorNode*> vpIniNodes;
+    vpIniNodes.resize(nIni);
+
+    for(int i=0; i<nIni; i++)
+    {
+        ExtractorNode ni;
+        ni.UL = cv::Point2i(hX*static_cast<float>(i),0);
+        ni.UR = cv::Point2i(hX*static_cast<float>(i+1),0);
+        ni.BL = cv::Point2i(ni.UL.x,maxY-minY);
+        ni.BR = cv::Point2i(ni.UR.x,maxY-minY);
+        ni.vKeys.reserve(vToDistributeKeys.size());
+
+        lNodes.push_back(ni);
+        vpIniNodes[i] = &lNodes.back();
+    }
+
+    //Associate points to childs
+    for(size_t i=0;i<vToDistributeKeys.size();i++)
+    {
+        const cv::KeyPoint &kp = vToDistributeKeys[i];
+        vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);
+    }
+
+    list<ExtractorNode>::iterator lit = lNodes.begin();
+
+    while(lit!=lNodes.end())
+    {
+        if(lit->vKeys.size()==1)
+        {
+            lit->bNoMore=true;
+            lit++;
+        }
+        else if(lit->vKeys.empty())
+            lit = lNodes.erase(lit);
+        else
+            lit++;
+    }
+
+    bool bFinish = false;
+
+    int iteration = 0;
+
+    vector<pair<int,ExtractorNode*> > vSizeAndPointerToNode;
+    vSizeAndPointerToNode.reserve(lNodes.size()*4);
+
+    // 根据兴趣点分布,利用N叉树方法对图像进行划分区域
+    while(!bFinish)
+    {
+        iteration++;
+
+        int prevSize = lNodes.size();
+
+        lit = lNodes.begin();
+
+        int nToExpand = 0;
+
+        vSizeAndPointerToNode.clear();
+
+        // 将目前的子区域经行划分
+        while(lit!=lNodes.end())
+        {
+            if(lit->bNoMore)
+            {
+                // If node only contains one point do not subdivide and continue
+                lit++;
+                continue;
+            }
+            else
+            {
+                // If more than one point, subdivide
+                ExtractorNode n1,n2,n3,n4;
+                lit->DivideNode(n1,n2,n3,n4); // 再细分成四个子区域
+
+                // Add childs if they contain points
+                if(n1.vKeys.size()>0)
+                {
+                    lNodes.push_front(n1);
+                    if(n1.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n2.vKeys.size()>0)
+                {
+                    lNodes.push_front(n2);
+                    if(n2.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n3.vKeys.size()>0)
+                {
+                    lNodes.push_front(n3);
+                    if(n3.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n4.vKeys.size()>0)
+                {
+                    lNodes.push_front(n4);
+                    if(n4.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+
+                lit=lNodes.erase(lit);
+                continue;
+            }
+        }
+
+        // Finish if there are more nodes than required features
+        // or all nodes contain just one point
+        if((int)lNodes.size()>=N || (int)lNodes.size()==prevSize)
+        {
+            bFinish = true;
+        }
+        // 当再划分之后所有的Node数大于要求数目时
+        else if(((int)lNodes.size()+nToExpand*3)>N)
+        {
+
+            while(!bFinish)
+            {
+
+                prevSize = lNodes.size();
+
+                vector<pair<int,ExtractorNode*> > vPrevSizeAndPointerToNode = vSizeAndPointerToNode;
+                vSizeAndPointerToNode.clear();
+
+                // 对需要划分的部分进行排序, 即对兴趣点数较多的区域进行划分
+                sort(vPrevSizeAndPointerToNode.begin(),vPrevSizeAndPointerToNode.end());
+                for(int j=vPrevSizeAndPointerToNode.size()-1;j>=0;j--)
+                {
+                    ExtractorNode n1,n2,n3,n4;
+                    vPrevSizeAndPointerToNode[j].second->DivideNode(n1,n2,n3,n4);
+
+                    // Add childs if they contain points
+                    if(n1.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n1);
+                        if(n1.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n2.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n2);
+                        if(n2.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n3.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n3);
+                        if(n3.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n4.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n4);
+                        if(n4.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+
+                    lNodes.erase(vPrevSizeAndPointerToNode[j].second->lit);
+
+                    if((int)lNodes.size()>=N)
+                        break;
+                }
+
+                if((int)lNodes.size()>=N || (int)lNodes.size()==prevSize)
+                    bFinish = true;
+
+            }
+        }
+    }
+
+    // Retain the best point in each node
+    // 保留每个区域响应值最大的一个兴趣点
+    vector<cv::KeyPoint> vResultKeys;
+    vResultKeys.reserve(nfeatures);
+    for(list<ExtractorNode>::iterator lit=lNodes.begin(); lit!=lNodes.end(); lit++)
+    {
+        vector<cv::KeyPoint> &vNodeKeys = lit->vKeys;
+        cv::KeyPoint* pKP = &vNodeKeys[0];
+        float maxResponse = pKP->response;
+
+        for(size_t k=1;k<vNodeKeys.size();k++)
+        {
+            if(vNodeKeys[k].response>maxResponse)
+            {
+                pKP = &vNodeKeys[k];
+                maxResponse = vNodeKeys[k].response;
+            }
+        }
+
+        vResultKeys.push_back(*pKP);
+    }
+
+    return vResultKeys;
+}
+*/
 } //namespace se2lam

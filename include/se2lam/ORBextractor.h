@@ -38,7 +38,7 @@ namespace se2lam
 class ORBextractor
 {
 public:
-    
+
     enum {HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 8, int scoreType=FAST_SCORE, int fastTh = 20);
@@ -61,6 +61,9 @@ protected:
 
     void ComputePyramid(cv::Mat image, cv::Mat Mask=cv::Mat());
     void ComputeKeyPoints(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
+                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
 
     std::vector<cv::Point> pattern;
 

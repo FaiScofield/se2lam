@@ -48,7 +48,11 @@ const int ORBmatcher::TH_HIGH = 100;
 const int ORBmatcher::TH_LOW = 75;
 const int ORBmatcher::HISTO_LENGTH = 30;
 
-
+/**
+ * Constructor
+ * @param nnratio  ratio of the best and the second score
+ * @param checkOri check orientation
+ */
 ORBmatcher::ORBmatcher(float nnratio, bool checkOri): mfNNratio(nnratio), mbCheckOrientation(checkOri)
 {
 }
@@ -109,6 +113,7 @@ void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, 
 
 // Bit set count operation from
 // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+///@Vance:计算马氏距离?
 int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
 {
     const int *pa = a.ptr<int32_t>();
@@ -127,6 +132,18 @@ int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
     return dist;
 }
 
+/**
+ * @brief 通过词包，对关键帧的特征点进行跟踪，该函数用于闭环检测时两个关键帧间的特征点匹配
+ *
+ * 通过bow对pKF和F中的特征点进行快速匹配（不属于同一node的特征点直接跳过匹配） \n
+ * 对属于同一node的特征点通过描述子距离进行匹配 \n
+ * 根据匹配，更新vpMatches12 \n
+ * 通过距离阈值、比例阈值和角度投票进行剔除误匹配
+ * @param  pKF1               KeyFrame1
+ * @param  pKF2               KeyFrame2
+ * @param  vpMatches12        pKF2中与pKF1匹配的MapPoint，null表示没有匹配
+ * @return                    成功匹配的数量
+ */
 int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
                 map<int, int> &mapMatches12, bool bIfMPOnly)
 {

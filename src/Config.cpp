@@ -82,7 +82,7 @@ double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
 void Config::readConfig(const std::string &path){
     DataPath = path;
-    std::string camParaPath = path + "/config/CamConfig.yml";
+    std::string camParaPath = path + "../se2_config/CamConfig.yml";
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
     cv::Mat _mK, _mD, _rvec, rvec, _T, T, R;
@@ -123,7 +123,7 @@ void Config::readConfig(const std::string &path){
     PrjMtrxEye = Kcam * cv::Mat::eye(3,4,CV_32FC1);
     camPara.release();
 
-    std::string settingsPath = path + "/config/Settings.yml";
+    std::string settingsPath = path + "../se2_config/Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 

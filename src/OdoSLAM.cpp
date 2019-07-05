@@ -46,8 +46,7 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
     mpVocabulary = new ORBVocabulary();
     bool bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
     if (!bVocLoad) {
-        cerr << "[ERROR] Wrong path to vocabulary. " << endl;
-        cerr << "[ERROR] Falied to open at: " << strVocFile << endl;
+        cerr << "[ERROR] Wrong path to vocabulary, Falied to open it." << endl;
         return;
     }
     cerr << "[SYSTEM] Vocabulary loaded!" << endl << endl;
@@ -56,17 +55,16 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
 void OdoSLAM::setDataPath(const char *strDataPath){
     cout << "[SYSTEM] Set Data Path to: " << strDataPath << endl;
     Config::readConfig(strDataPath);
-
 }
 
 cv::Mat OdoSLAM::getCurrentVehiclePose()
 {
-    return cvu::inv( mpMap->getCurrentFramePose() ) * Config::cTb;
+    return cvu::inv(mpMap->getCurrentFramePose()) * Config::cTb;
 }
 
 cv::Mat OdoSLAM::getCurrentCameraPoseWC()
 {
-    return cvu::inv( mpMap->getCurrentFramePose() );
+    return cvu::inv(mpMap->getCurrentFramePose());
 }
 
 cv::Mat OdoSLAM::getCurrentCameraPoseCW()
@@ -120,6 +118,8 @@ void OdoSLAM::start() {
     mbFinished = false;
 
     if (se2lam::Config::LOCALIZATION_ONLY) {
+
+        cout << "Localization_only mode." << endl;
 
         thread threadLocalizer(&se2lam::Localizer::run, mpLocalizer);
 
@@ -274,6 +274,7 @@ void OdoSLAM::checkAllExit() {
     }
 }
 
+//@Vance:这个没实现？
 void OdoSLAM::clear() {
 
 }
@@ -288,7 +289,7 @@ void OdoSLAM::waitForFinish(){
         }
     }
     std::this_thread::sleep_for(std::chrono::microseconds(20));
-    cerr << "wait for finish finished..." << endl;
+    cerr << "wait for finish thread finished..." << endl;
 }
 
 bool OdoSLAM::ok(){
