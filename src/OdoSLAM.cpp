@@ -34,25 +34,27 @@ OdoSLAM::OdoSLAM(){
 }
 
 void OdoSLAM::setVocFileBin(const char *strVoc){
-    cerr << "\n###\n"
+    cout << "\n###\n"
          << "###  se2lam: On-SE(2) Localization and Mapping with SE(2)-XYZ Constraints.\n"
          << "###\n" << endl;
 
+    cout << endl << "[SYSTEM] Set ORB Vocabulary to: " << strVoc << endl;
+    cout << "[SYSTEM] Loading ORB Vocabulary. This could take a while." << endl;
+
     //Init ORB BoW
-    cerr << endl << "Loading ORB Vocabulary. This could take a while." << endl;
     string strVocFile = strVoc;
     mpVocabulary = new ORBVocabulary();
     bool bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
     if (!bVocLoad) {
-        cerr << "Wrong path to vocabulary. " << endl;
-        cerr << "Falied to open at: " << strVocFile << endl;
+        cerr << "[ERROR] Wrong path to vocabulary. " << endl;
+        cerr << "[ERROR] Falied to open at: " << strVocFile << endl;
         return;
     }
-    cerr << "Vocabulary loaded!" << endl << endl;
+    cerr << "[SYSTEM] Vocabulary loaded!" << endl << endl;
 }
 
 void OdoSLAM::setDataPath(const char *strDataPath){
-
+    cout << "[SYSTEM] Set Data Path to: " << strDataPath << endl;
     Config::readConfig(strDataPath);
 
 }

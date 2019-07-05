@@ -7,14 +7,15 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
 
 # c++ 11 support for g2o, multi-thread and shared_ptr
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-old-style-cast")
 
 find_package(Eigen REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(CSparse REQUIRED)
 find_package(Cholmod REQUIRED)
+#set(G2O_ROOT "/home/vance/opt/g2o-20160424")
 find_package(G2O REQUIRED)
-
+find_package(Boost COMPONENTS filesystem REQUIRED)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -76,6 +77,7 @@ include_directories(
   ${CSPARSE_INCLUDE_DIR}
   ${Cholmod_INCLUDE_DIR}
   ${G2O_INCLUDE_DIR}
+  ${Boost_INCLUDE_DIRS}
 )
 
 list(APPEND LINK_LIBS
@@ -101,39 +103,57 @@ add_library(se2lam ${DIR_SRCS} ${IncFiles})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(se2lam
-${LINK_LIBS}
-${G2O_LIBS}
-DBoW2se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so
 )
 
 ## Build an exe
 add_executable(test_vn test/test_vn.cpp)
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(test_vn
-se2lam
-${LINK_LIBS}
-${G2O_LIBS}
-#${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+#    ${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so
 )
 
 
 add_executable(datapub test/datapub.cpp)
 target_link_libraries(datapub
-se2lam
-${LINK_LIBS}
+    se2lam
+    ${LINK_LIBS}
 )
 
 add_executable(imgview test/imgview.cpp)
 target_link_libraries(imgview
-se2lam
-${LINK_LIBS}
+    se2lam
+    ${LINK_LIBS}
 )
 
 
 # Build a subscriber test for vn dataset
 add_executable(test_ros test/test_ros.cpp)
 target_link_libraries(test_ros
-se2lam
-${LINK_LIBS}
+    se2lam
+    ${LINK_LIBS}
+)
+
+add_executable(test_rk rk/test_rk.cpp)
+target_link_libraries(test_rk
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+)
+
+add_executable(rkOdomToSE2 rk/rkOdomToSE2.cpp)
+target_link_libraries(rkOdomToSE2
+    se2lam
+    ${LINK_LIBS}
+)
+
+add_executable(rkImageUndistort rk/rkImageUndistort.cpp)
+target_link_libraries(rkImageUndistort
+    se2lam
+    ${LINK_LIBS}
+    ${Boost_LIBRARIES}
 )
