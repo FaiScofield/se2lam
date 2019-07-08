@@ -82,7 +82,8 @@ double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
 void Config::readConfig(const std::string &path){
     DataPath = path;
-    std::string camParaPath = path + "../se2_config/CamConfig.yml";
+    std::string camParaPath = path + "/config/CamConfig.yml";
+//    std::string camParaPath = path + "../se2_config/CamConfig.yml";   //!@Vance: for rk dataset
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
     cv::Mat _mK, _mD, _rvec, rvec, _T, T, R;
@@ -92,7 +93,7 @@ void Config::readConfig(const std::string &path){
     camPara["camera_matrix"] >> _mK;
     camPara["distortion_coefficients"] >> _mD;
     camPara["rvec_b_c"] >> _rvec;
-    camPara["tvec_b_c"] >> _T;
+    camPara["tvec_b_c"] >> _T;  //!@Vance: 单位mm
     _mK.convertTo(Kcam,CV_32FC1);
     _mD.convertTo(Dcam,CV_32FC2);
     _rvec.convertTo(rvec,CV_32FC1);
@@ -107,7 +108,7 @@ void Config::readConfig(const std::string &path){
             "- Camera distortion: " << std::endl << " " <<
             Dcam << std::endl <<
             "- Img size: " << std::endl << " " <<
-            ImgSize << std::endl << std::endl;
+            ImgSize << std::endl;
     // bTc: camera extrinsic
     cv::Rodrigues(rvec,R);
     bTc = cv::Mat::eye(4,4,CV_32FC1);
@@ -118,12 +119,14 @@ void Config::readConfig(const std::string &path){
     cTb = cv::Mat::eye(4,4,CV_32FC1);
     RT.copyTo(cTb.rowRange(0,3).colRange(0,3));
     t.copyTo(cTb.rowRange(0,3).col(3));
-
+    std::cerr << "- Camera extrinsic (Body to Camera): " << std::endl << " " <<
+              bTc << std::endl << std::endl ;
 
     PrjMtrxEye = Kcam * cv::Mat::eye(3,4,CV_32FC1);
     camPara.release();
 
-    std::string settingsPath = path + "../se2_config/Settings.yml";
+    std::string settingsPath = path + "/config/Settings.yml";
+//    std::string settingsPath = path + "../se2_config/Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 
@@ -212,7 +215,7 @@ Se2 Se2::operator +(const Se2& that) const{
 }
 
 // Same as: that.inv() + *this
-Se2 Se2::operator -(const Se2& that) const{
+Se2 Se2::operator -(const Se2& that) const {
     float dx = x - that.x;
     float dy = y - that.y;
     float dth = normalize_angle(theta - that.theta);
@@ -222,7 +225,7 @@ Se2 Se2::operator -(const Se2& that) const{
     return Se2(c*dx+s*dy, -s*dx+c*dy, dth);
 }
 
-cv::Mat Se2::toCvSE3()const
+cv::Mat Se2::toCvSE3() const
 {
     float c = cos(theta);
     float s = sin(theta);

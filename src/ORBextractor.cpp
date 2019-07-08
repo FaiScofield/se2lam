@@ -829,7 +829,7 @@ void ORBextractor::ComputePyramid(cv::Mat image, cv::Mat Mask)
     }
 
 }
-
+/*
 void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)
 {
     allKeypoints.resize(nlevels);
@@ -922,7 +922,7 @@ void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoin
     for (int level = 0; level < nlevels; ++level)
         computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
 }
-
+*/
 /*
 vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
     const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)

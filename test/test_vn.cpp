@@ -41,7 +41,6 @@ int main(int argc, char **argv)
     int i = 0;
 
     for(; i < n && system.ok(); i++) {
-
         string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         std::getline(rec, line);

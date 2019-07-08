@@ -23,8 +23,8 @@ public:
     double cov[9]; // 3*3, RowMajor
 };
 
-const int FRAME_GRID_ROWS = 48;
-const int FRAME_GRID_COLS = 64;
+const int FRAME_GRID_ROWS = 24; // default 48
+const int FRAME_GRID_COLS = 32; // default 64
 
 class KeyFrame;
 class Frame
@@ -76,8 +76,8 @@ public:
 
 
     // pose info: pose to ref KF, pose to World, odometry raw.
-    cv::Mat Tcr;
-    cv::Mat Tcw;
+    cv::Mat Tcr;    //!@Vance: Current frame 2 Reference frame
+    cv::Mat Tcw;    //!@Vance: Current frame 2 World frame
 
     Se2 Trb;     // ref KF to body
     Se2 Twb;     // world to body

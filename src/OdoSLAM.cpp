@@ -49,7 +49,7 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
         cerr << "[ERROR] Wrong path to vocabulary, Falied to open it." << endl;
         return;
     }
-    cerr << "[SYSTEM] Vocabulary loaded!" << endl << endl;
+    cout << "[SYSTEM] Vocabulary loaded!" << endl << endl;
 }
 
 void OdoSLAM::setDataPath(const char *strDataPath){
@@ -98,16 +98,14 @@ void OdoSLAM::start() {
 
     mpMapStorage->setMap(mpMap);
 
-    mpMapPub->setFramePub(mpFramePub);
-
     mpLocalizer->setMap(mpMap);
     mpLocalizer->setORBVoc(mpVocabulary);
     mpLocalizer->setSensors(mpSensors);
 
-
     mpFramePub->setLocalizer(mpLocalizer);
-    mpMapPub->setLocalizer(mpLocalizer);
 
+    mpMapPub->setFramePub(mpFramePub);
+    mpMapPub->setLocalizer(mpLocalizer);
 
     if (Config::USE_PREV_MAP){
         mpMapStorage->setFilePath(Config::READ_MAP_FILE_PATH, Config::READ_MAP_FILE_NAME);

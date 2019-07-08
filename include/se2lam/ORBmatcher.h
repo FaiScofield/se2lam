@@ -40,7 +40,7 @@ namespace se2lam
 {
 
 class ORBmatcher
-{    
+{
 public:
 
     ORBmatcher(float nnratio=0.6, bool checkOri=true);
@@ -66,11 +66,12 @@ public:
     bool mbCheckOrientation;
 
     int MatchByWindow(const Frame& frame1, Frame& frame2,
-                           std::vector<cv::Point2f>& vbPrevMatched, const int winSize,
-                           std::vector<int>& vnMatches12, const int levelOffset = 1,
-                           const int minLevel = 0, const int maxLevel = 8);
+                      std::vector<cv::Point2f>& vbPrevMatched, const int winSize,
+                      std::vector<int>& vnMatches12, const int levelOffset = 1,
+                      const int minLevel = 0, const int maxLevel = 8);
 
-    int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs, const int winSize, const int levelOffset,
+    int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
+                          const int winSize, const int levelOffset,
                           std::vector<int>& vMatchesIdxMP);
 
 

@@ -19,6 +19,7 @@ Frame::Frame(){}
 Frame::Frame(const Mat &im, const Se2& odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef){
 
     mpORBExtractor = extractor;
+    // 输入图像去畸变
     undistort(im, img, Config::Kcam, Config::Dcam);
     //im.copyTo(img);
 
@@ -31,7 +32,8 @@ Frame::Frame(const Mat &im, const Se2& odo, ORBextractor *extractor, const Mat &
     //undistortKeyPoints(K, distCoef);
     keyPointsUn = keyPoints;
 
-    if(mbInitialComputations){
+    if (mbInitialComputations) {
+        // 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
         mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS)/(maxXUn-minXUn);
@@ -44,17 +46,18 @@ Frame::Frame(const Mat &im, const Se2& odo, ORBextractor *extractor, const Mat &
     nextId++;
 
     //Scale Levels Info
-    mnScaleLevels = mpORBExtractor->GetLevels();
-    mfScaleFactor = mpORBExtractor->GetScaleFactor();
+    mnScaleLevels = mpORBExtractor->GetLevels();        // default 5
+    mfScaleFactor = mpORBExtractor->GetScaleFactor();   // default 1.2
 
+    // 计算金字塔每层尺度和高斯噪声
     mvScaleFactors.resize(mnScaleLevels);
     mvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
     for(int i=1; i<mnScaleLevels; i++)
     {
-        mvScaleFactors[i]=mvScaleFactors[i-1]*mfScaleFactor;
-        mvLevelSigma2[i]=mvScaleFactors[i]*mvScaleFactors[i];
+        mvScaleFactors[i] = mvScaleFactors[i-1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
     }
 
     mvInvLevelSigma2.resize(mvLevelSigma2.size());
@@ -62,6 +65,7 @@ Frame::Frame(const Mat &im, const Se2& odo, ORBextractor *extractor, const Mat &
         mvInvLevelSigma2[i] = 1.0/mvLevelSigma2[i];
 
     // Assign Features to Grid Cells
+    // 将特征点分cell存放
     int nReserve = 0.5*N/(FRAME_GRID_COLS*FRAME_GRID_ROWS);
     for(unsigned int i=0; i<FRAME_GRID_COLS;i++)
         for (unsigned int j=0; j<FRAME_GRID_ROWS;j++)
@@ -72,7 +76,7 @@ Frame::Frame(const Mat &im, const Se2& odo, ORBextractor *extractor, const Mat &
         cv::KeyPoint &kp = keyPointsUn[i];
 
         int nGridPosX, nGridPosY;
-        if(PosInGrid(kp,nGridPosX,nGridPosY))
+        if (PosInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
     }
 
@@ -183,20 +187,20 @@ void Frame::undistortKeyPoints(const Mat& K, const Mat& D){
 void Frame::computeBoundUn(const Mat& K, const Mat& D){
     float x = (float)img.cols;
     float y = (float)img.rows;
-    if(D.at<float>(0) == 0.){
+    if (D.at<float>(0) == 0.){
         minXUn = 0.f;
         minYUn = 0.f;
         maxXUn = x;
         maxYUn = y;
         return;
     }
-    Mat_<Point2f> mat(1,4);
+    Mat_<Point2f> mat(1, 4);
     mat << Point2f(0,0), Point2f(x,0), Point2f(0,y), Point2f(x,y);
-    undistortPoints(mat,mat,K,D,Mat(),K);
-    minXUn = std::min(mat(0).x,mat(2).x);
-    minYUn = std::min(mat(0).y,mat(1).y);
-    maxXUn = std::max(mat(1).x,mat(3).x);
-    maxYUn = std::max(mat(2).y,mat(3).y);
+    undistortPoints(mat, mat, K, D, Mat(), K);
+    minXUn = std::min(mat(0).x, mat(2).x);
+    minYUn = std::min(mat(0).y, mat(1).y);
+    maxXUn = std::max(mat(1).x, mat(3).x);
+    maxYUn = std::max(mat(2).y, mat(3).y);
 }
 
 bool Frame::inImgBound(Point2f pt){
@@ -212,6 +216,7 @@ bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
     posY = round((kp.pt.y-minYUn)*mfGridElementHeightInv);
 
     //Keypoint's coordinates are undistorted, which could cause to go out of the image
+    //特征点坐标是经过畸变矫正过的，可能会超出图像
     if(posX<0 || posX>=FRAME_GRID_COLS || posY<0 || posY>=FRAME_GRID_ROWS)
         return false;
 

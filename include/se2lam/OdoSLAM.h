@@ -59,7 +59,6 @@ public:
     bool ok();
 
 private:
-
     Map* mpMap;
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;

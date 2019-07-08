@@ -21,11 +21,13 @@ bool Sensors::update() {
     return odo_updated && img_updated;
 }
 
+// 当Sensors类里的当前帧数据没有被读取，则锁住当前线程
+// 直到数据被Localizer读走，则从system接收新的数据进来
 void Sensors::updateImg(const cv::Mat &img_, double time_)
 {
     std::unique_lock<std::mutex> lock(mutex_img);
 
-    while(img_updated)
+    while (img_updated)
     {
         cndvSensorUpdate.wait(lock);
     }

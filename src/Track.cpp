@@ -61,7 +61,6 @@ void Track::run(){
     ros::Rate rate(Config::FPS*5);
 
     while(ros::ok()){
-
         cv::Mat img;
         Se2 odo;
 
@@ -71,55 +70,56 @@ void Track::run(){
         bool sensorUpdated = mpSensors->update();
         Point3f odo_3f;
 
-        if(sensorUpdated) {
+        if (sensorUpdated) {
             mpSensors->readData(odo_3f, img);
             odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
             {
                 locker lock(mMutexForPub);
                 bool noFrame = !(Frame::nextId);
-                if(noFrame)
-                    mCreateFrame(img, odo);
+                if (noFrame)
+                    mCreateFrame(img, odo); // 为初始帧创建帧信息
                 else
-                    mTrack(img, odo);
+                    mTrack(img, odo);       // 非初始帧则进行tracking,计算位姿
             }
             mpMap->setCurrentFramePose(mFrame.Tcw);
             lastOdom = odo;
         }
 
-
         timer.stop();
-        //cerr << "Tracking consuming time: " << timer.time << " ms" << endl;
+//        clog << "[Track] Tracking consuming time: " << timer.time << " ms" << endl;
 
         if(checkFinish())
             break;
 
-
         rate.sleep();
     }
 
-    cerr << "Exiting tracking .." << endl;
+    cout << "[Track] Exiting tracking .." << endl;
 
     setFinish();
 }
 
 void Track::mCreateFrame(const Mat &img, const Se2& odo){
 
-
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    mFrame.Twb = Se2(0,0,0);
+    mFrame.Twb = Se2(0, 0, 0);
     mFrame.Tcw = Config::cTb.clone();
 
-    if(mFrame.keyPoints.size() > 100){
-        printf("-- INFO TR: Create first frame with %d features.\n", mFrame.N);
-        mpKF = make_shared<KeyFrame>(mFrame);
+    if (mFrame.keyPoints.size() > 100){
+        cout << endl << "=============================================" << endl;
+        cout << "[Track] Create first frame with " << mFrame.N
+             << " features in frame " << mFrame.id << endl;
+        cout << "=============================================" << endl << endl;
+        mpKF = make_shared<KeyFrame>(mFrame);   // 首帧为关键帧
         mpMap->insertKF(mpKF);
-        resetLocalTrack();
-    }else
+        resetLocalTrack();  // 数据转位参考帧
+    } else {
+        cout << "[Track] Failed to create first frame for too less keyPoints: "
+             << mFrame.keyPoints.size() << endl;
         Frame::nextId = 0;
+    }
 }
-
-
 
 void Track::mTrack(const Mat &img, const Se2& odo){
 
@@ -129,9 +129,11 @@ void Track::mTrack(const Mat &img, const Se2& odo){
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
     ORBmatcher matcher(0.9);
-    int nMatched = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);
-
-    nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
+    int nMatchedTmp = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);
+    // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
+    int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
+    cout << "[Track] ORBmatcher get valid/tatal matches " << nMatched
+         << "/" << nMatchedTmp << endl;
 
     updateFramePose();
 
@@ -144,7 +146,7 @@ void Track::mTrack(const Mat &img, const Se2& odo){
         // Insert KeyFrame
         PtrKeyFrame pKF = make_shared<KeyFrame>(mFrame);
 
-        assert( mpMap->getCurrentKF()->mIdKF == mpKF->mIdKF);
+        assert(mpMap->getCurrentKF()->mIdKF == mpKF->mIdKF);
         mpKF->preOdomFromSelf = make_pair(pKF, preSE2);
         pKF->preOdomToSelf = make_pair(mpKF, preSE2);
         mpLocalMapper->addNewKF(pKF, mLocalMPs, mMatchIdx, mvbGoodPrl);
@@ -159,14 +161,21 @@ void Track::mTrack(const Mat &img, const Se2& odo){
     timer.stop();
 }
 
-void Track::updateFramePose(){
-    mFrame.Trb = mFrame.odom - mpKF->odom;
-    Se2 dOdo = mpKF->odom - mFrame.odom;
-    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;
+///@Vance: 公式待验证
+//!@Vance: odom是绝对值而非增量
+void Track::updateFramePose() {
+    //@Vance: 参考帧Body->当前帧Body?
+    mFrame.Trb = mFrame.odom - mpKF->odom;  //!@Vance: 这个变量好像没用？
+    Se2 dOdo = mpKF->odom - mFrame.odom;    //!@Vance: delta_odom,即T_cr?
+    //@Vance: 当前帧Body->参考帧body?
+    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;    //!@Vance: 为何是右乘？
+    //@Vance: 当前帧Body->World
     mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
-    mFrame.Twb = mpKF->Twb + (mFrame.odom - mpKF->odom);
+    //@Vance: 当前帧World->Body（即body在World下的绝对坐标）
+    mFrame.Twb = mpKF->Twb + (mFrame.odom - mpKF->odom);    //!@Vance: 即 mpKF->Twb + mFrame.Trb
+//    mFrame.Twb = mpKF->Twb + mFrame.Trb;
 
-    // preintegration
+    // preintegration 预积分
     Eigen::Map<Vector3d> meas(preSE2.meas);
     Se2 odok = mFrame.odom - lastOdom;
     Vector2d odork(odok.x, odok.y);
@@ -187,10 +196,10 @@ void Track::updateFramePose(){
     Sigmak = Sigma_k_1;
 }
 
-
 void Track::resetLocalTrack(){
     mFrame.Tcr = cv::Mat::eye(4,4,CV_32FC1);
     mFrame.Trb = Se2(0,0,0);
+    // cv::KeyPoint 转 cv::Point2f
     KeyPoint::convert(mFrame.keyPoints, mPrevMatched);
     mRefFrame = mFrame;
     mLocalMPs = mpKF->mViewMPs;
@@ -202,8 +211,6 @@ void Track::resetLocalTrack(){
     for(int i = 0; i < 9; i++)
         preSE2.cov[i] = 0;
 }
-
-
 
 int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
                       Mat& img1, Mat& img2,
@@ -219,7 +226,6 @@ int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
 
     return !mMatchIdx.empty();
 }
-
 
 void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat& cTc, g2o::Matrix6d &Info_se3){
 
@@ -322,12 +328,12 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
 
     vector<unsigned char> mask;
 
-    if(pt1.size() != 0)
+    if (pt1.size() != 0)
         findFundamentalMat(pt1, pt2, mask);
 
     int nInlier = 0;
-    for(int i = 0, iend = mask.size(); i < iend; i++){
-        if(!mask[i])
+    for (int i = 0, iend = mask.size(); i < iend; i++){
+        if (!mask[i])
             matches[idx[i]] = -1;
         else
             nInlier++;
@@ -340,7 +346,6 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
     }
 
     return nInlier;
-
 }
 
 bool Track::needNewKF(int nTrackedOldMP, int nMatched){
