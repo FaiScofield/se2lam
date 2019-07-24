@@ -42,6 +42,17 @@ public:
     void requestFinish();
     bool isFinished();
 
+    void writePose();
+
+    enum eTrackingState {
+        NO_READY_YET = -1,
+        OK = 0,
+        TEMPORARY_LOST = 1,
+        LOST = 2
+    };
+    eTrackingState mState;
+    eTrackingState mLastState;
+
 private:
     // only useful when odo time not sync with img time
     //float mTimeOdo;

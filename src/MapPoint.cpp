@@ -18,18 +18,18 @@ typedef lock_guard<mutex> locker;
 
 int MapPoint::mNextId = 0;
 
-MapPoint::MapPoint(){
+MapPoint::MapPoint() {
     mbNull = false;
     mbGoodParallax = false;
     mNormalVector = Point3f(0,0,0);
-    mMainKF = NULL;
+    mMainKF = nullptr;
     mObservations.clear();
 }
 
 MapPoint::MapPoint(Point3f pos, bool goodPrl) {
     mObservations.clear();
     mNormalVector = Point3f(0,0,0);
-    mMainKF = NULL;
+    mMainKF = nullptr;
 
     mbNull = false;
     mPos = pos;
@@ -55,9 +55,9 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis){
     locker lock(mMutexObs);
     mbNull = true;
     mbGoodParallax = false;
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++){
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
         PtrKeyFrame pKF = it->first;
-        if(pKF->hasObservation(pThis))
+        if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
     }
     mObservations.clear();
@@ -68,9 +68,9 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis){
 void MapPoint::setNull(){
     mbNull = true;
     mbGoodParallax = false;
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++){
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++){
         PtrKeyFrame pKF = it->first;
-        if(pKF->hasObservation(it->second))
+        if (pKF->hasObservation(it->second))
             pKF->eraseObservation(it->second);
     }
     mObservations.clear();
@@ -90,7 +90,7 @@ void MapPoint::eraseObservation(const PtrKeyFrame &pKF){
     Point3f normPos = viewPos * (1.f / cv::norm(viewPos) );
 
     mObservations.erase(pKF);
-    if(!mbNull && mObservations.size() == 0){
+    if (!mbNull && mObservations.size() == 0){
         setNull();
     } else {
         updateMainKFandDescriptor();
@@ -127,7 +127,7 @@ void MapPoint::updateParallax(const PtrKeyFrame &pKF){
 
     // Get the oldest KF in the last 6 KFs
     PtrKeyFrame pKF0 = mObservations.begin()->first;
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
         PtrKeyFrame pKF_ = it->first;
         if(pKF->mIdKF - pKF_->mIdKF > 6)
             continue;
@@ -162,7 +162,7 @@ void MapPoint::updateParallax(const PtrKeyFrame &pKF){
             cv::Mat xyzinfoW = Rcw0.t() * toCvMat(xyzinfo0) * Rcw0;
 
             // Update measurements in other KFs
-            for(auto it = mObservations.begin(), iend = mObservations.end(); it!=iend; it++){
+            for (auto it = mObservations.begin(), iend = mObservations.end(); it!=iend; it++){
                 PtrKeyFrame pKF_k = it->first;
                 if(pKF_k->mIdKF == pKF->mIdKF || pKF_k->mIdKF == pKF0->mIdKF) {
                     continue;
@@ -209,9 +209,9 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp){
 std::set<PtrKeyFrame> MapPoint::getObservations(){
     locker lock(mMutexObs);
     std::set<PtrKeyFrame> pKFs;
-    for(auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
         PtrKeyFrame pKF = i->first;
-        if(pKF->isNull())
+        if (pKF->isNull())
             continue;
         pKFs.insert(i->first);
     }
@@ -225,19 +225,18 @@ Point2f MapPoint::getMainMeasure(){
 
 void MapPoint::updateMainKFandDescriptor(){
 
-
-    if(mbNull || mObservations.empty())
+    if (mbNull || mObservations.empty())
         return;
 
     vector<Mat> vDes;
     vector<PtrKeyFrame> vKFs;
     vDes.reserve(mObservations.size());
     vKFs.reserve(mObservations.size());
-    for(auto i = mObservations.begin(), iend = mObservations.end(); i!=iend; i++){
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i!=iend; i++){
         PtrKeyFrame pKF = i->first;
         lock_guard<mutex> lck(pKF->mMutexDes);
 
-        if(!pKF->isNull()){
+        if (!pKF->isNull()) {
             vKFs.push_back(pKF);
             vDes.push_back(pKF->descriptors.row(i->second));
         }
@@ -251,9 +250,9 @@ void MapPoint::updateMainKFandDescriptor(){
 
     float Distances[N][N];
 
-    for(int i = 0; i < N; i++){
+    for (int i = 0; i < N; i++) {
         Distances[i][i] = 0;
-        for(int j = i+1; j < N; j++){
+        for (int j = i+1; j < N; j++) {
             int distij = ORBmatcher::DescriptorDistance(vDes[i], vDes[j]);
             Distances[i][j] = distij;
             Distances[j][i] = distij;
@@ -263,11 +262,11 @@ void MapPoint::updateMainKFandDescriptor(){
     // Take the descriptor with least median distance to the rest
     int bestMedian = INT_MAX;
     int bestIdx = 0;
-    for(int i = 0; i < N; i++){
+    for (int i = 0; i < N; i++) {
         vector<int> vDists(Distances[i], Distances[i]+N);
         std::sort(vDists.begin(), vDists.end());
         int median = vDists[0.5*(N-1)];
-        if(median < bestMedian){
+        if (median < bestMedian) {
             bestMedian = median;
             bestIdx = i;
         }
@@ -275,7 +274,7 @@ void MapPoint::updateMainKFandDescriptor(){
 
     mMainDescriptor = vDes[bestIdx].clone();
 
-    if(mMainKF != NULL && mMainKF->mIdKF == vKFs[bestIdx]->mIdKF)
+    if (mMainKF != nullptr && mMainKF->mIdKF == vKFs[bestIdx]->mIdKF)
         return;
 
     mMainKF = vKFs[bestIdx];
@@ -291,9 +290,9 @@ void MapPoint::updateMainKFandDescriptor(){
 
 void MapPoint::updateMeasureInKFs(){
     locker lock(mMutexObs);
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it!=iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it!=iend; it++) {
         PtrKeyFrame pKF = it->first;
-        if(pKF->isNull())
+        if (pKF->isNull())
             continue;
 
         Mat Tcw = pKF->getPose();
@@ -311,9 +310,9 @@ int MapPoint::countObservation() {
 // This MP would be replaced and abandoned later
 void MapPoint::mergedInto(const shared_ptr<MapPoint> &pMP) {
     locker lock(mMutexObs);
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
         PtrKeyFrame pKF = it->first;
-        if(pKF->isNull())
+        if (pKF->isNull())
             continue;
         int idx = it->second;
         pKF->setObservation(pMP, idx);

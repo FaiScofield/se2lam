@@ -39,16 +39,14 @@ void FramePublish::run(){
 
     ros::NodeHandle nh;
     image_transport::ImageTransport it(nh);
-    image_transport::Publisher pub = it.advertise("/camera/framepub",1);
+    image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
 
     float fps = Config::FPS;
     ros::Rate rate(fps);
 
     while(nh.ok() && ros::ok()){
-
         if (!mbIsLocalize) {
-            if( mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches) ){
-
+            if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
                 WorkTimer timer;
                 timer.start();
 
@@ -71,15 +69,12 @@ void FramePublish::run(){
                 cv::resize(imgOut, imgOut, cv::Size(640,480));
                 sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgOut).toImageMsg();
                 pub.publish(msg);
-
             }
-        }
-        else {
-
+        } else {
             locker lockImg(mpLocalizer->mMutexImg);
 
-            if (mpLocalizer == NULL) continue;
-            if (mpLocalizer->mpKFCurr == NULL) continue;
+            if (mpLocalizer == nullptr) continue;
+            if (mpLocalizer->mpKFCurr == nullptr) continue;
             if (mpLocalizer->mImgCurr.cols == 0) continue;
 
             Mat imgCurr;
@@ -115,14 +110,13 @@ cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, cons
     Mat out = trainImg.clone();
     if (trainImg.channels() == 1)
         cvtColor(trainImg, out, CV_GRAY2BGR);
-    for (unsigned i = 0; i < matches.size(); i++) {
 
+    for (unsigned i = 0; i < matches.size(); i++) {
         if (matches[i] < 0) {
             continue;
 //            Point2f ptRef = queryKeys[i].pt;
 //            circle(out, ptRef, 5, Scalar(255, 0, 0), 1);
-        }
-        else {
+        } else {
             Point2f ptRef = queryKeys[i].pt;
             Point2f ptCurr = trainKeys[matches[i]].pt;
             circle(out, ptCurr, 5, Scalar(0, 255, 0), 1);
@@ -141,15 +135,14 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat &img, vect
         Point2f pt1 = keys[i].pt;
         if (matched[i] < 0) {
             circle(out, pt1, 5, Scalar(255, 0, 0), 1);
-        }
-        else {
+        } else {
             circle(out, pt1, 5, Scalar(0, 0, 255), 1);
         }
     }
     return out.clone();
 }
 
-Mat FramePublish::drawFrame() {
+cv::Mat FramePublish::drawFrame() {
 
     if (!mbIsLocalize) {
         if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
@@ -172,7 +165,7 @@ Mat FramePublish::drawFrame() {
             imgOut.copyTo(mImgOut);
         }
     }
-    else if (mpLocalizer != NULL && mpLocalizer->mpKFCurr != NULL && mpLocalizer->mImgCurr.cols != 0){
+    else if (mpLocalizer != nullptr && mpLocalizer->mpKFCurr != nullptr && mpLocalizer->mImgCurr.cols != 0){
 
         locker lockImg(mpLocalizer->mMutexImg);
 
@@ -202,6 +195,36 @@ Mat FramePublish::drawFrame() {
     return mImgOut.clone();
 }
 
+cv::Mat FramePublish::drawMatch() {
+    cv::Mat imgCurr, imgRef;
+    mImg.copyTo(imgCurr);
+    mImgRef.copyTo(imgRef);
+    if (imgCurr.channels() == 1)
+        cvtColor(imgCurr, imgCurr, CV_GRAY2BGR);
+    if (imgRef.channels() == 1)
+        cvtColor(imgRef, imgRef, CV_GRAY2BGR);
+
+    cv::Mat res(imgCurr.rows, imgCurr.cols+imgRef.cols, CV_8UC3);
+    imgCurr.copyTo(res.colRange(0, imgCurr.cols));
+    imgRef.copyTo(res.colRange(imgCurr.cols, imgCurr.cols+imgRef.cols));
+    if (!mbIsLocalize) {
+        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
+            for (int i = 0; i < matches.size(); ++i) {
+                if (matches[i] < 0) {
+                    continue;
+                } else {
+                    Point2f ptRef = kpRef[i].pt + Point2f(imgCurr.cols, 0);
+                    Point2f ptCurr = kp[matches[i]].pt;
+                    circle(res, ptCurr, 3, Scalar(0, 255, 0), 1);
+                    circle(res, ptRef, 3, Scalar(0, 255, 0), 1);
+                    line(res, ptRef, ptCurr, Scalar(255, 255, 0, 0.8));
+                }
+            }
+        }
+    }
+
+    return res.clone();
+}
 
 void FramePublish::setLocalizer(Localizer* localizer){
     mpLocalizer = localizer;

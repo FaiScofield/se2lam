@@ -38,8 +38,8 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
          << "###  se2lam: On-SE(2) Localization and Mapping with SE(2)-XYZ Constraints.\n"
          << "###\n" << endl;
 
-    cout << endl << "[SYSTEM] Set ORB Vocabulary to: " << strVoc << endl;
-    cout << "[SYSTEM] Loading ORB Vocabulary. This could take a while." << endl;
+    cout << endl << "[System] Set ORB Vocabulary to: " << strVoc << endl;
+    cout << "[System] Loading ORB Vocabulary. This could take a while." << endl;
 
     //Init ORB BoW
     string strVocFile = strVoc;
@@ -49,11 +49,11 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
         cerr << "[ERROR] Wrong path to vocabulary, Falied to open it." << endl;
         return;
     }
-    cout << "[SYSTEM] Vocabulary loaded!" << endl << endl;
+    cout << "[System] Vocabulary loaded!" << endl << endl;
 }
 
 void OdoSLAM::setDataPath(const char *strDataPath){
-    cout << "[SYSTEM] Set Data Path to: " << strDataPath << endl;
+    cout << "[System] Set Data Path to: " << strDataPath << endl;
     Config::readConfig(strDataPath);
 }
 
@@ -117,7 +117,7 @@ void OdoSLAM::start() {
 
     if (se2lam::Config::LOCALIZATION_ONLY) {
 
-        cout << "Localization_only mode." << endl;
+        cout << "[System] =====>> Localization_only mode." << endl;
 
         thread threadLocalizer(&se2lam::Localizer::run, mpLocalizer);
 
@@ -128,12 +128,11 @@ void OdoSLAM::start() {
 
         threadLocalizer.detach();
         threadMapPub.detach();
-
     }
     // SLAM case
     else {
 
-        cout << "Running SLAM" << endl;
+        cout << "[System] =====>> Running SLAM" << endl;
 
         mpMapPub->mbIsLocalize = false;
         mpFramePub->mbIsLocalize = false;
@@ -148,12 +147,10 @@ void OdoSLAM::start() {
         threadLocalMapper.detach();
         threadGlobalMapper.detach();
         threadMapPub.detach();
-
     }
 
     thread threadWait(&wait, this);
     threadWait.detach();
-
 }
 
 void OdoSLAM::wait(OdoSLAM* system){
@@ -185,7 +182,7 @@ void OdoSLAM::wait(OdoSLAM* system){
 
     system->mbFinished = true;
 
-    cerr << "System is cleared .." << endl;
+    cerr << "[System] System is cleared .." << endl;
 
 }
 

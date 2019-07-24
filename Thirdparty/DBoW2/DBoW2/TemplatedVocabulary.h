@@ -1155,7 +1155,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
   v.clear();
   fv.clear();
 
-  if(empty()) // safe for subclasses
+  if (empty()) // safe for subclasses
   {
     return;
   }
@@ -1214,7 +1214,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
     }
   } // if m_weighting == ...
 
-  if(must) v.normalize(norm);
+  if (must) v.normalize(norm);
 }
 
 // --------------------------------------------------------------------------

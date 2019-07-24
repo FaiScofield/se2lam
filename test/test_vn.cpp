@@ -52,16 +52,16 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
-    cerr << "Finish test..." << endl;
+    cout << "[Main] Finish test..." << endl;
 
     system.requestFinish();
     system.waitForFinish();
 
     ros::shutdown();
 
-    cerr << "Rec close..." << endl;
+    cout << "[Main] Rec close..." << endl;
     rec.close();
-    cerr << "Exit test..." << endl;
+    cout << "[Main] Exit test..." << endl;
     return 0;
 
 }

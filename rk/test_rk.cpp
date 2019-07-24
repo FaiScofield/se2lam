@@ -21,7 +21,7 @@ void readImagesRK(const string& dataFolder, vector<string>& files) {
 
     fs::path path(dataFolder);
     if (!fs::exists(path)) {
-        cerr << "Data folder doesn't exist!" << endl;
+        cerr << "[Main] Data folder doesn't exist!" << endl;
         return;
     }
 
@@ -34,10 +34,10 @@ void readImagesRK(const string& dataFolder, vector<string>& files) {
     }
 
     if (files.empty()) {
-        cerr << "Not image data in the folder!" << endl;
+        cerr << "[Main] Not image data in the folder!" << endl;
         return;
     } else
-        cout << "Read " << files.size() << " files in the folder." << endl;
+        cout << "[Main] Read " << files.size() << " files in the folder." << endl;
 
     sort(files.begin(), files.end());
 }
@@ -74,13 +74,14 @@ int main(int argc, char **argv)
     string imageFolder = se2lam::Config::DataPath + "/slamimg";
     vector<string> allImages;
     readImagesRK(imageFolder, allImages);
-    n = allImages.size();
+//    n = allImages.size();
+    n = 800;
     for(; i < n && system.ok(); i++) {
         string fullImgName = allImages[i];
-        cout << " ===> reading image: " << fullImgName << endl;
+//        cout << "[Main] reading image: " << fullImgName << endl;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
-            cerr << "No image data for image " << fullImgName << endl;
+            cerr << "[Main] No image data for image " << fullImgName << endl;
             continue;
         }
         std::getline(rec, line);
@@ -92,16 +93,16 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
-    cout << "Finish test..." << endl;
+    cout << "[Main] Finish test..." << endl;
 
     system.requestFinish();
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "Rec close..." << endl;
+    cout << "[Main] Rec close..." << endl;
     rec.close();
-    cout << "Exit test..." << endl;
+    cout << "[Main] Exit test..." << endl;
     return 0;
 
 }

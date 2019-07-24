@@ -31,7 +31,8 @@ class Frame
 {
 public:
     Frame();
-    Frame(const cv::Mat &im, const Se2& odo, ORBextractor* extractor, const cv::Mat &K, const cv::Mat &distCoef);
+    Frame(const cv::Mat &im, const Se2& odo, ORBextractor* extractor,
+          const cv::Mat &K, const cv::Mat &distCoef);
 
     Frame(const Frame& f);
     Frame& operator=(const Frame& f);
@@ -55,7 +56,8 @@ public:
     std::vector<cv::KeyPoint> keyPointsUn;
     cv::Mat descriptors;
     int N;
-    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int minLevel=-1, const int maxLevel=-1) const;
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y,
+        const float  &r, const int minLevel=-1, const int maxLevel=-1) const;
 
     // Scale Pyramid Info
     int mnScaleLevels;
@@ -76,8 +78,8 @@ public:
 
 
     // pose info: pose to ref KF, pose to World, odometry raw.
-    cv::Mat Tcr;    //!@Vance: Current frame 2 Reference frame
-    cv::Mat Tcw;    //!@Vance: Current frame 2 World frame
+    cv::Mat Tcr;    //!@Vance: Current Camera frame to Reference Camera frame
+    cv::Mat Tcw;    //!@Vance: Current Camera frame to World frame
 
     Se2 Trb;     // ref KF to body
     Se2 Twb;     // world to body

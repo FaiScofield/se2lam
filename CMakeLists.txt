@@ -157,3 +157,14 @@ target_link_libraries(rkImageUndistort
     ${LINK_LIBS}
     ${Boost_LIBRARIES}
 )
+
+find_package(PythonLibs 2.7)
+find_package(Pangolin)
+include_directories(${Pangolin_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+add_executable(ICPtrajectory rk/ICPtrajectory.cpp)
+target_link_libraries(ICPtrajectory
+    se2lam
+    ${LINK_LIBS}
+    ${Pangolin_LIBRARIES}
+    ${PYTHON_LIBRARIES}
+)

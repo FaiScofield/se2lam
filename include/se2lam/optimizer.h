@@ -35,11 +35,11 @@ typedef g2o::CameraParameters CamPara;
 
 inline Eigen::Quaterniond toQuaterniond(const Eigen::Vector3d &rot_vector)
 {
-    double angle = rot_vector.norm();
-    if(angle <= 1e-14)
+    double angle = rot_vector.norm();   // 返回squareNorm()的开方根,即向量的模
+    if (angle <= 1e-14)
         return Eigen::Quaterniond(1, 0, 0, 0);
     else
-        return Eigen::Quaterniond(Eigen::AngleAxisd(angle, rot_vector.normalized()));
+        return Eigen::Quaterniond(Eigen::AngleAxisd(angle, rot_vector.normalized())); // 归一化
 }
 
 inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond &q_)
@@ -48,6 +48,10 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond &q_)
     return angle_axis.angle() * angle_axis.axis();
 }
 
+
+//! BaseUnaryEdge 一元边
+//! SE3Quat SE3李代数，由r和t组成，r为四元素。转向量Vector7d后平移在前，旋转在后（虚部在前，实部在后）
+//! VertexSE3Expmap 相机位姿节点，6个维度
 class G2O_TYPES_SBA_API EdgeSE3ExpmapPrior: public g2o::BaseUnaryEdge<6, g2o::SE3Quat, g2o::VertexSE3Expmap> {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

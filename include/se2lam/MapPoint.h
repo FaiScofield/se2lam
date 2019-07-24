@@ -27,6 +27,10 @@ public:
     MapPoint(cv::Point3f pos, bool goodPrl);
     ~MapPoint();
 
+    /**
+     * @brief getObservations
+     * @return 返回能观测到此MP的KF集合
+     */
     std::set<PtrKeyFrame> getObservations();
 
     bool hasObservation(const PtrKeyFrame& pKF);

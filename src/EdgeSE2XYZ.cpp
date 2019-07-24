@@ -39,14 +39,9 @@ g2o::SE2 SE3ToSE2(const SE3Quat &_se3)
 }
 
 
-EdgeSE2XYZ::EdgeSE2XYZ()
-{
-}
+EdgeSE2XYZ::EdgeSE2XYZ() {}
 
-EdgeSE2XYZ::~EdgeSE2XYZ()
-{
-}
-
+EdgeSE2XYZ::~EdgeSE2XYZ() {}
 
 bool EdgeSE2XYZ::read(std::istream &is)
 {
@@ -58,20 +53,25 @@ bool EdgeSE2XYZ::write(std::ostream &os) const
     return true;
 }
 
+//! 计算重投影误差，2维
 void EdgeSE2XYZ::computeError()
 {
     VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
     VertexSBAPointXYZ* v2 = static_cast<VertexSBAPointXYZ*>(_vertices[1]);
 
+    //!@Vance: v1是Twb，所以这里要用逆
     SE3Quat Tbw = SE2ToSE3(v1->estimate().inverse());
     SE3Quat Tcw = Tcb * Tbw;
 
+    // 地图点的观测在相机坐标系下的坐标
     Vector3d lc = Tcw.map(v2->estimate());
 
+    // 误差=观测-投影, 这里是 投影-观测, 效果一样
+    // cam_map()把相机坐标系下三维点用内参转换为图像坐标输出
     _error = cam->cam_map(lc) -  Vector2d(_measurement);
 }
 
-
+//! 计算雅克比
 void EdgeSE2XYZ::linearizeOplus()
 {
     VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
@@ -92,12 +92,15 @@ void EdgeSE2XYZ::linearizeOplus()
 
     const double& fx = cam->focal_length;
 
+    // 误差对空间点在相机坐标系下的坐标的偏导
     Matrix23d J_pi;
     J_pi << fx * zc_inv, 0, -fx*lc(0)*zc_inv2,
             0, fx * zc_inv, -fx*lc(1)*zc_inv2;
 
+    // 误差对空间点的偏导2x3
     Matrix23d J_pi_Rcw = J_pi * Rcw;
 
+    // 误差对相机位姿se2的偏导2x3
     _jacobianOplusXi.block<2,2>(0,0) = -J_pi_Rcw.block<2,2>(0,0);
     _jacobianOplusXi.block<2,1>(0,2) = (J_pi_Rcw * skew(lw-pi)).block<2,1>(0,2);
 

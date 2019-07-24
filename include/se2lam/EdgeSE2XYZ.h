@@ -29,6 +29,9 @@ g2o::SE3Quat SE2ToSE3(const g2o::SE2& _se2);
 
 g2o::SE2 SE3ToSE2(const g2o::SE3Quat& _se3);
 
+//! 2元边
+//! 2维测量，测量类型为Vector2d，代表像素的重投影误差
+//! 两种顶点类型分别是VertexSE2、VertexSBAPointXYZ，即此2元边连接SE2李群位姿点和三维地图点
 class EdgeSE2XYZ : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
 {
 public:

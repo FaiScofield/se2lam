@@ -71,6 +71,7 @@ public:
 
     void updateLocalGraph();
 
+    //! 修剪冗余的KF
     bool pruneRedundantKF();
 
     void loadLocalGraph(SlamOptimizer& optimizer);
@@ -110,8 +111,8 @@ protected:
     bool isEmpty;
 
     //! Global Map
-    std::set<PtrMapPoint, MapPoint::IdLessThan> mMPs;
-    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mKFs;
+    std::set<PtrMapPoint, MapPoint::IdLessThan> mMPs;   //!@Vance: 全局地图点集合，以id升序排序
+    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mKFs;   //!@Vance: 全局关键帧集合，以id升序排序
 
     //! Local Map
     std::vector<PtrMapPoint> mLocalGraphMPs;

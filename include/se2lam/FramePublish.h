@@ -35,10 +35,12 @@ public:
                      std::vector<int> matched);
     cv::Mat drawFrame();
 
+    cv::Mat drawMatch();
+
     void setLocalizer(Localizer* localizer);
 
     bool mbIsLocalize;
-    Localizer* mpLocalizer;    
+    Localizer* mpLocalizer;
 
 private:
 
@@ -50,6 +52,8 @@ private:
 
     cv::Mat mImg, mImgRef;
     cv::Mat mImgOut;
+
+    cv::Mat mImgMatch;
 
 };
 

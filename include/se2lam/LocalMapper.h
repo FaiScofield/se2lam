@@ -10,6 +10,7 @@
 
 #include "Map.h"
 #include "optimizer.h"
+
 namespace se2lam{
 
 //#define TIME_TO_LOG_LOCAL_BA
@@ -23,11 +24,27 @@ public:
     void run();
 
     void setMap(Map *pMap);
-
+    ///
+    /// \brief setGlobalMapper
+    /// \param pGlobalMapper
+    ///
     void setGlobalMapper(GlobalMapper* pGlobalMapper);
 
+    /**
+     * @brief addNewKF
+     * @param pKF - key frame pointer
+     * @param localMPs - local map points
+     * @param vMatched12 - matches
+     * @param vbGoodPrl - vector of flags for map points with good parallax
+     */
     void addNewKF(PtrKeyFrame &pKF, const std::vector<cv::Point3f>& localMPs, const std::vector<int> &vMatched12, const std::vector<bool>& vbGoodPrl);
 
+    /**
+     * @brief findCorrespd
+     * @param vMatched12
+     * @param localMPs
+     * @param vbGoodPrl
+     */
     void findCorrespd(const std::vector<int> &vMatched12, const std::vector<cv::Point3f> &localMPs, const std::vector<bool>& vbGoodPrl);
 
     void removeOutlierChi2();
@@ -41,18 +58,16 @@ public:
     void setGlobalBABegin(bool value);
 
     void printOptInfo(const SlamOptimizer & _optimizer);    // For debugging by hbtang
-    bool mbPrintDebugInfo;
-
 
     void requestFinish();
     bool isFinished();
 
-    std::mutex mutexMapper;
-
     void updateLocalGraphInMap();
 
-    void pruneRedundantKfInMap();
+    void pruneRedundantKFinMap();
 
+    bool mbPrintDebugInfo;
+    std::mutex mutexMapper;
 
 protected:
     Map* mpMap;
@@ -64,16 +79,14 @@ protected:
     bool mbAcceptNewKF;
     bool mbGlobalBABegin;
 
-    mutex mMutexLocalGraph;
+    std::mutex mMutexLocalGraph;
 
     bool checkFinish();
     void setFinish();
     bool mbFinishRequested;
     bool mbFinished;
+
     std::mutex mMutexFinish;
-
-
-
 };
 
 }

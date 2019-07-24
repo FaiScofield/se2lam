@@ -20,7 +20,7 @@
 
 namespace se2lam{
 
-struct SE3Constraint{
+struct SE3Constraint {
 public:
     cv::Mat measure;
     cv::Mat info;
@@ -38,7 +38,7 @@ typedef shared_ptr<SE3Constraint> PtrSE3Cstrt;
 class MapPoint;
 typedef shared_ptr<MapPoint> PtrMapPoint;
 
-class KeyFrame: public Frame{
+class KeyFrame: public Frame {
 public:
     KeyFrame();
     KeyFrame(const Frame &frame);
@@ -80,15 +80,19 @@ public:
     void eraseObservation(int idx);
 
     // Whether a MP is observed by this KF
+    //!@Vance: 输入的MP是否能被当前KF观测到
     bool hasObservation(const PtrMapPoint& pMP);
 
     // Whether the index in image KeyPoints corresponds to an observed MP
+    //!@Vance: MP对应的图像特征点（以序号做输入）能否被当前KF观测到
     bool hasObservation(int idx);
 
     // Get an observed MP by an index
+    //!@Vance: 从图像特征点id获取观测点MP
     PtrMapPoint getObservation(int id);
 
     // Get the corresponding index of an observed MP
+    //!@Vance:
     int getFtrIdx(const PtrMapPoint& pMP);
 
     // Set a new MP in location index (used in MP merge)
@@ -99,13 +103,13 @@ public:
     void setViewMP(cv::Point3f pt3f, int idx, Eigen::Matrix3d info);
 
     // KeyFrame contraints: From this or To this
-    std::map< shared_ptr<KeyFrame>, SE3Constraint > mFtrMeasureFrom;
-    std::map< shared_ptr<KeyFrame>, SE3Constraint > mFtrMeasureTo;
-    std::pair< shared_ptr<KeyFrame>, SE3Constraint > mOdoMeasureFrom;
-    std::pair< shared_ptr<KeyFrame>, SE3Constraint > mOdoMeasureTo;
+    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureFrom;
+    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureTo;
+    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureFrom;
+    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureTo;
 
-    std::pair< shared_ptr<KeyFrame>, PreSE2 > preOdomFromSelf;
-    std::pair< shared_ptr<KeyFrame>, PreSE2 > preOdomToSelf;
+    std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomFromSelf;
+    std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomToSelf;
 
     void addFtrMeasureFrom(shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
     void addFtrMeasureTo(shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
@@ -124,11 +128,7 @@ public:
     bool mbBowVecExist;
     vector<PtrMapPoint> GetMapPointMatches();
 
-    // Copy Image
-//    void copyImgTo(cv::Mat & imgRet);
-
 protected:
-
     std::map<PtrMapPoint, int> mObservations;
     std::map<int, PtrMapPoint> mDualObservations;
 

@@ -12,6 +12,7 @@ namespace cvu{
 using namespace cv;
 using namespace std;
 
+//!@Vance: 避免直接求逆
 Mat inv(const Mat &T4x4){
     assert(T4x4.cols == 4 && T4x4.rows == 4);
     Mat RT = T4x4.rowRange(0,3).colRange(0,3).t();
@@ -42,7 +43,14 @@ Mat sk_sym(const Point3f _v){
     return mat;
 }
 
-
+/**
+ * @brief triangulate
+ * @param pt1 - first point in uv frame
+ * @param pt2 - second point in uv frame
+ * @param P1 -
+ * @param P2
+ * @return
+ */
 Point3f triangulate(const Point2f &pt1, const Point2f &pt2, const Mat &P1, const Mat &P2){
     Mat A(4,4,CV_32FC1);
 
@@ -88,6 +96,7 @@ Point2f camprjc(const Mat &_K, const Point3f &_pt)
     Point3f uvw = Matx33f(_K) * _pt;
     return Point2f(uvw.x/uvw.z, uvw.y/uvw.z);
 }
+
 
 bool checkParallax(const Point3f &o1, const Point3f &o2, const Point3f &pt3, int minDegree){
     float minCos[4] = {0.9998, 0.9994, 0.9986, 0.9976};

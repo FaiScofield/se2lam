@@ -120,7 +120,7 @@ double normalizeAngle(double angle) {
 
 int main(int argc, char *argv[])
 {
-    if (argc < 1) {
+    if (argc < 2) {
         cerr << "[Error] Usage: " << argv[0] << " <rk_dataset_folder>" << endl;
         return -1;
     }
@@ -173,11 +173,13 @@ int main(int argc, char *argv[])
         cerr << "[Error] Wrong output file path." << endl;
         return -1;
     }
+    int skipFrames = 0;
     for (auto & t : timeOdomFrame) {
         size_t r = static_cast<size_t>(
                     upper_bound(timeOdomRaw.begin(), timeOdomRaw.end(), t) - timeOdomRaw.begin());
         if (r > timeOdomRaw.size() - 1) {
             cout << "[Warning] 跳过此帧，因为找不到它的对应帧. " << t << endl;
+            skipFrames++;
             continue;
         }
         if (r == 0) {
@@ -197,6 +199,7 @@ int main(int argc, char *argv[])
              << " " << x << " " << y << " " << normalizeAngle(theta) << "\n";
     }
 
+    printf("因为找不到对应帧共计跳过%d帧.\n", skipFrames);
     cout << "done." << endl;
     return 0;
 }

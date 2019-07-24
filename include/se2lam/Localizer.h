@@ -18,7 +18,7 @@
 namespace se2lam {
 
 class Localizer {
-public:    
+public:
     //! Functions
     Localizer();
     ~Localizer();
@@ -44,7 +44,7 @@ public:
     void DoLocalBA();
     void DetectIfLost();
 
-    // Local map  
+    // Local map
     void UpdateLocalMap(int searchLevel = 3);
     void UpdateLocalMapTrack();
     void ResetLocalMap();
@@ -71,7 +71,9 @@ public:
     void requestFinish();
     bool isFinished();
 
-
+    cv::Point3f getCurrentFrameOdom() {
+        return mpSensors->getOdo();
+    }
 
 public:
     //! Variables

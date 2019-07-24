@@ -13,7 +13,7 @@
 #include "LocalMapper.h"
 #include "Localizer.h"
 #include "FramePublish.h"
-
+#include <opencv2/core/core.hpp>
 
 namespace se2lam {
 
@@ -40,6 +40,8 @@ public:
     void PublishKeyFrames();
     void PublishCameraCurr(const cv::Mat &Twc);
 
+    void PublishOdomInformation();
+
 private:
 
     ros::NodeHandle nh;
@@ -58,6 +60,8 @@ private:
     visualization_msgs::Marker mFeatGraph;
     visualization_msgs::Marker mOdoGraph;
     visualization_msgs::Marker mMST;
+
+    visualization_msgs::Marker mOdomRawGraph;
 
 
     float mPointSize;

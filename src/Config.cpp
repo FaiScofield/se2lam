@@ -82,8 +82,8 @@ double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
 void Config::readConfig(const std::string &path){
     DataPath = path;
-    std::string camParaPath = path + "/config/CamConfig.yml";
-//    std::string camParaPath = path + "../se2_config/CamConfig.yml";   //!@Vance: for rk dataset
+//    std::string camParaPath = path + "/config/CamConfig.yml";
+    std::string camParaPath = path + "../se2_config/CamConfig.yml";   //!@Vance: for rk dataset
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
     cv::Mat _mK, _mD, _rvec, rvec, _T, T, R;
@@ -102,8 +102,8 @@ void Config::readConfig(const std::string &path){
     fyCam = Kcam.at<float>(1,1);
     ImgSize.height = height;
     ImgSize.width = width;
-    std::cerr << "# Load camera config ..." << std::endl;
-    std::cerr << "- Camera matrix: " << std::endl << " " <<
+    std::cout << "# Load camera config ..." << std::endl;
+    std::cout << "- Camera matrix: " << std::endl << " " <<
             Kcam << std::endl <<
             "- Camera distortion: " << std::endl << " " <<
             Dcam << std::endl <<
@@ -119,14 +119,14 @@ void Config::readConfig(const std::string &path){
     cTb = cv::Mat::eye(4,4,CV_32FC1);
     RT.copyTo(cTb.rowRange(0,3).colRange(0,3));
     t.copyTo(cTb.rowRange(0,3).col(3));
-    std::cerr << "- Camera extrinsic (Body to Camera): " << std::endl << " " <<
+    std::cout << "- Camera extrinsic (Body to Camera): " << std::endl << " " <<
               bTc << std::endl << std::endl ;
 
     PrjMtrxEye = Kcam * cv::Mat::eye(3,4,CV_32FC1);
     camPara.release();
 
-    std::string settingsPath = path + "/config/Settings.yml";
-//    std::string settingsPath = path + "../se2_config/Settings.yml";
+//    std::string settingsPath = path + "/config/Settings.yml";
+    std::string settingsPath = path + "../se2_config/Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 

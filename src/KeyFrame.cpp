@@ -20,7 +20,7 @@ int KeyFrame::mNextIdKF = 0;
 
 KeyFrame::KeyFrame(){
     mbNull = false;
-    PtrKeyFrame pKF = NULL;
+    PtrKeyFrame pKF = nullptr;
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
     mOdoMeasureTo = make_pair(pKF, SE3Constraint());
 
@@ -35,8 +35,7 @@ KeyFrame::KeyFrame(){
     mvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
-    for(int i=1; i<mnScaleLevels; i++)
-    {
+    for (int i=1; i<mnScaleLevels; i++) {
         mvScaleFactors[i]=mvScaleFactors[i-1]*mfScaleFactor;
         mvLevelSigma2[i]=mvScaleFactors[i]*mvScaleFactors[i];
     }
@@ -58,7 +57,7 @@ KeyFrame::KeyFrame(const Frame& frame):
     mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d> >(sz, Eigen::Matrix3d::Identity()*-1);
     mNextIdKF++;
     mIdKF = mNextIdKF;
-    PtrKeyFrame pKF = NULL;
+    PtrKeyFrame pKF = nullptr;
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
     mOdoMeasureTo = make_pair(pKF, SE3Constraint());
 
@@ -85,11 +84,11 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame>& pThis){
 
 
     // Handle Feature based constraints
-    for(auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end();
+    for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end();
         it != iend; it++){
         it->first->mFtrMeasureTo.erase(pThis);
     }
-    for(auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end();
+    for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end();
         it != iend; it++){
         it->first->mFtrMeasureFrom.erase(pThis);
     }
@@ -98,7 +97,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame>& pThis){
     mFtrMeasureTo.clear();
 
     // Handle observations in MapPoints
-    for(auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++ ){
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++ ){
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
@@ -166,13 +165,13 @@ bool KeyFrame::isNull(){
 bool KeyFrame::hasObservation(const PtrMapPoint &pMP){
     locker lock(mMutexObs);
     map<PtrMapPoint,int>::iterator it = mObservations.find(pMP);
-    return(it!=mObservations.end());
+    return (it != mObservations.end());
 }
 
 bool KeyFrame::hasObservation(int idx) {
     locker lock(mMutexObs);
     auto it = mDualObservations.find(idx);
-    return(it != mDualObservations.end());
+    return (it != mDualObservations.end());
 }
 
 Mat KeyFrame::getPose(){
@@ -194,7 +193,7 @@ void KeyFrame::setPose(const Se2 &_Twb)
 
 void KeyFrame::addObservation(PtrMapPoint pMP, int idx){
     locker lock(mMutexObs);
-    if(pMP->isNull())
+    if (pMP->isNull())
         return;
     mObservations[pMP] = idx;
     mDualObservations[idx] = pMP;
@@ -244,11 +243,11 @@ void KeyFrame::setOdoMeasureTo(shared_ptr<KeyFrame> pKF, const Mat &_mea, const 
 void KeyFrame::ComputeBoW(ORBVocabulary* _pVoc)
 {
     lock_guard<mutex> lck(mMutexDes);
-    if(mBowVec.empty() || mFeatVec.empty()) {
+    if (mBowVec.empty() || mFeatVec.empty()) {
         vector<cv::Mat> vCurrentDesc = toDescriptorVector(descriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)
         // We assume the vocabulary tree has 6 levels, change the 4 otherwise
-        _pVoc->transform(vCurrentDesc,mBowVec,mFeatVec,4);
+        _pVoc->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
     }
     mbBowVecExist = true;
 }
@@ -274,9 +273,8 @@ vector<PtrMapPoint> KeyFrame::GetMapPointMatches(){
         iter = mDualObservations.find(i);
 
         if (iter == mDualObservations.end()) {
-            ret.push_back(pMP);
-        }
-        else {
+            ret.push_back(pMP); //!@Vance: Why存入空点？
+        } else {
             pMP = iter->second;
             ret.push_back(pMP);
         }
@@ -288,7 +286,7 @@ vector<PtrMapPoint> KeyFrame::GetMapPointMatches(){
 void KeyFrame::setObservation(const PtrMapPoint &pMP, int idx) {
     locker lock(mMutexObs);
 
-    if(mDualObservations.find(idx) == mDualObservations.end())
+    if (mDualObservations.find(idx) == mDualObservations.end())
         return;
 
     mObservations.erase(mDualObservations[idx]);

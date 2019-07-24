@@ -36,6 +36,8 @@ public:
 
     void forceSetUpdate(bool val);
 
+    cv::Point3f getOdo() { return mOdo; }
+
 protected:
 
     cv::Mat mImg;
