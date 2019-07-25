@@ -40,11 +40,11 @@ Visualization Manager:
         Camera: true
         CovisGraph: false
         FeatGraph: false
-        KeyFramesActive: false
-        KeyFramesNegative: false
-        MapPointsActive: false
+        KeyFramesActive: true
+        KeyFramesNegative: true
+        MapPointsActive: true
         MapPointsNegative: false
-        MapPointsNow: false
+        MapPointsNow: true
         OdoGraph: true
         OdomRawGraph: true
       Queue Size: 100
@@ -98,16 +98,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10.5431376
+      Distance: 51.5254974
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.728344262
-        Y: 2.94363856
-        Z: -0.122685604
+        X: 3.44974756
+        Y: -0.729751706
+        Z: 0.00820762385
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false

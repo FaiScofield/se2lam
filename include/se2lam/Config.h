@@ -125,6 +125,9 @@ public:
     static void readConfig(const std::string& path);
     static bool acceptDepth(float depth);
 
+    static bool SAVE_MATCH_IMAGE;
+    static std::string SAVE_MATCH_IMAGE_PATH;
+    static int ImgStartIndex;
 };
 
 }//namespace se2lam

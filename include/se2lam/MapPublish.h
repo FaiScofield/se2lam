@@ -42,6 +42,7 @@ public:
 
     void PublishOdomInformation();
 
+
 private:
 
     ros::NodeHandle nh;

@@ -71,13 +71,13 @@ public:
     void requestFinish();
     bool isFinished();
 
-    cv::Point3f getCurrentFrameOdom() {
-        return mpSensors->getOdo();
-    }
+    cv::Point3f getCurrentFrameOdom();
+    Se2 getCurrKFPose();
+    Se2 getRefKFPose();
 
 public:
     //! Variables
-    bool mbIsTracked;
+    bool mbIsTracked;   // 定位成功标志
 
     Map* mpMap;
     ORBextractor* mpORBextractor;

@@ -57,8 +57,7 @@ bool GlobalMapper::CheckGMReady() {
         mbNewKF = true;
         mpKFCurr = pKFCurr;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }

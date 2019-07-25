@@ -44,6 +44,8 @@ public:
 
     void writePose();
 
+//    bool relocalization();
+
     enum eTrackingState {
         NO_READY_YET = -1,
         OK = 0,
@@ -91,6 +93,8 @@ private:
     // preintegration on SE2
     PreSE2 preSE2;
     Se2 lastOdom;
+
+    int nLostFrames;
 
 public:
 

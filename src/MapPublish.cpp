@@ -196,7 +196,6 @@ MapPublish::MapPublish(Map* pMap){
     mOdomRawGraph.color.b = 0.0;
     mOdomRawGraph.color.a = 0.7;
 
-
     tf::Transform tfT;
     tfT.setIdentity();
     tfb.sendTransform(tf::StampedTransform(tfT,ros::Time::now(),"/se2lam/World","/se2lam/Camera"));
@@ -216,7 +215,6 @@ MapPublish::MapPublish(Map* pMap){
     publisher.publish(mOdoGraph);
 
     publisher.publish(mOdomRawGraph);
-
 }
 
 MapPublish::~MapPublish(){}
@@ -227,7 +225,9 @@ void MapPublish::PublishKeyFrames(){
 
     mCovisGraph.points.clear();
     mFeatGraph.points.clear();
-    mOdoGraph.points.clear();
+
+    if (!mbIsLocalize)
+        mOdoGraph.points.clear();
 
     //Camera is a pyramid. Define in camera coordinate system
     float d = mCameraSize;
@@ -249,6 +249,7 @@ void MapPublish::PublishKeyFrames(){
         vKFsAct = mpMap->getLocalKFs();
     }
 
+    //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
     for (int i=0, iend=vKFsAll.size(); i<iend; i++) {
         if(vKFsAll[i]->isNull())
             continue;
@@ -329,12 +330,11 @@ void MapPublish::PublishKeyFrames(){
             for(auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++){
                 if( (*it)->mIdKF > vKFsAll[i]->mIdKF )
                     continue;
-//                Mat Twc2 = (*it)->getPose().inv();
-                Mat Twc2 = (*it)->getPose().inv() * Config::cTb;
+                Mat Twb = (*it)->getPose().inv() * Config::cTb;
                 geometry_msgs::Point msgs_o2;
-                msgs_o2.x = Twc2.at<float>(0,3)/mScaleRatio;
-                msgs_o2.y = Twc2.at<float>(1,3)/mScaleRatio;
-                msgs_o2.z = Twc2.at<float>(2,3)/mScaleRatio;
+                msgs_o2.x = Twb.at<float>(0,3)/mScaleRatio;
+                msgs_o2.y = Twb.at<float>(1,3)/mScaleRatio;
+                msgs_o2.z = Twb.at<float>(2,3)/mScaleRatio;
                 mCovisGraph.points.push_back(msgs_o);
                 mCovisGraph.points.push_back(msgs_o2);
             }
@@ -345,30 +345,47 @@ void MapPublish::PublishKeyFrames(){
         for (auto iter = pKF->mFtrMeasureFrom.begin();
              iter != pKF->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
-//            Mat Twc2 = pKF2->getPose().inv();
-            Mat Twc2 = pKF2->getPose().inv() * Config::cTb;
+            Mat Twb = pKF2->getPose().inv() * Config::cTb;
             geometry_msgs::Point msgs_o2;
-            msgs_o2.x = Twc2.at<float>(0,3)/mScaleRatio;
-            msgs_o2.y = Twc2.at<float>(1,3)/mScaleRatio;
-            msgs_o2.z = Twc2.at<float>(2,3)/mScaleRatio;
+            msgs_o2.x = Twb.at<float>(0,3)/mScaleRatio;
+            msgs_o2.y = Twb.at<float>(1,3)/mScaleRatio;
+            msgs_o2.z = Twb.at<float>(2,3)/mScaleRatio;
             mFeatGraph.points.push_back(msgs_o);
             mFeatGraph.points.push_back(msgs_o2);
         }
 
         // Odometry Graph
+        if (mbIsLocalize)
+            continue;
         PtrKeyFrame pKFOdoChild = pKF->mOdoMeasureFrom.first;
-        if (pKFOdoChild != NULL) {
-//            Mat Twc2 = pKFOdoChild->getPose().inv();
-            Mat Twc2 = pKFOdoChild->getPose().inv() * Config::cTb;
+        if (pKFOdoChild != NULL && !mbIsLocalize) {
+            Mat Twb = pKFOdoChild->getPose().inv() * Config::cTb;
             geometry_msgs::Point msgs_o2;
-            msgs_o2.x = Twc2.at<float>(0,3)/mScaleRatio;
-            msgs_o2.y = Twc2.at<float>(1,3)/mScaleRatio;
-            msgs_o2.z = Twc2.at<float>(2,3)/mScaleRatio;
+            msgs_o2.x = Twb.at<float>(0,3)/mScaleRatio;
+            msgs_o2.y = Twb.at<float>(1,3)/mScaleRatio;
+            msgs_o2.z = Twb.at<float>(2,3)/mScaleRatio;
             mOdoGraph.points.push_back(msgs_o);
             mOdoGraph.points.push_back(msgs_o2);
         }
-
     }
+    // Odometry Graph for Localize only case
+    static geometry_msgs::Point msgsLast;
+    if (mbIsLocalize) {
+        geometry_msgs::Point msgs;
+        msgs.x = mpLocalize->getCurrKFPose().x/mScaleRatio;
+        msgs.y = mpLocalize->getCurrKFPose().y/mScaleRatio;
+//        msgs.x = mpLocalize->mpKFCurr->Twb.x/mScaleRatio;
+//        msgs.y = mpLocalize->mpKFCurr->Twb.y/mScaleRatio;
+        mOdoGraph.points.push_back(msgsLast);
+        mOdoGraph.points.push_back(msgs);
+        printf("[MapPublish] mOdoGraph msgsLast = [%f, %f]\n", msgsLast.x, msgsLast.y);
+        printf("[MapPublish] mOdoGraph     msgs = [%f, %f]\n", msgs.x, msgs.y);
+        msgsLast = msgs;
+
+//        msgsLast.x = mpLocalize->mpKFRef->Twb.x/mScaleRatio;
+//        msgsLast.y = mpLocalize->mpKFRef->Twb.y/mScaleRatio;
+    }
+//    printf("[MapPublish] Size of mOdoGraph = %ld\n", mOdoGraph.points.size());
 
     mKFsNeg.header.stamp = ros::Time::now();
     mCovisGraph.header.stamp = ros::Time::now();
@@ -549,7 +566,6 @@ void MapPublish::run(){
     image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
     ros::Rate rate(Config::FPS/* / 3*/);
-
     while (nh.ok()) {
 
         if (CheckFinish()) {
@@ -564,24 +580,30 @@ void MapPublish::run(){
             cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
         pub.publish(msg);
 
-
         cv::Mat imgMatch = mpFramePub->drawMatch();
-        string str = "theta: " + to_string(mpLocalize->getCurrentFrameOdom().z * 180 / M_PI);
+        float lastThetaKF = mpMap->getCurrentKF()->odom.theta;
+        float currTheta = mpLocalize->getCurrentFrameOdom().z;
+        float dt = (currTheta - lastThetaKF) * 180 / M_PI;
+        if (dt > 180.)       dt -= 360;
+        else if (dt < -180.) dt += 360;
+        string str = "d_theta: " + to_string(dt);
         cv::putText(imgMatch, str, Point(30, 15), 1, 1.1, Scalar(0,0,255), 2);
         sensor_msgs::ImagePtr msgMatch =
             cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
         pubImgMatches.publish(msgMatch);
-        string fileName = "/home/vance/output/rk_se2lam/match/" +
-                          to_string(mpMap->getCurrentKF()->mIdKF) + ".jpg";
-        cv::imwrite(fileName, imgMatch);
-
+        // debug 存下match图片
+        if (Config::SAVE_MATCH_IMAGE) {
+            string fileName = Config::SAVE_MATCH_IMAGE_PATH +
+                              to_string(mpMap->getCurrentKF()->mIdKF) + ".jpg";
+            cv::imwrite(fileName, imgMatch);
+        }
 
         if (mpMap->empty())
             continue;
 
         cv::Mat cTw;
         if (mbIsLocalize) {
-            if (mpLocalize->mpKFCurr == NULL || mpLocalize->mpKFCurr->isNull()) {
+            if (mpLocalize->mpKFCurr == nullptr || mpLocalize->mpKFCurr->isNull()) {
                 continue;
             }
             cTw = mpLocalize->mpKFCurr->getPose();
@@ -600,7 +622,7 @@ void MapPublish::run(){
         rate.sleep();
         ros::spinOnce();
     }
-    cerr << "Exiting mappublish .." << endl;
+    cout << "[MapPublish] Exiting mappublish .." << endl;
 
     nh.shutdown();
 
@@ -638,16 +660,42 @@ bool MapPublish::isFinished()
 void MapPublish::PublishOdomInformation()
 {
 //    mOdomRawGraph.points.clear();
+//    static bool firstFrame = true;
     static geometry_msgs::Point msgsLast;
+//    static Se2 odomDelta;
+
+//    if (firstFrame) {
+//        odomDelta = mpMap->getCurrentKF()->odom;
+//        firstFrame = false;
+//    }
+
+//    geometry_msgs::Point msgs, msgsCurr;
+//    msgs.x = mpMap->getCurrentKF()->odom.x/mScaleRatio;
+//    msgs.y = mpMap->getCurrentKF()->odom.y/mScaleRatio;
+//    msgsCurr.x = (msgs.x - odomDelta.x) * cos(odomDelta.theta) - (msgs.y - odomDelta.y) * sin(odomDelta.theta);
+//    msgsCurr.y = (msgs.x - odomDelta.x) * sin(odomDelta.theta) + (msgs.y - odomDelta.y) * cos(odomDelta.theta);
+//    mOdomRawGraph.points.push_back(msgsLast);
+//    mOdomRawGraph.points.push_back(msgsCurr);
+//    msgsLast = msgsCurr;
 
     //! odom在body系下，转到camera系下和计算值进行对比
-//    Mat odom2c = mpMap->getCurrentKF()->odom.toCvSE3() * Config::bTc;
     geometry_msgs::Point msgs;
-    msgs.x = mpMap->getCurrentKF()->odom.x/mScaleRatio;
-    msgs.y = mpMap->getCurrentKF()->odom.y/mScaleRatio;
-    mOdomRawGraph.points.push_back(msgsLast);
-    mOdomRawGraph.points.push_back(msgs);
-    msgsLast = msgs;
+
+    if (!mbIsLocalize) {
+        msgs.x = mpMap->getCurrentKF()->odom.x/mScaleRatio;
+        msgs.y = mpMap->getCurrentKF()->odom.y/mScaleRatio;
+        mOdomRawGraph.points.push_back(msgsLast);
+        mOdomRawGraph.points.push_back(msgs);
+        msgsLast = msgs;
+    } else {
+        msgs.x = mpLocalize->mpKFCurr->odom.x/mScaleRatio;
+        msgs.y = mpLocalize->mpKFCurr->odom.y/mScaleRatio;
+        mOdomRawGraph.points.push_back(msgsLast);
+        mOdomRawGraph.points.push_back(msgs);
+        msgsLast = msgs;
+//        msgsLast.x = mpLocalize->mpKFRef->Twb.x/mScaleRatio;
+//        msgsLast.y = mpLocalize->mpKFRef->Twb.y/mScaleRatio;
+    }
 
 
 //    fprintf(stderr, "[MapPublish] A OdomRawGraph marker (%f, %f) published.\n",

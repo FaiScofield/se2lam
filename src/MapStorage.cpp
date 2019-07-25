@@ -15,21 +15,21 @@ namespace se2lam {
 using namespace std;
 using namespace cv;
 
-MapStorage::MapStorage(){
+MapStorage::MapStorage() {
     mvKFs.clear();
     mvMPs.clear();
 }
 
-void MapStorage::setFilePath(const string path, const string file){
+void MapStorage::setFilePath(const string path, const string file) {
     mMapPath = path;
     mMapFile = file;
 }
 
-void MapStorage::setMap(Map *pMap){
+void MapStorage::setMap(Map *pMap) {
     mpMap = pMap;
 }
 
-void MapStorage::loadMap(){
+void MapStorage::loadMap() {
 
     loadKeyFrames();
 
@@ -45,11 +45,11 @@ void MapStorage::loadMap(){
 
     loadToMap();
 
-    printf("&& INFO MS: Map loaded from __%s__.\n\n", (mMapPath+mMapFile).c_str());
+    printf("[MapStorage] Map loaded from __%s__.\n\n", (mMapPath+mMapFile).c_str());
 
 }
 
-void MapStorage::saveMap(){
+void MapStorage::saveMap() {
 
     mvKFs = mpMap->getAllKF();
     mvMPs = mpMap->getAllMP();
@@ -70,16 +70,16 @@ void MapStorage::saveMap(){
 
     saveFtrGraph();
 
-    printf("&& INFO MS: Map saved to __%s__.\n\n", (mMapPath+mMapFile).c_str());
+    printf("[MapStorage] Map saved to __%s__.\n\n", (mMapPath+mMapFile).c_str());
 
 }
 
-void MapStorage::sortKeyFrames(){
+void MapStorage::sortKeyFrames() {
     // Remove null KFs
     {
         vector<PtrKeyFrame> vKFs;
         vKFs.reserve(mvKFs.size());
-        for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+        for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
             PtrKeyFrame pKF = mvKFs[i];
             if(pKF->isNull())
                 continue;
@@ -89,7 +89,7 @@ void MapStorage::sortKeyFrames(){
     }
 
     // Change Id of KF to be vector index
-    for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         pKF->mIdKF  = i;
     }
@@ -100,7 +100,7 @@ void MapStorage::sortMapPoints() {
     {
         vector<PtrMapPoint> vMPs;
         vMPs.reserve(mvMPs.size());
-        for(int i = 0, iend = mvMPs.size(); i < iend; i++) {
+        for (int i = 0, iend = mvMPs.size(); i < iend; i++) {
             PtrMapPoint pMP = mvMPs[i];
             if(pMP->isNull() || !(pMP->isGoodPrl()) )
                 continue;
@@ -110,17 +110,17 @@ void MapStorage::sortMapPoints() {
     }
 
     // Change Id of MP to be vector index
-    for(int i = 0, iend = mvMPs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvMPs.size(); i < iend; i++) {
         PtrMapPoint pMP = mvMPs[i];
         pMP->mId = i;
     }
 
 }
 
-void MapStorage::saveKeyFrames(){
+void MapStorage::saveKeyFrames() {
 
     // Save images to individual files
-    for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         imwrite(mMapPath + to_string(i) + ".bmp", pKF->img);
     }
@@ -128,7 +128,7 @@ void MapStorage::saveKeyFrames(){
     // Write data to file
     FileStorage file(mMapPath + mMapFile, FileStorage::WRITE);
     file << "KeyFrames" << "[";
-    for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
 
         PtrKeyFrame pKF = mvKFs[i];
 
@@ -137,7 +137,7 @@ void MapStorage::saveKeyFrames(){
         file << "Id" << i;
 
         file << "KeyPoints" << "[";
-        for(int j = 0, jend = pKF->keyPoints.size(); j < jend; j++) {
+        for (int j = 0, jend = pKF->keyPoints.size(); j < jend; j++) {
             KeyPoint kp  = pKF->keyPoints[j];
             file << "{";
             file << "pt" << kp.pt;
@@ -149,7 +149,7 @@ void MapStorage::saveKeyFrames(){
         file << "]";
 
         file << "KeyPointsUn" << "[";
-        for(int j = 0, jend = pKF->keyPointsUn.size(); j < jend; j++) {
+        for (int j = 0, jend = pKF->keyPointsUn.size(); j < jend; j++) {
             KeyPoint kp  = pKF->keyPointsUn[j];
             file << "{";
             file << "pt" << kp.pt;
@@ -166,13 +166,13 @@ void MapStorage::saveKeyFrames(){
             cout << "Wrong size of KP in saving" << endl;
 
         file << "ViewMPs" << "[";
-        for(int j = 0, jend = pKF->mViewMPs.size(); j < jend; j++) {
+        for (int j = 0, jend = pKF->mViewMPs.size(); j < jend; j++) {
             file << pKF->mViewMPs[j];
         }
         file << "]";
 
         file << "ViewMPInfo" << "[";
-        for(int j = 0, jend = pKF->mViewMPsInfo.size(); j < jend; j++) {
+        for (int j = 0, jend = pKF->mViewMPsInfo.size(); j < jend; j++) {
             file << toCvMat( pKF->mViewMPsInfo[j] );
         }
         file << "]";
@@ -192,13 +192,13 @@ void MapStorage::saveKeyFrames(){
 
 }
 
-void MapStorage::saveMapPoints(){
+void MapStorage::saveMapPoints() {
 
     // Write data to file
     FileStorage file(mMapPath + mMapFile, FileStorage::APPEND);
     file << "MapPoints" << "[";
 
-    for(int i = 0, iend = mvMPs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvMPs.size(); i < iend; i++) {
         PtrMapPoint pMP = mvMPs[i];
         file << "{";
 
@@ -225,9 +225,9 @@ void MapStorage::saveObservations() {
 
     //Mat_<int> Index(sizeKF, sizeMP, -1);
 
-    for(int i = 0; i < sizeKF; i++) {
+    for (int i = 0; i < sizeKF; i++) {
         PtrKeyFrame pKF = mvKFs[i];
-        for(int j = 0; j < sizeMP; j++) {
+        for (int j = 0; j < sizeMP; j++) {
             PtrMapPoint pMP = mvMPs[j];
             if(pKF->hasObservation(pMP)) {
                 obs.at<int>(i,j) = 1;
@@ -245,17 +245,17 @@ void MapStorage::saveObservations() {
     file.release();
 }
 
-void MapStorage::saveCovisibilityGraph(){
+void MapStorage::saveCovisibilityGraph() {
 
     int sizeKF = mvKFs.size();
 
     cv::Mat CovisibilityGraph(sizeKF, sizeKF, CV_32SC1, Scalar(0));
 
-    for(int i = 0; i < sizeKF; i++) {
+    for (int i = 0; i < sizeKF; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         set<PtrKeyFrame> sKFs = pKF->getAllCovisibleKFs();
 
-        for(auto it = sKFs.begin(), itend = sKFs.end(); it != itend; it++){
+        for (auto it = sKFs.begin(), itend = sKFs.end(); it != itend; it++) {
             PtrKeyFrame covKF = *it;
             CovisibilityGraph.at<int>(i,covKF->mIdKF) = 1;
         }
@@ -266,12 +266,12 @@ void MapStorage::saveCovisibilityGraph(){
     file.release();
 }
 
-void MapStorage::saveOdoGraph(){
+void MapStorage::saveOdoGraph() {
 
     int sizeKF = mvKFs.size();
 
     mOdoNextId = vector<int>(sizeKF, -1);
-    for(int i = 0; i < sizeKF; i++) {
+    for (int i = 0; i < sizeKF; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         PtrKeyFrame nextKF = pKF->mOdoMeasureFrom.first;
 
@@ -283,7 +283,7 @@ void MapStorage::saveOdoGraph(){
     FileStorage file(mMapPath + mMapFile, FileStorage::APPEND);
 
     file << "OdoGraphNextKF" << "[";
-    for(int i = 0; i < sizeKF; i++) {
+    for (int i = 0; i < sizeKF; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         Mat measure = pKF->mOdoMeasureFrom.second.measure;
         Mat info = ( pKF->mOdoMeasureFrom.second.info );
@@ -299,18 +299,18 @@ void MapStorage::saveOdoGraph(){
 
 }
 
-void MapStorage::saveFtrGraph(){
+void MapStorage::saveFtrGraph() {
 
     int sizeKF = mvKFs.size();
 
     FileStorage file(mMapPath + mMapFile, FileStorage::APPEND);
 
     file << "FtrGraphPairs" << "[";
-    for(int i = 0; i < sizeKF; i++) {
+    for (int i = 0; i < sizeKF; i++) {
         PtrKeyFrame pKFi = mvKFs[i];
         int idi = pKFi->mIdKF;
 
-        for(auto it = pKFi->mFtrMeasureFrom.begin(), itend = pKFi->mFtrMeasureFrom.end(); it != itend; it++){
+        for (auto it = pKFi->mFtrMeasureFrom.begin(), itend = pKFi->mFtrMeasureFrom.end(); it != itend; it++) {
             PtrKeyFrame pKFj = it->first;
             int idj = pKFj->mIdKF;
             Mat measure = it->second.measure;
@@ -332,7 +332,7 @@ void MapStorage::saveFtrGraph(){
 
 }
 
-void MapStorage::loadKeyFrames(){
+void MapStorage::loadKeyFrames() {
 
     mvKFs.clear();
 
@@ -340,7 +340,7 @@ void MapStorage::loadKeyFrames(){
     FileNode nodeKFs = file["KeyFrames"];
     FileNodeIterator it = nodeKFs.begin(), itend = nodeKFs.end();
 
-    for(; it != itend; it++) {
+    for (; it != itend; it++) {
         PtrKeyFrame pKF = make_shared<KeyFrame>();
 
         FileNode nodeKF = *it;
@@ -353,7 +353,7 @@ void MapStorage::loadKeyFrames(){
             vector<KeyPoint> vKPs;
 
             FileNodeIterator itKP = nodeKP.begin(), itKPend = nodeKP.end();
-            for(; itKP != itKPend; itKP++) {
+            for (; itKP != itKPend; itKP++) {
                 KeyPoint kp;
                 (*itKP)["pt"] >> kp.pt;
                 kp.octave = (int)(*itKP)["octave"];
@@ -370,7 +370,7 @@ void MapStorage::loadKeyFrames(){
             vector<KeyPoint> vKPs;
 
             FileNodeIterator itKP = nodeKPUn.begin(), itKPend = nodeKPUn.end();
-            for(; itKP != itKPend; itKP++) {
+            for (; itKP != itKPend; itKP++) {
                 KeyPoint kp;
                 (*itKP)["pt"] >> kp.pt;
                 kp.octave = (int)(*itKP)["octave"];
@@ -391,7 +391,7 @@ void MapStorage::loadKeyFrames(){
         {
             vector<Point3f> vPos;
             FileNodeIterator itMP = nodeViewMP.begin(), itMPend = nodeViewMP.end();
-            for( ; itMP != itMPend; itMP++) {
+            for ( ; itMP != itMPend; itMP++) {
                 Point3f pos;
                 (*itMP) >> pos;
                 vPos.push_back(pos);
@@ -406,7 +406,7 @@ void MapStorage::loadKeyFrames(){
         {
             vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d> > vInfo;
             FileNodeIterator itInfo = nodeMPInfo.begin(), itInfoend = nodeMPInfo.end();
-            for( ; itInfo != itInfoend; itInfo++) {
+            for ( ; itInfo != itInfoend; itInfo++) {
                 Mat info;
                 (*itInfo) >> info;
                 vInfo.push_back( toMatrix3d(info) );
@@ -429,7 +429,7 @@ void MapStorage::loadKeyFrames(){
 
     file.release();
 
-    for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);
         img.copyTo(pKF->img);
@@ -437,7 +437,7 @@ void MapStorage::loadKeyFrames(){
 
 }
 
-void MapStorage::loadMapPoints(){
+void MapStorage::loadMapPoints() {
 
     mvMPs.clear();
 
@@ -445,7 +445,7 @@ void MapStorage::loadMapPoints(){
     FileNode nodeMPs = file["MapPoints"];
     FileNodeIterator it = nodeMPs.begin(), itend = nodeMPs.end();
 
-    for(; it != itend; it++) {
+    for (; it != itend; it++) {
         PtrMapPoint pMP = make_shared<MapPoint>();
 
         FileNode nodeMP = *it;
@@ -465,7 +465,7 @@ void MapStorage::loadMapPoints(){
 
 }
 
-void MapStorage::loadObservations(){
+void MapStorage::loadObservations() {
     FileStorage file(mMapPath + mMapFile, FileStorage::READ);
     Mat Index, Obs;
 
@@ -479,8 +479,8 @@ void MapStorage::loadObservations(){
     int sizeKF = Obs.rows;
     int sizeMP = Obs.cols;
 
-    for(int i = 0; i < sizeKF; i++) {
-        for( int j = 0; j < sizeMP; j++) {
+    for (int i = 0; i < sizeKF; i++) {
+        for ( int j = 0; j < sizeMP; j++) {
             if( Obs.at<int>(i,j) ) {
                 PtrKeyFrame pKF = mvKFs[i];
                 PtrMapPoint pMP = mvMPs[j];
@@ -495,7 +495,7 @@ void MapStorage::loadObservations(){
     file.release();
 }
 
-void MapStorage::loadCovisibilityGraph(){
+void MapStorage::loadCovisibilityGraph() {
     FileStorage file(mMapPath + mMapFile, FileStorage::READ);
 
     Mat mCovisibilityGraph;
@@ -505,8 +505,8 @@ void MapStorage::loadCovisibilityGraph(){
     int sizeKF = mCovisibilityGraph.rows;
     int sizeMP = mCovisibilityGraph.cols;
 
-    for(int i = 0; i < sizeKF; i++) {
-        for( int j = 0; j < sizeMP; j++) {
+    for (int i = 0; i < sizeKF; i++) {
+        for ( int j = 0; j < sizeMP; j++) {
             if( mCovisibilityGraph.at<int>(i,j) ) {
                 PtrKeyFrame pKFi = mvKFs[i];
                 PtrKeyFrame pKFj = mvKFs[j];
@@ -520,13 +520,13 @@ void MapStorage::loadCovisibilityGraph(){
 
 }
 
-void MapStorage::loadOdoGraph(){
+void MapStorage::loadOdoGraph() {
     FileStorage file(mMapPath + mMapFile, FileStorage::READ);
 
     FileNode nodeOdos = file["OdoGraphNextKF"];
     FileNodeIterator it = nodeOdos.begin(), itend = nodeOdos.end();
 
-    for(int i = 0; it != itend; it++, i++) {
+    for (int i = 0; it != itend; it++, i++) {
 
         FileNode nodeOdo = *it;
 
@@ -552,13 +552,13 @@ void MapStorage::loadOdoGraph(){
 
 }
 
-void MapStorage::loadFtrGraph(){
+void MapStorage::loadFtrGraph() {
     FileStorage file(mMapPath + mMapFile, FileStorage::READ);
 
     FileNode nodeFtrs = file["FtrGraphPairs"];
     FileNodeIterator it = nodeFtrs.begin(), itend = nodeFtrs.end();
 
-    for(; it != itend; it++) {
+    for (; it != itend; it++) {
         FileNode nodeFtr = (*it);
 
         Point2i pairId;
@@ -579,17 +579,17 @@ void MapStorage::loadFtrGraph(){
     file.release();
 }
 
-void MapStorage::loadToMap(){
+void MapStorage::loadToMap() {
     mpMap->clear();
-    for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         mpMap->insertKF(mvKFs[i]);
     }
-    for(int i = 0, iend = mvMPs.size(); i < iend; i++) {
+    for (int i = 0, iend = mvMPs.size(); i < iend; i++) {
         mpMap->insertMP(mvMPs[i]);
     }
 }
 
-void MapStorage::clearData(){
+void MapStorage::clearData() {
     mvKFs.clear();
     mvMPs.clear();
     //mCovisibilityGraph.release();

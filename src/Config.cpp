@@ -80,6 +80,13 @@ double Config::GM_VCL_RATIO_MIN_MATCH_MP = 0.05;
 int Config::GM_DCL_MIN_KFID_OFFSET = 20;
 double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
+
+//! for debug
+int Config::ImgStartIndex = 0;
+bool Config::SAVE_MATCH_IMAGE = false;
+std::string Config::SAVE_MATCH_IMAGE_PATH = "/home/vance/output/se2/";
+
+
 void Config::readConfig(const std::string &path){
     DataPath = path;
 //    std::string camParaPath = path + "/config/CamConfig.yml";
@@ -126,7 +133,7 @@ void Config::readConfig(const std::string &path){
     camPara.release();
 
 //    std::string settingsPath = path + "/config/Settings.yml";
-    std::string settingsPath = path + "../se2_config/Settings.yml";
+    std::string settingsPath = path + "../se2_config/Settings.yml";   //!@Vance: for rk dataset
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 
@@ -184,6 +191,11 @@ void Config::readConfig(const std::string &path){
 
     GM_DCL_MIN_KFID_OFFSET = (int)(settings["gm_dcl_min_kfid_offset"]);
     GM_DCL_MIN_SCORE_BEST = (double)(settings["gm_dcl_min_score_best"]);
+
+    //! NOTE for debug
+    settings["save_match_image"] >> SAVE_MATCH_IMAGE;
+    settings["save_match_image_path"] >> SAVE_MATCH_IMAGE_PATH;
+    settings["img_start_idx"] >> ImgStartIndex;
 
     settings.release();
 }

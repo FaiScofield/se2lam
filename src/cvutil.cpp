@@ -12,7 +12,7 @@ namespace cvu{
 using namespace cv;
 using namespace std;
 
-//!@Vance: 避免直接求逆
+//! 变换矩阵的逆
 Mat inv(const Mat &T4x4){
     assert(T4x4.cols == 4 && T4x4.rows == 4);
     Mat RT = T4x4.rowRange(0,3).colRange(0,3).t();
@@ -31,8 +31,8 @@ void pts2Ftrs(const vector<KeyPoint>& _orgnFtrs, const vector<Point2f>& _points,
     }
 }
 
-
-Mat sk_sym(const Point3f _v){
+//! 求向量的反对称矩阵^
+Mat sk_sym(const Point3f _v) {
     Mat mat(3,3,CV_32FC1, Scalar(0));
     mat.at<float>(0,1) = -_v.z;
     mat.at<float>(0,2) =  _v.y;

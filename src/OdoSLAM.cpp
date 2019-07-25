@@ -116,11 +116,11 @@ void OdoSLAM::start() {
     mbFinished = false;
 
     if (se2lam::Config::LOCALIZATION_ONLY) {
-
         cout << "[System] =====>> Localization_only mode." << endl;
 
         thread threadLocalizer(&se2lam::Localizer::run, mpLocalizer);
 
+        //! 注意标志位在这里设置的
         mpFramePub->mbIsLocalize = true;
         mpMapPub->mbIsLocalize = true;
 
@@ -128,15 +128,11 @@ void OdoSLAM::start() {
 
         threadLocalizer.detach();
         threadMapPub.detach();
-    }
-    // SLAM case
-    else {
-
+    } else {  // SLAM case
         cout << "[System] =====>> Running SLAM" << endl;
 
         mpMapPub->mbIsLocalize = false;
         mpFramePub->mbIsLocalize = false;
-
 
         thread threadTracker(&se2lam::Track::run, mpTrack);
         thread threadLocalMapper(&se2lam::LocalMapper::run, mpLocalMapper);
@@ -155,8 +151,8 @@ void OdoSLAM::start() {
 
 void OdoSLAM::wait(OdoSLAM* system){
 
-    ros::Rate rate(Config::FPS * 10);
-    cv::Mat empty(100, 640, CV_8U, cv::Scalar(0));
+    ros::Rate rate(Config::FPS/* * 10*/);
+//    cv::Mat empty(100, 640, CV_8U, cv::Scalar(0));
 
     //cv::namedWindow("Press q on this window to exit...");
     while (1) {
@@ -166,13 +162,13 @@ void OdoSLAM::wait(OdoSLAM* system){
 
             break;
         }
-        //cv::imshow("Press q on this window to exit...", empty);
-        if(cv::waitKey(5) == 'q'){
-            system->requestFinish();
-        }
+//        cv::imshow("Press q on this window to exit...", empty);
+//        if (cv::waitKey(5) == 'q') {
+//            system->requestFinish();
+//        }
         rate.sleep();
     }
-    //cv::destroyAllWindows();
+//    cv::destroyAllWindows();
 
     system->saveMap();
 
@@ -183,10 +179,12 @@ void OdoSLAM::wait(OdoSLAM* system){
     system->mbFinished = true;
 
     cerr << "[System] System is cleared .." << endl;
-
 }
 
 void OdoSLAM::saveMap() {
+    if (se2lam::Config::LOCALIZATION_ONLY)
+        return;
+
     if (se2lam::Config::SAVE_NEW_MAP){
         mpMapStorage->setFilePath(se2lam::Config::WRITE_MAP_FILE_PATH, se2lam::Config::WRITE_MAP_FILE_NAME);
         printf("&& DBG MS: Begin save map.\n");
@@ -238,8 +236,7 @@ void OdoSLAM::sendRequestFinish(){
     if (Config::LOCALIZATION_ONLY) {
         mpLocalizer->requestFinish();
         mpMapPub->RequestFinish();
-    }
-    else {
+    } else {
         mpTrack->requestFinish();
         mpLocalMapper->requestFinish();
         mpGlobalMapper->requestFinish();
@@ -255,14 +252,12 @@ void OdoSLAM::checkAllExit() {
             else
                 std::this_thread::sleep_for(std::chrono::microseconds(2));
         }
-    }
-    else {
+    } else {
         while (1) {
             if (mpTrack->isFinished() && mpLocalMapper->isFinished() &&
                     mpGlobalMapper->isFinished() && mpMapPub->isFinished()) {
                 break;
-            }
-            else {
+            } else {
                 std::this_thread::sleep_for(std::chrono::microseconds(2));
             }
         }
@@ -278,13 +273,12 @@ void OdoSLAM::waitForFinish(){
     while (1) {
         if (mbFinished) {
             break;
-        }
-        else {
+        } else {
             std::this_thread::sleep_for(std::chrono::microseconds(2));
         }
     }
     std::this_thread::sleep_for(std::chrono::microseconds(20));
-    cerr << "wait for finish thread finished..." << endl;
+    cerr << "[System] Wait for finish thread finished..." << endl;
 }
 
 bool OdoSLAM::ok(){

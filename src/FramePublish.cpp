@@ -35,6 +35,7 @@ FramePublish::~FramePublish(){
 
 }
 
+//! NOTE 这个线程没有一直跑，相关函数只有在MapPublish里被调用
 void FramePublish::run(){
 
     ros::NodeHandle nh;
@@ -45,6 +46,7 @@ void FramePublish::run(){
     ros::Rate rate(fps);
 
     while(nh.ok() && ros::ok()){
+        cerr << "[FramePb] mbIsLocalize = " << mbIsLocalize << endl;
         if (!mbIsLocalize) {
             if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
                 WorkTimer timer;
@@ -207,7 +209,7 @@ cv::Mat FramePublish::drawMatch() {
     cv::Mat res(imgCurr.rows, imgCurr.cols+imgRef.cols, CV_8UC3);
     imgCurr.copyTo(res.colRange(0, imgCurr.cols));
     imgRef.copyTo(res.colRange(imgCurr.cols, imgCurr.cols+imgRef.cols));
-    if (!mbIsLocalize) {
+//    if (!mbIsLocalize) {
         if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
             for (int i = 0; i < matches.size(); ++i) {
                 if (matches[i] < 0) {
@@ -221,7 +223,7 @@ cv::Mat FramePublish::drawMatch() {
                 }
             }
         }
-    }
+//    }
 
     return res.clone();
 }

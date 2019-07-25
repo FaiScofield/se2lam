@@ -12,21 +12,23 @@ using namespace std;
 using namespace cv;
 using namespace Eigen;
 
+const char *vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
+
 int main(int argc, char **argv)
 {
     //! Initialize
     ros::init(argc, argv, "test_vn");
     ros::start();
 
-    if(argc != 3){
-        cerr << "Usage: rosrun se2lam test_vn dataPath PATH_TO_ORBvoc.bin" << endl;
+    if (argc != 2) {
+        cerr << "Usage: rosrun se2lam test_vn dataPath" << endl;
         ros::shutdown();
-        return 1;
+        return -1;
     }
 
     se2lam::OdoSLAM system;
 
-    system.setVocFileBin(argv[2]);
+    system.setVocFileBin(vocFile);
     system.setDataPath(argv[1]);
     system.start();
 
@@ -38,9 +40,9 @@ int main(int argc, char **argv)
     ros::Rate rate(se2lam::Config::FPS);
 
     int n = se2lam::Config::ImgIndex;
-    int i = 0;
+    int m = se2lam::Config::ImgStartIndex;
 
-    for(; i < n && system.ok(); i++) {
+    for(int i=m; i < m+n && system.ok(); i++) {
         string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         std::getline(rec, line);
@@ -59,7 +61,7 @@ int main(int argc, char **argv)
 
     ros::shutdown();
 
-    cout << "[Main] Rec close..." << endl;
+    cout << "[Main] Ros close..." << endl;
     rec.close();
     cout << "[Main] Exit test..." << endl;
     return 0;

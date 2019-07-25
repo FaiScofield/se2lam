@@ -340,6 +340,7 @@ void LocalMapper::run()
 
             pruneRedundantKFinMap();
 
+            //! NOTE 原作者把这个步骤给注释掉了.
             removeOutlierChi2();    // 这里做了一次LocalBA,并剔除离群KF
 
             updateLocalGraphInMap();
