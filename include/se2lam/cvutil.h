@@ -11,6 +11,7 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include "Config.h"
 
 namespace cvu{
 
@@ -34,6 +35,8 @@ bool checkParallax(const Point3f& o1, const Point3f& o2, const Point3f& pt3, int
 Point3f se3map(const Mat& _Tcw, const Point3f& _pt);
 
 void pts2Ftrs(const vector<cv::KeyPoint>& _orgnFtrs, const vector<Point2f>& _points, vector<cv::KeyPoint>& _features);
+
+void normalizeYawAngle(se2lam::Se2& odom);
 
 } // namespace scv
 

@@ -69,14 +69,19 @@ int main(int argc, char **argv)
     ros::Rate rate(se2lam::Config::FPS);
 
     size_t n = static_cast<size_t>(se2lam::Config::ImgIndex);
-    size_t i = 0;
+    size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
 
     string imageFolder = se2lam::Config::DataPath + "/slamimg";
     vector<string> allImages;
     readImagesRK(imageFolder, allImages);
-//    n = allImages.size();
-    n = 800;
-    for(; i < n && system.ok(); i++) {
+    n = min(allImages.size(), n);
+    for(size_t i = 0; i < n && system.ok(); i++) {
+        // 起始帧不为0的时候保证odom数据跟image对应
+        if (i < m) {
+            std::getline(rec, line);
+            continue;
+        }
+
         string fullImgName = allImages[i];
 //        cout << "[Main] reading image: " << fullImgName << endl;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);

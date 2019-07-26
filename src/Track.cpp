@@ -29,7 +29,7 @@ ofstream ofs;
 
 Track::Track()
 {
-    mState = NO_READY_YET;
+    mState = FIRST_FRAME;   // NO_READY_YET
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = 8;
     nMaxFrames = Config::FPS;
@@ -69,6 +69,7 @@ void Track::setSensors(Sensors *pSensors)
     mpSensors = pSensors;
 }
 
+// TODO 首帧位姿要设为0，Odom也要归零
 void Track::run()
 {
     if (Config::LOCALIZATION_ONLY)
@@ -87,25 +88,35 @@ void Track::run()
         Point3f odo_3f;
 
         if (sensorUpdated) {
-
             mpSensors->readData(odo_3f, img);
             odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+
             {
                 locker lock(mMutexForPub);
                 bool noFrame = !(Frame::nextId);
                 if (noFrame) {
+//                    if (mState == FIRST_FRAME)
+//                    mFirstFrameOdom = odo;
                     mCreateFrame(img, odo);  // 为初始帧创建帧信息
                     mLastState = mState;
                     mState = OK;
-                } else
+                } else {
+//                    odo.x -= mFirstFrameOdom.x /** cos(mFirstFrameOdom.theta)*/;
+//                    odo.y -= mFirstFrameOdom.y /** sin(mFirstFrameOdom.theta)*/;
+//                    odo.theta -= mFirstFrameOdom.theta;
+//                    cvu::normalizeYawAngle(odo);
                     mTrack(img, odo);  // 非初始帧则进行tracking,计算位姿
+                }
             }
             mpMap->setCurrentFramePose(mFrame.Tcw);
-            lastOdom = odo;
+            mLastOdom = odo;
 
             timer.stop();
-            printf("[Track] #%d Tracking consuming time: %fms\n", mFrame.id,
-                   timer.time);
+            printf("[Track] #%d Tracking consuming time: %fms, Pose:[%f, %f]\n",
+                   mFrame.id, timer.time, mFrame.Twb.x/1000, mFrame.Twb.y/1000);
+//            printf("[Track] #%d Odom_input:[%f, %f, %f], Odom_orig:[%f, %f, %f]\n",
+//                   mFrame.id, mFrame.odom.x, mFrame.odom.y, mFrame.odom.theta,
+//                   odo_3f.x, odo_3f.y, odo_3f.z);
 
             //            writePose();
         }
@@ -130,7 +141,7 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
     mFrame.Twb = Se2(0, 0, 0);  //!@Vance: 当前帧World->Body，即Body的世界坐标，首帧为原点
     mFrame.Tcw = Config::cTb.clone();  //!@Vance: 当前帧Camera->World
 
-    if (mFrame.keyPoints.size() > 100) {
+    if (mFrame.keyPoints.size() > 80) { // 100
         cout << "========================================================"
              << endl;
         cout << "[Track] #" << mFrame.id << " Create first frame with "
@@ -198,7 +209,7 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
         mpKF = pKF;
 
-        cout << "[Track] Add new KF at #" << mFrame.id << endl;
+        printf("[Track] Add new KF at #%d(KF#%d)\n", mFrame.id, mpKF->mIdKF);
     }
 
     timer.stop();
@@ -233,10 +244,9 @@ void Track::updateFramePose()
     //    mFrame.Twb = mpKF->Twb + mFrame.Trb;
 
     // preintegration 预积分
-    //!@Vance:
-    //!这里并没有使用上预积分？都是局部变量，且实际一帧图像仅对应一帧Odom数据
+    //! NOTE 这里并没有使用上预积分？都是局部变量，且实际一帧图像仅对应一帧Odom数据
     Eigen::Map<Vector3d> meas(preSE2.meas);
-    Se2 odok = mFrame.odom - lastOdom;
+    Se2 odok = mFrame.odom - mLastOdom;
     Vector2d odork(odok.x, odok.y);
     Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
     meas.head<2>() += Phi_ik * odork;

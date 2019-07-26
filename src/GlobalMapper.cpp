@@ -156,9 +156,9 @@ void GlobalMapper::run() {
 
         //! Return
         if (Config::GLOBAL_PRINT) {
-            cout << "[GobalMap] " << "loopTime = " << t1+t2+t3+t4+t5
-//                 << ", numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs()
-                 << endl;
+            fprintf(stderr, "[GobalMap] #%d(KF#%d) loopTime = %fms\n",
+                    mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, t1+t2+t3+t4+t5);
+//            << ", numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs()
         }
 
         mbNewKF = false;
@@ -304,14 +304,13 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP,
         }
 
         if (Config::GLOBAL_PRINT) {
-            cerr << "## DEBUG GM: " << "add feature constraint from "
+            cerr << "[GlobalMap] add feature constraint from "
                  << mpKFCurr->mIdKF << " to " << mpKFLoop->mIdKF <<  ", MPGood/KPGood/MPNow/KPNow="
                  << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
-    }
-    else {
+    } else {
         if (Config::GLOBAL_PRINT) {
-            cerr << "## DEBUG GM: " << "no enough MPs matched, MPGood/KPGood/MPNow/KPNow="
+            cerr << "[GlobalMap] no enough MPs matched, MPGood/KPGood/MPNow/KPNow = "
                  << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
     }

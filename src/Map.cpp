@@ -225,7 +225,7 @@ bool Map::pruneRedundantKF(){
 
                 bool bIsInitKF = (thisKF->mIdKF == 0);  // 多余
                 bool bHasFeatEdge = (thisKF->mFtrMeasureFrom.size() != 0);
-                printf("[Map Debug] bHasFeatEdge: %d\n", bHasFeatEdge);
+//                printf("[Map Debug] bHasFeatEdge: %d\n", bHasFeatEdge);
 
                 // Prune this KF and link a new odometry constrait
                 if (lastKF && nextKF && !bIsInitKF && !bHasFeatEdge) {
@@ -256,7 +256,8 @@ bool Map::pruneRedundantKF(){
                         nextKF->addCovisibleKF(lastKF);
                         lastKF->addCovisibleKF(nextKF);
 
-                        printf("[Map] Prune KF #%d\n", thisKF->mIdKF);
+                        printf("[Map] #%d(KF#%d) Prune KF#%d\n",
+                               mCurrentKF->id, mCurrentKF->mIdKF, thisKF->mIdKF);
 
                         pruned = true;
                         prunedThis = true;
@@ -301,7 +302,7 @@ bool Map::pruneRedundantKF(){
         std::swap(vpKFs, mLocalGraphKFs);
     }
 
-    printf("[Map] #%d(KF%d) Prune Local KFs: %ld, Mps: %ld\n",
+    printf("[Map] #%d(KF#%d) Prune Local KFs: %ld, Mps: %ld\n",
            mCurrentKF->id, mCurrentKF->mIdKF,
            nLocalKFs - mLocalGraphKFs.size(), nLocalMPs - mLocalGraphMPs.size());
     return pruned;
@@ -338,7 +339,7 @@ void Map::updateLocalGraph(){
         }
         searchLevel--;
     }
-    printf("[Map] #%d(KF#%d): %ld KFs were set to local KFs.\n",
+    printf("[Map] #%d(KF#%d) %ld KFs were set to local KFs.\n",
             mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
 
     //!@Vance: 获得localKFs的所有MPs

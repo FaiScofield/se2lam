@@ -48,9 +48,10 @@ public:
 
     enum eTrackingState {
         NO_READY_YET = -1,
-        OK = 0,
-        TEMPORARY_LOST = 1,
-        LOST = 2
+        FIRST_FRAME = 0,
+        OK = 1,
+        TEMPORARY_LOST = 2,
+        LOST = 3
     };
     eTrackingState mState;
     eTrackingState mLastState;
@@ -92,9 +93,10 @@ private:
 
     // preintegration on SE2
     PreSE2 preSE2;
-    Se2 lastOdom;
+    Se2 mLastOdom;
 
     int nLostFrames;
+    Se2 mFirstFrameOdom;
 
 public:
 

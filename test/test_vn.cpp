@@ -42,7 +42,13 @@ int main(int argc, char **argv)
     int n = se2lam::Config::ImgIndex;
     int m = se2lam::Config::ImgStartIndex;
 
-    for(int i=m; i < m+n && system.ok(); i++) {
+    for(int i = 0; i < n && system.ok(); i++) {
+        // 起始帧不为0的时候保证odom数据跟image对应
+        if (i < m) {
+            std::getline(rec, line);
+            continue;
+        }
+
         string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         std::getline(rec, line);

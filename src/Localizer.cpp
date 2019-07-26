@@ -8,6 +8,7 @@
 #include <ros/ros.h>
 #include "ORBmatcher.h"
 #include "optimizer.h"
+#include "cvutil.h"
 
 namespace se2lam {
 using namespace std;
@@ -49,7 +50,6 @@ void Localizer::run() {
     ofstream fileOutTraj(se2lam::Config::WRITE_TRAJ_FILE_PATH + se2lam::Config::WRITE_TRAJ_FILE_NAME);
     // traj log
 
-
     ros::Rate rate(Config::FPS * 2);
 
     //! Main loop
@@ -70,22 +70,27 @@ void Localizer::run() {
 
 //        id_raw++;
 
-
         cv::Mat img;
         Se2 odo;
+        Point3f odo_3f;
         bool sensorUpdated = mpSensors->update();
         if (sensorUpdated) {
-            Point3f odo_3f;
             mpSensors->readData(odo_3f, img);
-            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
 
+//            static Point3f firstOdom = odo_3f;
+//            odo = Se2(odo_3f.x - firstOdom.x*cos(firstOdom.z),
+//                      odo_3f.y - firstOdom.y*sin(firstOdom.z),
+//                      odo_3f.z - firstOdom.z);
+
+            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+//            cvu::normalizeYawAngle(odo);
             ReadFrameInfo(img, odo);    // 每一帧都是KF
 
             if (mpKFRef == nullptr)
                 continue;
 
             UpdatePoseCurr();
-            fprintf(stderr, "[Localizer] currentFrame: %d, pose:[%f, %f]\n",
+            printf("[Localizer] #%d currentFrame pose:[%f, %f]\n",
                     mpKFCurr->id, mpKFCurr->Twb.x*0.001, mpKFCurr->Twb.y*0.001);
 
 
@@ -150,12 +155,10 @@ void Localizer::run() {
 
                     DrawImgCurr();
                     DrawImgMatch(mapMatchGood);
-
                 } else {
                     DrawImgCurr();
                     mImgMatch = Mat::zeros(mImgMatch.rows, mImgMatch.cols, mImgMatch.type());
                 }
-
                 DetectIfLost();
             }
 
@@ -169,7 +172,14 @@ void Localizer::run() {
         WriteTrajFile(fileOutTraj);
 
         timer.stop();
-        printf("[Localizer] #%d localize loopTime = %fms\n", mpKFCurr->mIdKF, timer.time);
+        printf("[Localizer] KF#%d(#%d) localize tracking time: %fms, Pose:[%f, %f]\n",
+               mpKFCurr->mIdKF, mpKFCurr->id, timer.time,
+               mpKFCurr->Twb.x, mpKFCurr->Twb.y);
+//        printf("[Localizer] KF#%d(#%d) Odom_input:[%f, %f, %f], Odom_orig:[%f, %f, %f]\n",
+//               mpKFCurr->mIdKF, mpKFCurr->id,
+//               mpKFCurr->odom.x, mpKFCurr->odom.y, mpKFCurr->odom.theta,
+//               odo_3f.x, odo_3f.y, odo_3f.z);
+
         rate.sleep();
     }
 
@@ -204,7 +214,6 @@ void Localizer::ReadFrameInfo(const Mat &img, const Se2& odo) {
     mFrameCurr.Tcw = Config::cTb.clone();
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
     mpKFCurr->ComputeBoW(mpORBVoc);
-
 }
 
 void Localizer::MatchLastFrame() {
@@ -229,7 +238,7 @@ void Localizer::MatchLocalMap() {
         mpKFCurr->addObservation(pMP,idxKPCurr);
     }
 
-    cout << "[Localizer] Match Local Map, numMPMatchLocal = " << numMPMatched << endl;
+//    printf("[Localizer] #%d Match Local Map, numMPMatchLocal = %d\n",mpKFCurr->id ,numMPMatched);
 }
 
 
@@ -301,7 +310,7 @@ void Localizer::DoLocalBA() {
     Mat Twc = toCvMat(estimateVertexSE3Expmap(optimizer, mpKFCurr->mIdKF));
     mpKFCurr->setPose(Twc);
 
-    cout << "[Localizer] localBA Time = " << timer.time << "ms" << endl;
+    fprintf(stderr, "[Localizer] #%d localBA Time = %fms\n", mpKFCurr->id, timer.time);
 }
 
 void Localizer::DetectIfLost() {
@@ -354,7 +363,7 @@ bool Localizer::DetectLoopClose() {
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
 
-    for(int i=0; i<numKFs; i++) {
+    for (int i=0; i<numKFs; i++) {
 
         PtrKeyFrame pKF = vpKFsAll[i];
         DBoW2::BowVector BowVec = pKF->mBowVec;
@@ -419,12 +428,12 @@ bool Localizer::VerifyLoopClose(map<int,int> & mapMatchMP, map<int,int> & mapMat
     int numGoodMatch = mapMatch.size();
 
     if (numGoodMatch >= numMinMatch) {
-        cerr << "[Localizer] " << "loop close verification PASSED, "
+        cerr << "[Localizer] " << "Loop close verification PASSED, "
              << "numGoodMatch = " << numGoodMatch << endl;
         bVerified = true;
     }
     else {
-        cerr << "[Localizer]  " << "loop close verification FAILED, "
+        cerr << "[Localizer] " << "Loop close verification FAILED, "
              << "numGoodMatch = " << numGoodMatch << endl;
     }
     return bVerified;

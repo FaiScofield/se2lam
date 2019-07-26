@@ -238,8 +238,10 @@ void LocalMapper::removeOutlierChi2()
     vnAllIdx.clear();
 
     if (mbPrintDebugInfo) {
-        fprintf(stderr, "[LocalMap]: Remove Outlier Time %f\n", timer.time);
-        fprintf(stderr, "[LocalMap]: Outliers: %d; totally %d\n", nBadMP, nAllMP);
+        fprintf(stderr, "[LocalMap]: #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
+                mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, timer.time);
+        fprintf(stderr, "[LocalMap]: #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
+                mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, nBadMP, nAllMP);
     }
 }
 
@@ -290,12 +292,12 @@ void LocalMapper::localBA()
     local_ba_time_log << " " << timer.time << endl;
 #endif
 
-    if (mbPrintDebugInfo) {
-        cerr << "[LocalMap] LocalBA cost time " << timer.time << ", number of KFs: "
-             << mpMap->getLocalKFs().size()
-//                 << ", number of MP " << vpEdgesAll.size()
-             << endl;
-    }
+//    if (mbPrintDebugInfo) {
+//        cerr << "[LocalMap] LocalBA cost time " << timer.time << ", number of KFs: "
+//             << mpMap->getLocalKFs().size()
+////                 << ", number of MP " << vpEdgesAll.size()
+//             << endl;
+//    }
 
 #ifdef REJECT_IF_LARGE_LAMBDA
     if (solver->currentLambda() > 100.0) {
@@ -350,7 +352,8 @@ void LocalMapper::run()
             timer.stop();
 
             if (mbPrintDebugInfo) {
-                cerr << "[LocalMap] Time cost for one KF BA: " << timer.time << " ms." << endl;
+                fprintf(stderr, "[LocalMap] #%d(KF#%d) Time cost for Local BA: %fms.\n",
+                        mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, timer.time);
             }
 
             mbUpdated = false;
