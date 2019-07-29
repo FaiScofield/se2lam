@@ -24,6 +24,9 @@ Localizer::Localizer() {
 
     mbFinished = false;
     mbFinishRequested = false;
+
+    mState = cvu::NO_READY_YET;
+    nLostFrames = 0;
 }
 
 Localizer::~Localizer() {
@@ -34,151 +37,181 @@ Localizer::~Localizer() {
 //! BUG 跑完有内存泄露！需要检查！
 void Localizer::run() {
     //! Init
-//    string fullOdoName = Config::DataPath + "/odo_raw.txt";
-//    ifstream odo_rec(fullOdoName);
-//    string odo_line;
-//    float odo_x, odo_y, odo_theta;
-//    int id_raw = 0;
+    static bool bMapOK = !mpMap->empty();
+    if (bMapOK) {
+        mState = cvu::FIRST_FRAME;
+    } else {
+        fprintf(stderr, "[Localizer] Map is empty!\n");
+        mState = cvu::NO_READY_YET;
+        return;
+    }
+    mLastState = mState;
 
-//    for (int i=0; i < Config::ImgIndexLocalSt; i++) {
-//        getline(odo_rec, odo_line);
-//    }
+    WorkTimer timer;
+    timer.start();
 
     ComputeBowVecAll();
 
+    timer.stop();
+    fprintf(stderr, "[Localizer] Compute Bow Vctors all cost time: %fms\n", timer.time);
+
     // traj log
-    ofstream fileOutTraj(se2lam::Config::WRITE_TRAJ_FILE_PATH + se2lam::Config::WRITE_TRAJ_FILE_NAME);
+//    ofstream fileOutTraj(se2lam::Config::WRITE_TRAJ_FILE_PATH + se2lam::Config::WRITE_TRAJ_FILE_NAME);
     // traj log
 
-    ros::Rate rate(Config::FPS * 2);
+    ros::Rate rate(Config::FPS /** 2*/);
 
     //! Main loop
-    while(ros::ok()) {
+    while (ros::ok()) {
 
         WorkTimer timer;
         timer.start();
 
         //! Get new measurement: image and odometry
-//        string fullImgName = Config::DataPath + "/image/" + to_string(id_raw) + ".bmp";
-//        Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
-
-//        getline(odo_rec, odo_line);
-//        istringstream iss(odo_line);
-//        iss >> odo_x >> odo_y >> odo_theta;
-//        Se2 odo(odo_x, odo_y, odo_theta);
-
-
-//        id_raw++;
-
         cv::Mat img;
         Se2 odo;
         Point3f odo_3f;
         bool sensorUpdated = mpSensors->update();
-        if (sensorUpdated) {
-            mpSensors->readData(odo_3f, img);
 
-//            static Point3f firstOdom = odo_3f;
-//            odo = Se2(odo_3f.x - firstOdom.x*cos(firstOdom.z),
-//                      odo_3f.y - firstOdom.y*sin(firstOdom.z),
-//                      odo_3f.z - firstOdom.z);
+        if (!sensorUpdated) {
+//            fprintf(stderr, "[Localizer] No sensor data input!\n");
+//            rate.sleep();
+            continue;
+        }
 
-            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
-//            cvu::normalizeYawAngle(odo);
-            ReadFrameInfo(img, odo);    // 每一帧都是KF
+        mpSensors->readData(odo_3f, img);
+        odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+        ReadFrameInfo(img, odo);    // 每一帧都是KF，mpKFRef数据赋值
 
-            if (mpKFRef == nullptr)
-                continue;
+        if (mpKFRef == nullptr) {
+            mState = cvu::FIRST_FRAME;
+            cerr << "[Localizer] Tracking Start ..." << endl;
+//                continue;
+        }
 
-            UpdatePoseCurr();
-            printf("[Localizer] #%d currentFrame pose:[%f, %f]\n",
-                    mpKFCurr->id, mpKFCurr->Twb.x*0.001, mpKFCurr->Twb.y*0.001);
+        if (mState == cvu::FIRST_FRAME) {
+            bool bIfLoopCloseDetected = false;
+            bool bIfLoopCloseVerified = false;
 
+            bIfLoopCloseDetected = DetectLoopClose();
 
-            //! Tracking process
-            // Tracking good, do localize based on last loop
-            if (mbIsTracked) {
+            if (bIfLoopCloseDetected) {
 
-                //            MatchLastFrame();
-                //            DoLocalBA();
+                map<int,int> mapMatchMP, mapMatchGood, mapMatchRaw;
+                bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
 
-                MatchLocalMap();
+                if (bIfLoopCloseVerified) {
 
-                int numMPCurr = mpKFCurr->getSizeObsMP();
-                if (numMPCurr > 30) {
+                    mpKFCurr->setPose(mpKFLoop->getPose());
+                    mpKFCurr->addCovisibleKF(mpKFLoop);
+
+                    // Update local map from KFLoop
+                    UpdateLocalMap();
+
+                    // Set MP observation of KFCurr from KFLoop
+                    MatchLoopClose(mapMatchGood);
+
+                    // Do Local BA and Do outlier rejection
                     DoLocalBA();
+
+                    // Set MP observation of KFCurr from local map
+                    MatchLocalMap();
+
+                    // Do local BA again and do outlier rejection
+                    DoLocalBA();
+
+                }  else {
+                    ResetLocalMap();
                 }
-
-                UpdateCovisKFCurr();
-
-                UpdateLocalMap(1);
 
                 DrawImgCurr();
+                DrawImgMatch(mapMatchGood);
+            } else {
+                DrawImgCurr();
                 mImgMatch = Mat::zeros(mImgMatch.rows, mImgMatch.cols, mImgMatch.type());
-
-                DetectIfLost();
             }
-            // Tracking lost, need loop close
-            else {
-                cerr << "[Localizer] Tracking lost! Need to relocalize..." << endl;
-                bool bIfLoopCloseDetected = false;
-                bool bIfLoopCloseVerified = false;
-
-                bIfLoopCloseDetected = DetectLoopClose();
-
-                if (bIfLoopCloseDetected) {
-
-                    map<int,int> mapMatchMP, mapMatchGood, mapMatchRaw;
-                    bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
-
-                    if (bIfLoopCloseVerified) {
-
-                        mpKFCurr->setPose(mpKFLoop->getPose());
-                        mpKFCurr->addCovisibleKF(mpKFLoop);
-
-                        // Update local map from KFLoop
-                        UpdateLocalMap();
-
-                        // Set MP observation of KFCurr from KFLoop
-                        MatchLoopClose(mapMatchGood);
-
-                        // Do Local BA and Do outlier rejection
-                        DoLocalBA();
-
-                        // Set MP observation of KFCurr from local map
-                        MatchLocalMap();
-
-                        // Do local BA again and do outlier rejection
-                        DoLocalBA();
-                    }  else {
-                        ResetLocalMap();
-                    }
-
-                    DrawImgCurr();
-                    DrawImgMatch(mapMatchGood);
-                } else {
-                    DrawImgCurr();
-                    mImgMatch = Mat::zeros(mImgMatch.rows, mImgMatch.cols, mImgMatch.type());
-                }
-                DetectIfLost();
-            }
-
+            DetectIfLost();
+            continue;
         }
+
+        UpdatePoseCurr();
+        if (mState == cvu::OK) {
+//            UpdatePoseCurr();
+
+            MatchLocalMap();
+
+            int numMPCurr = mpKFCurr->getSizeObsMP();
+            if (numMPCurr > 30) {
+                DoLocalBA();
+            }
+
+            UpdateCovisKFCurr();
+
+            UpdateLocalMap(1);
+
+            DrawImgCurr();
+            mImgMatch = Mat::zeros(mImgMatch.rows, mImgMatch.cols, mImgMatch.type());
+
+            DetectIfLost();
+        }
+        // Tracking lost, need loop close
+        else {
+            assert(mState != cvu::NO_READY_YET);
+            assert(mState != cvu::FIRST_FRAME);
+            assert(mState != cvu::OK);
+
+            printf("[Localizer] Tracking temporary lost! nLostFrame = %d\n", nLostFrames);
+            bool bIfLoopCloseDetected = false;
+            bool bIfLoopCloseVerified = false;
+
+            bIfLoopCloseDetected = DetectLoopClose();
+
+            if (bIfLoopCloseDetected) {
+                map<int,int> mapMatchMP, mapMatchGood, mapMatchRaw;
+                bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
+
+                if (bIfLoopCloseVerified) {
+                    mpKFCurr->setPose(mpKFLoop->getPose());
+                    mpKFCurr->addCovisibleKF(mpKFLoop);
+
+                    // Update local map from KFLoop
+                    UpdateLocalMap();
+
+                    // Set MP observation of KFCurr from KFLoop
+                    MatchLoopClose(mapMatchGood);
+
+                    // Do Local BA and Do outlier rejection
+                    DoLocalBA();
+
+                    // Set MP observation of KFCurr from local map
+                    MatchLocalMap();
+
+                    // Do local BA again and do outlier rejection
+                    DoLocalBA();
+
+                } else {
+                    ResetLocalMap();
+                }
+
+                DrawImgCurr();
+                DrawImgMatch(mapMatchGood);
+            } else {
+                DrawImgCurr();
+                mImgMatch = Mat::zeros(mImgMatch.rows, mImgMatch.cols, mImgMatch.type());
+            }
+            DetectIfLost();
+        }
+
+        mpKFCurrRefined = mpKFCurr;
+//        WriteTrajFile(fileOutTraj);
+
+        timer.stop();
+        printf("[Localizer] #%d localize tracking time: %fms, Pose:[%f, %f]\n",
+               mpKFCurr->mIdKF, timer.time, mpKFCurr->Twb.x/1000, mpKFCurr->Twb.y/1000);
 
         if (checkFinish()) {
             break;
         }
-
-        mpKFCurrRefined = mpKFCurr;
-        WriteTrajFile(fileOutTraj);
-
-        timer.stop();
-        printf("[Localizer] KF#%d(#%d) localize tracking time: %fms, Pose:[%f, %f]\n",
-               mpKFCurr->mIdKF, mpKFCurr->id, timer.time,
-               mpKFCurr->Twb.x, mpKFCurr->Twb.y);
-//        printf("[Localizer] KF#%d(#%d) Odom_input:[%f, %f, %f], Odom_orig:[%f, %f, %f]\n",
-//               mpKFCurr->mIdKF, mpKFCurr->id,
-//               mpKFCurr->odom.x, mpKFCurr->odom.y, mpKFCurr->odom.theta,
-//               odo_3f.x, odo_3f.y, odo_3f.z);
 
         rate.sleep();
     }
@@ -206,7 +239,15 @@ void Localizer::WriteTrajFile(ofstream & file) {
 }
 
 void Localizer::ReadFrameInfo(const Mat &img, const Se2& odo) {
+//    if (mState == FIRST_FRAME) {
+//        mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+//        mFrameCurr.Tcw = Config::cTb.clone();
+//        mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
+//        mpKFCurr->ComputeBoW(mpORBVoc);
 
+//        mFrameRef = mFrameCurr;
+//        mpKFRef = mpKFCurr;
+//    }
     mFrameRef = mFrameCurr;
     mpKFRef = mpKFCurr;
 
@@ -243,6 +284,7 @@ void Localizer::MatchLocalMap() {
 
 
 void Localizer::DoLocalBA() {
+    locker lock(mutex mMutexKFLocal);   //!@Vance: 20190729新增,解决MapPub问题
 
     SlamOptimizer optimizer;
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
@@ -269,10 +311,10 @@ void Localizer::DoLocalBA() {
 
     map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
 
-
+    // Add Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
         PtrMapPoint pMP = *iter;
-        if(pMP->isNull() || !pMP->isGoodPrl())
+        if (pMP->isNull() || !pMP->isGoodPrl())
             continue;
 
         bool marginal = false;
@@ -283,7 +325,7 @@ void Localizer::DoLocalBA() {
         int ftrIdx = Observations[pMP];
         int octave = pMP->getOctave(mpKFCurr);
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
-        Eigen::Vector2d uv = toVector2d( mpKFCurr->keyPointsUn[ftrIdx].pt );
+        Eigen::Vector2d uv = toVector2d(mpKFCurr->keyPointsUn[ftrIdx].pt );
         Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
 
         EdgeProjectXYZ2UV* ei = new EdgeProjectXYZ2UV();
@@ -310,7 +352,8 @@ void Localizer::DoLocalBA() {
     Mat Twc = toCvMat(estimateVertexSE3Expmap(optimizer, mpKFCurr->mIdKF));
     mpKFCurr->setPose(Twc);
 
-    fprintf(stderr, "[Localizer] #%d localBA Time = %fms\n", mpKFCurr->id, timer.time);
+    printf("[Localizer] #%d localBA Time = %fms, set pose to [%f. %f]\n",
+           mpKFCurr->mIdKF, timer.time, mpKFCurr->Twb.x/1000, mpKFCurr->Twb.y/1000);
 }
 
 void Localizer::DetectIfLost() {
@@ -318,9 +361,19 @@ void Localizer::DetectIfLost() {
     int numKFLocal = GetLocalKFs().size();
     if (numKFLocal > 0) {
         mbIsTracked = true;
+
+        nLostFrames = 0;
+        mState = cvu::OK;
     } else {
         mbIsTracked = false;
+
+        mState = cvu::TEMPORARY_LOST;
+        if (mLastState == cvu::TEMPORARY_LOST)
+            nLostFrames++;
+        if (nLostFrames > 100)
+            mState = cvu::LOST;
     }
+    mLastState = mState;
 }
 
 void Localizer::setMap(Map *pMap) {
@@ -336,7 +389,7 @@ void Localizer::ComputeBowVecAll() {
     vector<PtrKeyFrame> vpKFs;
     vpKFs = mpMap->getAllKF();
     int numKFs = vpKFs.size();
-    for(int i=0; i<numKFs; i++) {
+    for (int i=0; i<numKFs; i++) {
         PtrKeyFrame pKF = vpKFs[i];
         if (pKF->mbBowVecExist) {
             continue;
@@ -384,14 +437,14 @@ bool Localizer::DetectLoopClose() {
     }
 
     //! DEBUG: Print loop closing info
-    if (bDetected) {
-        cerr << "[Localizer] Detect a loop close!"
+    if (bDetected && Config::LOCAL_PRINT) {
+        cout << "[Localizer] Detect a loop close!"
              << " idCurr = " << pKFCurr->id
              << ", idLoop = " << mpKFLoop->id
              << ", bestScore = " << scoreBest
              << endl;
     } else {
-        cerr << "[Localizer]"
+        cout << "[Localizer]"
              << " idCurr = " << pKFCurr->id
              << ", NO good loop close detected."
              << endl;
@@ -402,19 +455,19 @@ bool Localizer::DetectLoopClose() {
 
 bool Localizer::VerifyLoopClose(map<int,int> & mapMatchMP, map<int,int> & mapMatchGood, map<int,int> & mapMatchRaw) {
 
+    if (mpKFCurr == NULL || mpKFLoop == NULL) {
+        return false;
+    }
+
     mapMatchMP.clear();
     mapMatchGood.clear();
     mapMatchRaw.clear();
     map<int,int> mapMatch;
 
     bool bVerified = false;
-    //int numMinMPMatch = 15;
-    int numMinMatch = 45;
+//    int numMinMPMatch = 15;
+    int numMinMatch = 30;   // 45
     //double ratioMinMPMatch = 0.1;
-
-    if (mpKFCurr == NULL || mpKFLoop == NULL) {
-        return false;
-    }
 
     //! Match ORB KPs
     ORBmatcher matcher;
@@ -428,13 +481,12 @@ bool Localizer::VerifyLoopClose(map<int,int> & mapMatchMP, map<int,int> & mapMat
     int numGoodMatch = mapMatch.size();
 
     if (numGoodMatch >= numMinMatch) {
-        cerr << "[Localizer] " << "Loop close verification PASSED, "
-             << "numGoodMatch = " << numGoodMatch << endl;
+        cerr << "[Localizer] Loop close verification PASSED! numGoodMatch = "
+             << numGoodMatch << endl;
         bVerified = true;
-    }
-    else {
-        cerr << "[Localizer] " << "Loop close verification FAILED, "
-             << "numGoodMatch = " << numGoodMatch << endl;
+    } else {
+        cout << "[Localizer] Loop close verification FAILED! numGoodMatch = "
+             << numGoodMatch << endl;
     }
     return bVerified;
 }
@@ -453,11 +505,11 @@ void Localizer::DrawImgCurr() {
 
     locker lockImg(mMutexImg);
 
-    if(mpKFCurr == NULL)
+    if (mpKFCurr == NULL)
         return;
 
     mpKFCurr->copyImgTo(mImgCurr);
-    if(mImgCurr.channels() == 1)
+    if (mImgCurr.channels() == 1)
         cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
 
     for (int i=0, iend=mpKFCurr->keyPoints.size(); i<iend; i++) {
@@ -469,14 +521,12 @@ void Localizer::DrawImgCurr() {
         Scalar colorCurr;
         if (ifMPCurr) {
             colorCurr = Scalar(0,255,0);
-        }
-        else {
+        } else {
             colorCurr = Scalar(255,0,0);
         }
 
         circle(mImgCurr, ptCurr, 5, colorCurr, 1);
     }
-
 }
 
 void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
@@ -485,7 +535,7 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
 
     //! Renew images
 
-    if(mpKFCurr == NULL || mpKFLoop == NULL) {
+    if (mpKFCurr == NULL || mpKFLoop == NULL) {
         return;
     }
 
@@ -497,9 +547,9 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
         mImgLoop.setTo(cv::Scalar(0));
     }
 
-    if(mImgLoop.channels() == 1)
+    if (mImgLoop.channels() == 1)
         cvtColor(mImgLoop, mImgLoop, CV_GRAY2BGR);
-    if(mImgMatch.channels() == 1)
+    if (mImgMatch.channels() == 1)
         cvtColor(mImgMatch, mImgMatch, CV_GRAY2BGR);
     vconcat(mImgCurr, mImgLoop, mImgMatch);  // 垂直拼接
 
@@ -611,7 +661,7 @@ void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
     for (unsigned int i=0; i<vInlier.size(); i++) {
         int idxCurr = vIdxCurr[i];
         int idxLoop = vIdxLoop[i];
-        if(vInlier[i] == true) {
+        if (vInlier[i] == true) {
             mapMatchGood[idxCurr] = idxLoop;
         }
     }
@@ -652,7 +702,7 @@ void Localizer::UpdateLocalMap(int searchLevel) {
 
     while(searchLevel > 0) {
         std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
-        for(auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
+        for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
             PtrKeyFrame pKF = *iter;
             std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
             mspKFLocal.insert(spKF.begin(), spKF.end());
@@ -660,7 +710,7 @@ void Localizer::UpdateLocalMap(int searchLevel) {
         searchLevel--;
     }
 
-    for(auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
+    for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
         set<PtrMapPoint> spMP = pKF->getAllObsMPs();
         mspMPLocal.insert(spMP.begin(), spMP.end());
@@ -687,13 +737,13 @@ void Localizer::MatchLoopClose(map<int,int> mapMatchGood) {
 
 void Localizer::UpdateCovisKFCurr() {
 
-    for(auto iter = mspKFLocal.begin(); iter != mspKFLocal.end(); iter++) {
+    for (auto iter = mspKFLocal.begin(); iter != mspKFLocal.end(); iter++) {
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKF = *iter;
 
         FindCommonMPs(mpKFCurr, pKF, spMPs);
 
-        if(spMPs.size() > 0.1 * mpKFCurr->getSizeObsMP()){
+        if (spMPs.size() > 0.1 * mpKFCurr->getSizeObsMP()){
             mpKFCurr->addCovisibleKF(pKF);
         }
     }
@@ -703,10 +753,6 @@ int Localizer::FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, set
     spMPs.clear();
     mpMap->compareViewMPs(pKF1, pKF2, spMPs);
     return spMPs.size();
-}
-
-void Localizer::Test(int a, int b) {
-    //int c = a + b;
 }
 
 void Localizer::setSensors(Sensors* pSensors){
@@ -747,5 +793,11 @@ Se2 Localizer::getRefKFPose() {
     locker lock(mutex mMutexKFLocal);
     return mpKFRef->Twb;
 }
+
+PtrKeyFrame Localizer::getKFCurr() {
+    locker lock(mutex mMutexKFLocal);
+    return mpKFCurr;
+}
+
 
 }

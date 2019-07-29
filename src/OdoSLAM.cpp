@@ -116,7 +116,7 @@ void OdoSLAM::start() {
     mbFinished = false;
 
     if (se2lam::Config::LOCALIZATION_ONLY) {
-        cout << "[System] =====>> Localization_only mode." << endl;
+        cerr << "[System] =====>> Localization-Only Mode <<=====" << endl;
 
         thread threadLocalizer(&se2lam::Localizer::run, mpLocalizer);
 
@@ -129,7 +129,7 @@ void OdoSLAM::start() {
         threadLocalizer.detach();
         threadMapPub.detach();
     } else {  // SLAM case
-        cout << "[System] =====>> Running SLAM" << endl;
+        cout << "[System] =====>> Running SLAM <<=====" << endl;
 
         mpMapPub->mbIsLocalize = false;
         mpFramePub->mbIsLocalize = false;

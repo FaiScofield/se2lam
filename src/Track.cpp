@@ -29,7 +29,7 @@ ofstream ofs;
 
 Track::Track()
 {
-    mState = FIRST_FRAME;   // NO_READY_YET
+    mState = cvu::FIRST_FRAME;   // NO_READY_YET
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = 8;
     nMaxFrames = Config::FPS;
@@ -99,7 +99,7 @@ void Track::run()
 //                    mFirstFrameOdom = odo;
                     mCreateFrame(img, odo);  // 为初始帧创建帧信息
                     mLastState = mState;
-                    mState = OK;
+                    mState = cvu::OK;
                 } else {
 //                    odo.x -= mFirstFrameOdom.x /** cos(mFirstFrameOdom.theta)*/;
 //                    odo.y -= mFirstFrameOdom.y /** sin(mFirstFrameOdom.theta)*/;
@@ -114,9 +114,8 @@ void Track::run()
             timer.stop();
             printf("[Track] #%d Tracking consuming time: %fms, Pose:[%f, %f]\n",
                    mFrame.id, timer.time, mFrame.Twb.x/1000, mFrame.Twb.y/1000);
-//            printf("[Track] #%d Odom_input:[%f, %f, %f], Odom_orig:[%f, %f, %f]\n",
-//                   mFrame.id, mFrame.odom.x, mFrame.odom.y, mFrame.odom.theta,
-//                   odo_3f.x, odo_3f.y, odo_3f.z);
+            printf("[Track] #%d Odom_input:[%f, %f, %f]\n", mFrame.id,
+                   mFrame.odom.x/1000, mFrame.odom.y/1000, mFrame.odom.theta);
 
             //            writePose();
         }
@@ -181,7 +180,7 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 ////        }
 //    }
 
-    assert(mState == OK);
+    assert(mState == cvu::OK);
 
     ORBmatcher matcher(0.9);
     int nMatchedTmp = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);

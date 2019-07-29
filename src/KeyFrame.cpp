@@ -41,7 +41,7 @@ KeyFrame::KeyFrame(){
     }
 
     mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for(int i=0; i<mnScaleLevels; i++)
+    for (int i=0; i<mnScaleLevels; i++)
         mvInvLevelSigma2[i] = 1.0/mvLevelSigma2[i];
 
 }
@@ -55,8 +55,8 @@ KeyFrame::KeyFrame(const Frame& frame):
     size_t sz = frame.keyPoints.size();
     mViewMPs = vector<Point3f>(sz, Point3f(-1,-1,-1));
     mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d> >(sz, Eigen::Matrix3d::Identity()*-1);
-    mNextIdKF++;
     mIdKF = mNextIdKF;
+    mNextIdKF++;
     PtrKeyFrame pKF = nullptr;
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
     mOdoMeasureTo = make_pair(pKF, SE3Constraint());
@@ -103,7 +103,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame>& pThis){
     }
 
     // Handle Covisibility
-    for(auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; it++){
+    for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; it++){
         (*it)->eraseCovisibleKF(pThis);
     }
     mObservations.clear();
@@ -146,11 +146,11 @@ set<PtrMapPoint> KeyFrame::getAllObsMPs(bool checkParallax){
     locker lock(mMutexObs);
     set<PtrMapPoint> spMP;
     auto i = mObservations.begin(), iend = mObservations.end();
-    for(; i != iend; i++){
+    for (; i != iend; i++){
         PtrMapPoint pMP = i->first;
-        if( pMP->isNull() )
+        if (pMP->isNull())
             continue;
-        if( checkParallax && !pMP->isGoodPrl() )
+        if (checkParallax && !pMP->isGoodPrl())
             continue;
         spMP.insert(pMP);
     }
@@ -297,7 +297,7 @@ void KeyFrame::setObservation(const PtrMapPoint &pMP, int idx) {
 PtrMapPoint KeyFrame::getObservation(int idx){
     locker lock(mMutexObs);
 
-    if(!mDualObservations[idx]){
+    if (!mDualObservations[idx]){
         printf("This is NULL! /in MP\n");
     }
     return mDualObservations[idx];
@@ -305,7 +305,7 @@ PtrMapPoint KeyFrame::getObservation(int idx){
 
 int KeyFrame::getFtrIdx(const PtrMapPoint &pMP){
     locker lock(mMutexObs);
-    if(mObservations.find(pMP) == mObservations.end())
+    if (mObservations.find(pMP) == mObservations.end())
         return -1;
     return mObservations[pMP];
 }

@@ -198,6 +198,11 @@ cv::Mat FramePublish::drawFrame() {
 }
 
 cv::Mat FramePublish::drawMatch() {
+    if (mbIsLocalize)
+        return Mat();
+
+    mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches);
+
     cv::Mat imgCurr, imgRef;
     mImg.copyTo(imgCurr);
     mImgRef.copyTo(imgRef);
@@ -209,21 +214,17 @@ cv::Mat FramePublish::drawMatch() {
     cv::Mat res(imgCurr.rows, imgCurr.cols+imgRef.cols, CV_8UC3);
     imgCurr.copyTo(res.colRange(0, imgCurr.cols));
     imgRef.copyTo(res.colRange(imgCurr.cols, imgCurr.cols+imgRef.cols));
-//    if (!mbIsLocalize) {
-        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
-            for (int i = 0; i < matches.size(); ++i) {
-                if (matches[i] < 0) {
-                    continue;
-                } else {
-                    Point2f ptRef = kpRef[i].pt + Point2f(imgCurr.cols, 0);
-                    Point2f ptCurr = kp[matches[i]].pt;
-                    circle(res, ptCurr, 3, Scalar(0, 255, 0), 1);
-                    circle(res, ptRef, 3, Scalar(0, 255, 0), 1);
-                    line(res, ptRef, ptCurr, Scalar(255, 255, 0, 0.8));
-                }
-            }
+    for (int i = 0; i < matches.size(); ++i) {
+        if (matches[i] < 0) {
+            continue;
+        } else {
+            Point2f ptRef = kpRef[i].pt + Point2f(imgCurr.cols, 0);
+            Point2f ptCurr = kp[matches[i]].pt;
+            circle(res, ptCurr, 3, Scalar(0, 255, 0), 1);
+            circle(res, ptRef, 3, Scalar(0, 255, 0), 1);
+            line(res, ptRef, ptCurr, Scalar(255, 255, 0, 0.8));
         }
-//    }
+    }
 
     return res.clone();
 }

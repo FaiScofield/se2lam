@@ -65,7 +65,7 @@ public:
     int FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);
 
     // DEBUG
-    void Test(int a = 1, int b = 2);
+//    void Test(int a = 1, int b = 2);
     void WriteTrajFile(std::ofstream & file);
 
     void requestFinish();
@@ -74,6 +74,8 @@ public:
     cv::Point3f getCurrentFrameOdom();
     Se2 getCurrKFPose();
     Se2 getRefKFPose();
+    PtrKeyFrame getKFCurr();
+    void trackFirstFrame();
 
 public:
     //! Variables
@@ -103,6 +105,8 @@ public:
     mutex mMutexKFLocal;
     mutex mMutexLocalMap;
 
+    cvu::eTrackingState mState;
+    cvu::eTrackingState mLastState;
 protected:
     bool checkFinish();
     void setFinish();
@@ -111,6 +115,9 @@ protected:
     std::mutex mMutexFinish;
 
     Sensors* mpSensors;
+
+    int nLostFrames;
+    std::condition_variable cndvFirstKFUpdate;
 };
 
 

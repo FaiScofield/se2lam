@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "Frame.h"
 #include "Sensors.h"
+#include "cvutil.h"
 
 namespace se2lam {
 
@@ -46,15 +47,8 @@ public:
 
 //    bool relocalization();
 
-    enum eTrackingState {
-        NO_READY_YET = -1,
-        FIRST_FRAME = 0,
-        OK = 1,
-        TEMPORARY_LOST = 2,
-        LOST = 3
-    };
-    eTrackingState mState;
-    eTrackingState mLastState;
+    cvu::eTrackingState mState;
+    cvu::eTrackingState mLastState;
 
 private:
     // only useful when odo time not sync with img time

@@ -21,6 +21,13 @@ using cv::Mat;
 using cv::Point2f;
 using cv::Point3f;
 
+enum eTrackingState {
+    NO_READY_YET = -1,
+    FIRST_FRAME = 0,
+    OK = 1,
+    TEMPORARY_LOST = 2,
+    LOST = 3
+};
 
 Mat inv(const Mat& T4x4);
 
