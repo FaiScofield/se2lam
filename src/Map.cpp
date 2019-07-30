@@ -51,7 +51,6 @@ void Map::setCurrentKF(const PtrKeyFrame &pKF){
 }
 
 
-
 vector<PtrKeyFrame> Map::getAllKF(){
     locker lock(mMutexGraph);
     return vector<PtrKeyFrame>(mKFs.begin(), mKFs.end());
