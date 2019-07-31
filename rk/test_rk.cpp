@@ -16,30 +16,57 @@ namespace fs = boost::filesystem;
 
 const char *vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
 
-void readImagesRK(const string& dataFolder, vector<string>& files) {
-    files.clear();
+struct RK_IMAGE
+{
+    RK_IMAGE(const string& s, const long long int t)
+        : fileName(s), timeStamp(t) {}
 
+    string fileName;
+    long long int timeStamp;
+};
+
+
+bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
+{
+    return r1.timeStamp < r2.timeStamp;
+}
+
+void readImagesRK(const string& dataFolder, vector<string>& files)
+{
     fs::path path(dataFolder);
     if (!fs::exists(path)) {
         cerr << "[Main] Data folder doesn't exist!" << endl;
         return;
     }
 
+    vector<RK_IMAGE> allImages;
     fs::directory_iterator end_iter;
     for (fs::directory_iterator iter(path); iter != end_iter; ++iter) {
         if (fs::is_directory(iter->status()))
             continue;
-        if (fs::is_regular_file(iter->status()))
-            files.push_back(iter->path().string());
+        if (fs::is_regular_file(iter->status())) {
+            // format: /frameRaw12987978101.jpg
+            string s = iter->path().string();
+            auto i = s.find_last_of('/');
+            auto j = s.find_last_of('.');
+            auto t = atoll(s.substr(i+8+1, j-i-8-1).c_str());
+            allImages.push_back(RK_IMAGE(s, t));
+        }
     }
 
-    if (files.empty()) {
+    if (allImages.empty()) {
         cerr << "[Main] Not image data in the folder!" << endl;
         return;
     } else
-        cout << "[Main] Read " << files.size() << " files in the folder." << endl;
+        cout << "[Main] Read " << allImages.size() << " files in the folder." << endl;
 
-    sort(files.begin(), files.end());
+
+    //! 注意不能直接对string排序
+    sort(allImages.begin(), allImages.end(), lessThen);
+
+    files.clear();
+    for (int i = 0; i < allImages.size(); ++i)
+        files.push_back(allImages[i].fileName);
 }
 
 
