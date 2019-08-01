@@ -54,8 +54,8 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
             auto i = s.find_last_of('/');
             auto j = s.find_last_of('.');
             auto t = atoll(s.substr(i+8+1, j-i-8-1).c_str());
-//            cout << s << endl;
-//            cout << t << endl;
+            cout << s << endl;
+            cout << t << endl;
             allImages.push_back(RK_IMAGE(s, t));
         }
     }
@@ -113,18 +113,13 @@ int main(int argc, char **argv)
         //! Hough
 //        HoughLinesP();
 
+        //! LineSegmentDetector 这个效果不如LSDDetector
+//        Ptr<LineSegmentDetector> pLSD  = createLineSegmentDetector();
 
-        Ptr<LineSegmentDetector> pLSD  = createLineSegmentDetector(LSD_REFINE_ADV); // default: LSD_REFINE_STD
-//        pLSD->detect();
-//        pLSD->drawSegments();
-//        pLSD->compareSegments();
-
-
-        //! LSD
+        //! LSDDetector
         // LSD: A fast line segment detector with a false detection control, 2010
         vector<KeyLine> keyLines;
-        Ptr<LSDDetector> lsd =
-                LSDDetector::createLSDDetector();
+        Ptr<LSDDetector> lsd = LSDDetector::createLSDDetector();
         lsd->detect(imgCur, keyLines, 2, 2);
         drawKeylines(imgCur, keyLines, outImageLSD, Scalar(0,255,0));
 //        imshow("LSD lines", outImageLSD);
@@ -142,8 +137,7 @@ int main(int argc, char **argv)
         BinaryDescriptor::Params param; // 参数设置
 
         keyLinesCur.clear();
-        Ptr<BinaryDescriptor> bd =
-                BinaryDescriptor::createBinaryDescriptor();
+        Ptr<BinaryDescriptor> bd = BinaryDescriptor::createBinaryDescriptor();
         bd->detect(imgCur, keyLinesCur);
         bd->compute(imgCur, keyLinesCur, desCur);
 
@@ -157,8 +151,7 @@ int main(int argc, char **argv)
 
         //! Match
         vector<DMatch> matches, matchesKnn;
-        Ptr<BinaryDescriptorMatcher> bdm =
-                BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
+        Ptr<BinaryDescriptorMatcher> bdm = BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
         bdm->match(desCur, desRef, matches);
 
         vector<vector<DMatch>> vMatchesKnn;
@@ -169,18 +162,16 @@ int main(int argc, char **argv)
 
         //! Show Matches
         vector<char> mask(matches.size(), 1);
-        drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef,
-                                         matches, outImageLsdMatch, Scalar(0,0,255),
-                                         Scalar(0,255,0), mask);
+        drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef, matches,
+                        outImageLsdMatch, Scalar(0,0,255), Scalar(0,255,0), mask);
         imshow("LSD Matches", outImageLsdMatch);
 
         vector<char> mask2(matchesKnn.size(), 1);
-        drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef,
-                                         matchesKnn, outImageLsdMatchGood, Scalar(0,0,255),
-                                         Scalar(0,255,0), mask2);
+        drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef, matchesKnn,
+                        outImageLsdMatchGood, Scalar(0,0,255), Scalar(0,255,0), mask2);
         imshow("LSD Matches Knn", outImageLsdMatchGood);
 
-        waitKey(20);
+        waitKey(200);
 
         imgCur.copyTo(imgRef);
         desCur.copyTo(desRef);
