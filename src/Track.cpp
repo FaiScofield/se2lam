@@ -29,10 +29,11 @@ ofstream ofs;
 
 Track::Track()
 {
-    mState = cvu::FIRST_FRAME;   // NO_READY_YET
+    mState = cvu::NO_READY_YET;  // NO_READY_YET
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
-    nMinFrames = 8;
+    //    nMinFrames = 8;
     nMaxFrames = Config::FPS;
+    nMinFrames = min(8, static_cast<int>(0.5 * nMaxFrames + 1));  // 8
     mnGoodPrl = 0;
     // mbTriangulated = false;
 
@@ -44,15 +45,16 @@ Track::Track()
     mbFinishRequested = false;
 
     nLostFrames = 0;
-//    try {
-//        ofs.open(trajectoryFile, ios_base::out);
-//    } catch (exception e) {
-//        cout << e.what() << endl;
-//    }
-//    ofs.close();
+    //    try {
+    //        ofs.open(trajectoryFile, ios_base::out);
+    //    } catch (exception e) {
+    //        cout << e.what() << endl;
+    //    }
+    //    ofs.close();
 }
 
-Track::~Track() {}
+Track::~Track()
+{}
 
 void Track::setMap(Map *pMap)
 {
@@ -91,31 +93,30 @@ void Track::run()
             mpSensors->readData(odo_3f, img);
             odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
 
+            Mat imgShap, imgGamma;
+            imgShap = cvu::sharpping(img, 12);
+            imgGamma = cvu::gamma(imgShap, 1.2);
             {
                 locker lock(mMutexForPub);
                 bool noFrame = !(Frame::nextId);
                 if (noFrame) {
-//                    if (mState == FIRST_FRAME)
-//                    mFirstFrameOdom = odo;
-                    mCreateFrame(img, odo);  // 为初始帧创建帧信息
+                    //                    if (mState == FIRST_FRAME)
+                    //                    mFirstFrameOdom = odo;
+                    mCreateFrame(imgGamma, odo);  // 为初始帧创建帧信息
                     mLastState = mState;
                     mState = cvu::OK;
                 } else {
-//                    odo.x -= mFirstFrameOdom.x /** cos(mFirstFrameOdom.theta)*/;
-//                    odo.y -= mFirstFrameOdom.y /** sin(mFirstFrameOdom.theta)*/;
-//                    odo.theta -= mFirstFrameOdom.theta;
-//                    cvu::normalizeYawAngle(odo);
-                    mTrack(img, odo);  // 非初始帧则进行tracking,计算位姿
+                    mTrack(imgGamma, odo);  // 非初始帧则进行tracking,计算位姿
                 }
             }
             mpMap->setCurrentFramePose(mFrame.Tcw);
             mLastOdom = odo;
 
             timer.stop();
-            printf("[Track] #%d Tracking consuming time: %fms, Pose:[%f, %f]\n",
-                   mFrame.id, timer.time, mFrame.Twb.x/1000, mFrame.Twb.y/1000);
-            printf("[Track] #%d Odom_input:[%f, %f, %f]\n", mFrame.id,
-                   mFrame.odom.x/1000, mFrame.odom.y/1000, mFrame.odom.theta);
+            printf("[Track] #%d Tracking consuming time: %fms, Pose:[%f, %f]\n", mFrame.id,
+                   timer.time, mFrame.Twb.x / 1000, mFrame.Twb.y / 1000);
+            printf("[Track] #%d Odom_input:[%f, %f, %f]\n", mFrame.id, mFrame.odom.x / 1000,
+                   mFrame.odom.y / 1000, mFrame.odom.theta);
 
             //            writePose();
         }
@@ -140,13 +141,11 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
     mFrame.Twb = Se2(0, 0, 0);  //!@Vance: 当前帧World->Body，即Body的世界坐标，首帧为原点
     mFrame.Tcw = Config::cTb.clone();  //!@Vance: 当前帧Camera->World
 
-    if (mFrame.keyPoints.size() > 80) { // 100
-        cout << "========================================================"
+    if (mFrame.keyPoints.size() > 80) {  // 100
+        cout << "========================================================" << endl;
+        cout << "[Track] #" << mFrame.id << " Create first frame with " << mFrame.N << " features."
              << endl;
-        cout << "[Track] #" << mFrame.id << " Create first frame with "
-             << mFrame.N << " features." << endl;
-        cout << "========================================================"
-             << endl;
+        cout << "========================================================" << endl;
         mpKF = make_shared<KeyFrame>(mFrame);  // 首帧为关键帧
         mpMap->insertKF(mpKF);
         resetLocalTrack();  // 数据转至参考帧
@@ -167,27 +166,27 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
     bool bTrackOK;
 
-//    if (mState == TEMPORARY_LOST) {
-//        bTrackOK = relocalization();
-//        if (bTrackOK) {
-//            nLostFrames = 0;
-//            mState = OK;
-//        } else {
-//            nLostFrames++;
-//        }
-////        if (nLostFrames > 50) {
-////            mState = LOST;
-////        }
-//    }
+    //    if (mState == TEMPORARY_LOST) {
+    //        bTrackOK = relocalization();
+    //        if (bTrackOK) {
+    //            nLostFrames = 0;
+    //            mState = OK;
+    //        } else {
+    //            nLostFrames++;
+    //        }
+    ////        if (nLostFrames > 50) {
+    ////            mState = LOST;
+    ////        }
+    //    }
 
     assert(mState == cvu::OK);
 
-    ORBmatcher matcher(0.9);
+    ORBmatcher matcher(0.75);  // 由于trackWithRefKF,间隔有些帧数，nnratio不应过小
     int nMatchedTmp = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);
     // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
     int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
-    cout << "[Track] #" << mFrame.id << " ORBmatcher get valid/tatal matches "
-         << nMatched << "/" << nMatchedTmp << endl;
+    cout << "[Track] #" << mFrame.id << " ORBmatcher get valid/tatal matches " << nMatched << "/"
+         << nMatchedTmp << endl;
 
     updateFramePose();
 
@@ -219,16 +218,14 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 void Track::updateFramePose()
 {
     //! 参考帧Body->当前帧Body，向量，这里就是delta_odom
-    //! mpKF是Last KF，如果当前帧不是KF，则当前帧位姿由Last
-    //! KF叠加上里程计数据计算得到
+    //! mpKF是Last KF，如果当前帧不是KF，则当前帧位姿由Last KF叠加上里程计数据计算得到
     //! 这里默认场景是工业级里程计，精度比较准，KF之间里程误差可以忽略
     mFrame.Trb = mFrame.odom - mpKF->odom;
 
     //! 当前帧Body->参考帧Body？ Trb和Tbr不能直接取负，而是差了一个旋转
     Se2 dOdo = mpKF->odom - mFrame.odom;  //!@Vance: delta_odom,即t_cr?
     //@Vance: 当前帧Camera->参考帧Camera，矩阵
-    mFrame.Tcr =
-        Config::cTb * dOdo.toCvSE3() * Config::bTc;  //!@Vance: 为何是右乘？
+    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;  //!@Vance: 为何是右乘？
     //! NOTE 当前帧Camera->World，矩阵，为何右乘？
     mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
     //@Vance: 当前帧World->Body，向量，故相加
@@ -282,8 +279,8 @@ void Track::resetLocalTrack()
         preSE2.cov[i] = 0;
 }
 
-int Track::copyForPub(vector<KeyPoint> &kp1, vector<KeyPoint> &kp2, Mat &img1,
-                      Mat &img2, vector<int> &vMatches12)
+int Track::copyForPub(vector<KeyPoint> &kp1, vector<KeyPoint> &kp2, Mat &img1, Mat &img2,
+                      vector<int> &vMatches12)
 {
 
     locker lock(mMutexForPub);
@@ -297,8 +294,7 @@ int Track::copyForPub(vector<KeyPoint> &kp1, vector<KeyPoint> &kp2, Mat &img1,
     return !mMatchIdx.empty();
 }
 
-void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc,
-                                 g2o::Matrix6d &Info_se3)
+void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc, g2o::Matrix6d &Info_se3)
 {
 
     const Mat bTc = Config::bTc;
@@ -315,8 +311,7 @@ void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc,
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
     //    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4,
     //    1.f/(dtheta*dtheta) };
-    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4,
-                     1e-4, 1e-4, 1.f / (dtheta * dtheta)};
+    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
     for (int i = 0; i < 6; i++)
         Info_se3_bTb(i, i) = data[i];
     Info_se3 = Info_se3_bTb;
@@ -335,8 +330,8 @@ void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc,
     // assert(verifyInfo(Info_se3));
 }
 
-void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2,
-                             Eigen::Matrix3d &info1, Eigen::Matrix3d &info2)
+void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eigen::Matrix3d &info1,
+                             Eigen::Matrix3d &info2)
 {
 
     Point3f O1 = Point3f(cvu::inv(Tcw1).rowRange(0, 3).col(3));
@@ -354,11 +349,11 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2,
     float dz1 = dxy2 / sinParallax;
     float dz2 = dxy1 / sinParallax;
 
-    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0,
-                     1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dz1 * dz1));
+    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dxy1 * dxy1), 0, 0,
+                     0, 1.f / (dz1 * dz1));
 
-    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0,
-                     1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dz2 * dz2));
+    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dxy2 * dxy2), 0, 0,
+                     0, 1.f / (dz2 * dz2));
 
     Point3f z1 = Point3f(0, 0, length1);
     Point3f z2 = Point3f(0, 0, length2);
@@ -381,8 +376,8 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2,
     info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
 }
 
-int Track::removeOutliers(const vector<KeyPoint> &kp1,
-                          const vector<KeyPoint> &kp2, vector<int> &matches)
+int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &kp2,
+                          vector<int> &matches)
 {
     vector<Point2f> pt1, pt2;
     vector<int> idx;
@@ -428,8 +423,10 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;  // 重叠视野小于之前的一半，且当前视野内点数大于40
     bool c3 = mFrame.id - mpKF->id > nMaxFrames;  // 或间隔太大
-    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;  // 或匹配对小于1/10最大特征点数
-    bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);  // 则可能需要加入关键帧，实际还得看odom那边的条件
+    bool c4 =
+        nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;  // 或匹配对小于1/10最大特征点数
+    bool bNeedNewKF =
+        c0 && ((c1 && c2) || c3 || c4);  // 则可能需要加入关键帧，实际还得看odom那边的条件
 
     bool bNeedKFByOdo = true;
     if (mbUseOdometry) {
@@ -441,8 +438,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= (0.0523f * Config::UPPER_DEPTH * 0.1f);  // 3 degree = 0.0523 rad
 
-        bNeedKFByOdo = c5 || c6;  // 里程计旋转超过2°，或者移动距离超过一定距离(约2-5cm,
-                       // for 4-10m UPPER_DEPTH)
+        bNeedKFByOdo = c5 || c6;  // 里程计旋转超过2°，或者移动距离超过一定距离(约2-5cm,for 4-10m UPPER_DEPTH)
     }
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件
 

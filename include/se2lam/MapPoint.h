@@ -60,6 +60,7 @@ public:
     PtrKeyFrame mMainKF;
     int mMainOctave;
     float mLevelScaleFactor;
+
     cv::Point2f getMainMeasure();
     void updateMainKFandDescriptor();
 
@@ -77,7 +78,6 @@ public:
             return lhs->mId < rhs->mId;
         }
     };
-
 
     void revisitFailCount();
 

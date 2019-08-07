@@ -16,12 +16,17 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-Frame::Frame() {}
+bool Frame::mbInitialComputations = true;
+int Frame::nextId = 0;
+float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
+float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 
-Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor,
-             const Mat &K, const Mat &distCoef)
+
+Frame::Frame()
+{}
+
+Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
 {
-
     mpORBExtractor = extractor;
     //! 输入图像去畸变
     undistort(im, img, Config::Kcam, Config::Dcam);
@@ -40,10 +45,8 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor,
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        mfGridElementWidthInv =
-            static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
-        mfGridElementHeightInv =
-            static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
+        mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
+        mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
 
         mbInitialComputations = false;
     }
@@ -88,14 +91,6 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor,
     // Tcw = cv::Mat::eye(4,4,CV_32FC1);
     // Tcr = cv::Mat::eye(4,4,CV_32FC1);
 }
-
-bool Frame::mbInitialComputations = true;
-
-int Frame::nextId = 0;
-
-float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
-
-float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 
 Frame::Frame(const Frame &f)
 {
@@ -175,7 +170,7 @@ void Frame::setTime(float time)
     mTime = time;
 }
 
-
+//! 这个函数没用了
 void Frame::undistortKeyPoints(const Mat &K, const Mat &D)
 {
     keyPointsUn = keyPoints;
@@ -215,8 +210,7 @@ void Frame::computeBoundUn(const Mat &K, const Mat &D)
 
 bool Frame::inImgBound(Point2f pt)
 {
-    return (pt.x >= minXUn && pt.x <= maxXUn && pt.y >= minYUn &&
-            pt.y <= maxYUn);
+    return (pt.x >= minXUn && pt.x <= maxXUn && pt.y >= minYUn && pt.y <= maxYUn);
 }
 
 
@@ -228,17 +222,15 @@ bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
 
     //! Keypoint's coordinates are undistorted, which could cause to go out of the image
     //! 特征点坐标是经过畸变矫正过的，可能会超出图像
-    if (posX < 0 || posX >= FRAME_GRID_COLS ||
-        posY < 0 || posY >= FRAME_GRID_ROWS)
+    if (posX < 0 || posX >= FRAME_GRID_COLS || posY < 0 || posY >= FRAME_GRID_ROWS)
         return false;
 
     return true;
 }
 
 // From ORB_SLAM
-vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y,
-                                        const float &r, int minLevel,
-                                        int maxLevel) const
+vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const float &r,
+                                        int minLevel, int maxLevel) const
 {
     vector<size_t> vIndices;
     vIndices.reserve(keyPointsUn.size());
@@ -311,6 +303,7 @@ void Frame::copyDesTo(cv::Mat &desRet)
     descriptors.copyTo(desRet);
 }
 
-Frame::~Frame() {}
+Frame::~Frame()
+{}
 
-} // namespace se2lam
+}  // namespace se2lam

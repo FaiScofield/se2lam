@@ -32,7 +32,7 @@
 #include <limits.h>
 
 //#include <stdint-gcc.h>
-//#include <stdint.h>
+#include <stdint.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
@@ -49,7 +49,7 @@ using namespace cv;
 using namespace std;
 
 const int ORBmatcher::TH_HIGH = 100;
-const int ORBmatcher::TH_LOW = 75;
+const int ORBmatcher::TH_LOW = 65;  // 75
 const int ORBmatcher::HISTO_LENGTH = 30;
 
 /**
@@ -59,8 +59,7 @@ const int ORBmatcher::HISTO_LENGTH = 30;
  */
 ORBmatcher::ORBmatcher(float nnratio, bool checkOri)
     : mfNNratio(nnratio), mbCheckOrientation(checkOri)
-{
-}
+{}
 
 float ORBmatcher::RadiusByViewingCos(const float &viewCos)
 {
@@ -70,9 +69,8 @@ float ORBmatcher::RadiusByViewingCos(const float &viewCos)
         return 4.0;
 }
 
-
-void ORBmatcher::ComputeThreeMaxima(vector<int> *histo, const int L, int &ind1,
-                                    int &ind2, int &ind3)
+//! 取出直方图中值最大的三个index，这里主要是在特征匹配时保证旋转连续性
+void ORBmatcher::ComputeThreeMaxima(vector<int> *histo, const int L, int &ind1, int &ind2, int &ind3)
 {
     int max1 = 0;
     int max2 = 0;
@@ -109,7 +107,6 @@ void ORBmatcher::ComputeThreeMaxima(vector<int> *histo, const int L, int &ind1,
 
 // Bit set count operation from
 // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-//! 计算汉明距离
 int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
 {
     const int *pa = a.ptr<int32_t>();
@@ -128,21 +125,18 @@ int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
 }
 
 /**
- * @brief
- * 通过词包，对关键帧的特征点进行跟踪，该函数用于闭环检测时两个关键帧间的特征点匹配
+ * @brief 通过词包，对关键帧的特征点进行跟踪，该函数用于闭环检测时两个关键帧间的特征点匹配
  *
- * 通过bow对pKF和F中的特征点进行快速匹配（不属于同一node的特征点直接跳过匹配）
- * \n
+ * 通过bow对pKF和F中的特征点进行快速匹配（不属于同一node的特征点直接跳过匹配）\n
  * 对属于同一node的特征点通过描述子距离进行匹配 \n
  * 根据匹配，更新vpMatches12 \n
  * 通过距离阈值、比例阈值和角度投票进行剔除误匹配
- * @param  pKF1               KeyFrame1
- * @param  pKF2               KeyFrame2
- * @param  vpMatches12        pKF2中与pKF1匹配的MapPoint，null表示没有匹配
- * @return                    成功匹配的数量
+ * @param  pKF1         KeyFrame1
+ * @param  pKF2         KeyFrame2
+ * @param  vpMatches12  pKF2中与pKF1匹配的MapPoint，null表示没有匹配
+ * @return              成功匹配的数量
  */
-int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
-                            map<int, int> &mapMatches12, bool bIfMPOnly)
+int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int> &mapMatches12, bool bIfMPOnly)
 {
     mapMatches12.clear();
 
@@ -201,8 +195,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
                 int bestDist2 = INT_MAX;
 
                 //! 步骤3：遍历F中属于该node的特征点，找到了最佳匹配点
-                for (size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2;
-                     i2++) {
+                for (size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2; i2++) {
                     size_t idx2 = f2it->second[i2];
 
                     PtrMapPoint pMP2 = vpMapPoints2[idx2];
@@ -217,9 +210,8 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
                     if (vbMatched2[idx2])
                         continue;
 
-                    cv::Mat d2 = Descriptors2.row(idx2);
-
-                    int dist = DescriptorDistance(d1, d2);
+                    cv::Mat d2 = Descriptors2.row(idx2);    // 取出该特征对应的描述子
+                    int dist = DescriptorDistance(d1, d2);  // 求描述子的距离
 
                     if (dist < bestDist1) {
                         bestDist2 = bestDist1;
@@ -234,8 +226,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
                 if (bestDist1 < TH_LOW) {
                     //! trick!
                     //! 最佳匹配比次佳匹配明显要好，那么最佳匹配才真正靠谱
-                    if (static_cast<float>(bestDist1) <
-                        mfNNratio * static_cast<float>(bestDist2)) {
+                    if (static_cast<float>(bestDist1) < mfNNratio * static_cast<float>(bestDist2)) {
                         //! 步骤5：更新特征点的MapPoint
                         mapMatches12[idx1] = bestIdx2;
                         vbMatched2[bestIdx2] = true;
@@ -244,8 +235,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
                             //! trick!
                             //! angle：每个特征点在提取描述子时的旋转主方向角度，如果图像旋转了，这个角度将发生改变
                             //! 所有的特征点的角度变化应该是一致的，通过直方图统计得到最准确的角度变化值
-                            float rot =
-                                vKeysUn1[idx1].angle - vKeysUn2[bestIdx2].angle;    // 该特征点的角度变化值
+                            float rot = vKeysUn1[idx1].angle - vKeysUn2[bestIdx2].angle;  // 该特征点的角度变化值
                             if (rot < 0.0)
                                 rot += 360.0f;
                             int bin = round(rot * factor);  // 将rot分配到bin组
@@ -294,19 +284,18 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
 
 /**
  * @brief ORBmatcher::MatchByWindow 根据窗口cell选出匹配点
- * @param frame1 - 参考帧
- * @param frame2 - 当前帧
- * @param vbPrevMatched - 参考帧特征点
- * @param winSize - cell尺寸
- * @param vnMatches12 - [output]匹配情况
- * @param levelOffset - 最大金字塔层差
- * @param minLevel - 金字塔最小层数
- * @param maxLevel - 金字塔最大层数
- * @return 返回匹配点的总数
+ * @param frame1        参考帧
+ * @param frame2        当前帧
+ * @param vbPrevMatched 参考帧特征点[update]
+ * @param winSize       cell尺寸
+ * @param vnMatches12   匹配情况[output]
+ * @param levelOffset   最大金字塔层差
+ * @param minLevel      金字塔最小层数
+ * @param maxLevel      金字塔最大层数
+ * @return              返回匹配点的总数
  */
-int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2,
-                              vector<Point2f> &vbPrevMatched, const int winSize,
-                              vector<int> &vnMatches12, const int levelOffset,
+int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2, vector<Point2f> &vbPrevMatched,
+                              const int winSize, vector<int> &vnMatches12, const int levelOffset,
                               const int minLevel, const int maxLevel)
 {
     int nmatches = 0;
@@ -328,9 +317,8 @@ int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2,
             continue;
         int minLevel2 = level1 - levelOffset > 0 ? level1 - levelOffset : 0;
         //! 按cell粗匹配？
-        vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(vbPrevMatched[i1].x, vbPrevMatched[i1].y,
-                                     winSize, minLevel2, level1 + levelOffset);
+        vector<size_t> vIndices2 = frame2.GetFeaturesInArea(
+            vbPrevMatched[i1].x, vbPrevMatched[i1].y, winSize, minLevel2, level1 + levelOffset);
         if (vIndices2.empty())
             continue;
 
@@ -374,8 +362,7 @@ int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2,
                 nmatches++;
 
                 //! for orientation check
-                float rot = frame1.keyPointsUn[i1].angle -
-                            frame2.keyPointsUn[bestIdx2].angle;
+                float rot = frame1.keyPointsUn[i1].angle - frame2.keyPointsUn[bestIdx2].angle;
                 if (rot < 0.0)
                     rot += 360.f;
                 int bin = round(rot * factor);
@@ -415,8 +402,17 @@ int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2,
     return nmatches;
 }
 
-int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF,
-                                  std::vector<PtrMapPoint> &localMPs,
+/**
+ * @brief ORBmatcher::MatchByProjection 通过投影，对Local MapPoint进行跟踪
+ *   在LocalMapper的addNewKF()里调用
+ * @param pNewKF        当前关键帧
+ * @param localMPs      局部地图点
+ * @param winSize       搜索半径 15
+ * @param levelOffset   金字塔层搜索相对范围 2
+ * @param vMatchesIdxMP 匹配上的MP索引[output]
+ * @return              返回匹配点数
+ */
+int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF, std::vector<PtrMapPoint> &localMPs,
                                   const int winSize, const int levelOffset,
                                   std::vector<int> &vMatchesIdxMP)
 {
@@ -433,18 +429,16 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF,
             continue;
         // Point2f predictUV = scv::prjcPt2Cam(Config::Kcam, pNewKF->Tcw,
         // pMP->getPos());
-        Point2f predictUV =
-            cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->Tcw, pMP->getPos()));
+        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->Tcw, pMP->getPos()));
         if (!pNewKF->inImgBound(predictUV))
             continue;
         const int predictLevel = pMP->mMainOctave;
         const int levelWinSize = predictLevel * winSize;
-        const int minLevel =
-            predictLevel > levelOffset ? predictLevel - levelOffset : 0;
+        const int minLevel = predictLevel > levelOffset ? predictLevel - levelOffset : 0;
 
-        vector<size_t> vNearIndices =
-            pNewKF->GetFeaturesInArea(predictUV.x, predictUV.y, levelWinSize,
-                                      minLevel, predictLevel + levelOffset);
+        // 通过投影点(投影到当前帧,见isInFrustum())以及搜索窗口和预测的尺度进行搜索,找出附近的兴趣点
+        vector<size_t> vNearIndices = pNewKF->GetFeaturesInArea(
+            predictUV.x, predictUV.y, levelWinSize, minLevel, predictLevel + levelOffset);
         if (vNearIndices.empty())
             continue;
 
@@ -455,8 +449,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF,
         int bestIdx = -1;
 
         // Get best and second matches with near keypoints
-        for (auto it = vNearIndices.begin(), iend = vNearIndices.end();
-             it != iend; it++) {
+        for (auto it = vNearIndices.begin(), iend = vNearIndices.end(); it != iend; it++) {
             int idx = *it;
             if (pNewKF->hasObservation(idx))
                 continue;

@@ -53,14 +53,12 @@ void LocalMapper::setGlobalMapper(GlobalMapper *pGlobalMapper)
 }
 
 
-void LocalMapper::addNewKF(PtrKeyFrame &pKF,
-                           const vector<Point3f> &localMPs,
-                           const vector<int> &vMatched12,
-                           const vector<bool> &vbGoodPrl)
+void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
+                           const vector<int> &vMatched12, const vector<bool> &vbGoodPrl)
 {
-
     mNewKF = pKF;
 
+    // 这里有跟局部地图匹配更新共视关系
     findCorrespd(vMatched12, localMPs, vbGoodPrl);
 
     mpMap->updateCovisibility(mNewKF);
@@ -89,8 +87,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF,
     mbAcceptNewKF = false;
 }
 
-void LocalMapper::findCorrespd(const vector<int> &vMatched12,
-                               const vector<Point3f> &localMPs,
+void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point3f> &localMPs,
                                const vector<bool> &vbGoodPrl)
 {
 
@@ -103,16 +100,13 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12,
             if (pPrefKF->hasObservation(i) && vMatched12[i] >= 0) {
                 PtrMapPoint pMP = pPrefKF->getObservation(i);
                 if (!pMP) {
-                    printf("This is NULL. /in LM\n");  //!@Vance:
-                    //!是否需要continue？
+                    printf("This is NULL. /in LM\n");  //! NOTE @Vance:是否需要continue？
+//                    continue;
                 }
                 Eigen::Matrix3d xyzinfo, xyzinfo0;
-                Track::calcSE3toXYZInfo(pPrefKF->mViewMPs[i],
-                                        cv::Mat::eye(4, 4, CV_32FC1),
+                Track::calcSE3toXYZInfo(pPrefKF->mViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1),
                                         mNewKF->Tcr, xyzinfo0, xyzinfo);
-                mNewKF->setViewMP(
-                    cvu::se3map(mNewKF->Tcr, pPrefKF->mViewMPs[i]),
-                    vMatched12[i], xyzinfo);
+                mNewKF->setViewMP(cvu::se3map(mNewKF->Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo);
                 mNewKF->addObservation(pMP, vMatched12[i]);
                 pMP->addObservation(mNewKF, vMatched12[i]);
             }
@@ -135,20 +129,17 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12,
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
-            Point3f x3d = cvu::triangulate(
-                pMP->getMainMeasure(), mNewKF->keyPointsUn[i].pt,
-                Config::Kcam * pMP->mMainKF->Tcw.rowRange(0, 3),
-                Config::Kcam * mNewKF->Tcw.rowRange(0, 3));
+            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mNewKF->keyPointsUn[i].pt,
+                                           Config::Kcam * pMP->mMainKF->Tcw.rowRange(0, 3),
+                                           Config::Kcam * mNewKF->Tcw.rowRange(0, 3));
             Point3f posNewKF = cvu::se3map(mNewKF->Tcw, x3d);
             if (!pMP->acceptNewObserve(posNewKF, mNewKF->keyPoints[i])) {
                 continue;
             }
-            if (posNewKF.z > Config::UPPER_DEPTH ||
-                posNewKF.z < Config::LOWER_DEPTH)
+            if (posNewKF.z > Config::UPPER_DEPTH || posNewKF.z < Config::LOWER_DEPTH)
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, mNewKF->Tcw, pMP->mMainKF->Tcw,
-                                    infoNew, infoOld);
+            Track::calcSE3toXYZInfo(posNewKF, mNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
             mNewKF->setViewMP(posNewKF, i, infoNew);
             mNewKF->addObservation(pMP, i);
             pMP->addObservation(mNewKF, i);
@@ -164,8 +155,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12,
             Point3f posW = cvu::se3map(cvu::inv(pPrefKF->Tcw), localMPs[i]);
             Point3f posKF = cvu::se3map(mNewKF->Tcr, localMPs[i]);
             Eigen::Matrix3d xyzinfo, xyzinfo0;
-            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->Tcw, mNewKF->Tcw,
-                                    xyzinfo0, xyzinfo);
+            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->Tcw, mNewKF->Tcw, xyzinfo0, xyzinfo);
 
             mNewKF->setViewMP(posKF, vMatched12[i], xyzinfo);
             pPrefKF->setViewMP(localMPs[i], i, xyzinfo0);
@@ -301,8 +291,8 @@ void LocalMapper::localBA()
 
 #ifdef REJECT_IF_LARGE_LAMBDA
     if (solver->currentLambda() > 100.0) {
-        cerr << "-- DEBUG LM: current lambda too large "
-             << solver->currentLambda() << " , reject optimized result" << endl;
+        cerr << "-- DEBUG LM: current lambda too large " << solver->currentLambda()
+             << " , reject optimized result" << endl;
         return;
     }
 #endif
@@ -318,7 +308,6 @@ void LocalMapper::localBA()
 
 void LocalMapper::run()
 {
-
     if (Config::LOCALIZATION_ONLY)
         return;
 
@@ -343,11 +332,11 @@ void LocalMapper::run()
             pruneRedundantKFinMap();
 
             //! NOTE 原作者把这个步骤给注释掉了.
-            removeOutlierChi2();    // 这里做了一次LocalBA,并剔除离群KF
+            removeOutlierChi2();  // 这里做了一次LocalBA,并剔除离群KF
 
             updateLocalGraphInMap();
 
-            localBA();              // 这里又做了一次LocalBA
+            localBA();  // 这里又做了一次LocalBA
 
             timer.stop();
 
@@ -394,8 +383,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
 {
 
     // for odometry edges
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end();
-         it++) {
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
         g2o::EdgeSE3Expmap *pEdge = static_cast<g2o::EdgeSE3Expmap *>(*it);
         vector<g2o::HyperGraph::Vertex *> vVertices = pEdge->vertices();
         if (vVertices.size() == 2) {
@@ -418,8 +406,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
     }
 
     // for plane motion edges
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end();
-         it++) {
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
         g2o::EdgeSE3Expmap *pEdge = static_cast<g2o::EdgeSE3Expmap *>(*it);
         vector<g2o::HyperGraph::Vertex *> vVertices = pEdge->vertices();
         if (vVertices.size() == 1) {
@@ -438,10 +425,8 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
     }
 
     // for XYZ2UV edges
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end();
-         it++) {
-        g2o::EdgeProjectXYZ2UV *pEdge =
-            static_cast<g2o::EdgeProjectXYZ2UV *>(*it);
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
+        g2o::EdgeProjectXYZ2UV *pEdge = static_cast<g2o::EdgeProjectXYZ2UV *>(*it);
         vector<g2o::HyperGraph::Vertex *> vVertices = pEdge->vertices();
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();

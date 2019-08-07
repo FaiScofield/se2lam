@@ -45,6 +45,10 @@ void pts2Ftrs(const vector<cv::KeyPoint>& _orgnFtrs, const vector<Point2f>& _poi
 
 void normalizeYawAngle(se2lam::Se2& odom);
 
+cv::Mat gamma(const cv::Mat& grayImg, float gamma);
+
+cv::Mat sharpping(const cv::Mat& img, float scale);
+
 } // namespace scv
 
 #endif

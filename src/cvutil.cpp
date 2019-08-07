@@ -121,5 +121,34 @@ void normalizeYawAngle(se2lam::Se2& odom)
         odom.theta -= M_PI;
 }
 
+//Gamma变换 gamma = 1.2 越小越亮
+cv::Mat gamma(const cv::Mat& grayImg, float gamma)
+{
+    cv::Mat imgGamma, imgOut;
+    grayImg.convertTo(imgGamma, CV_32F, 1.0/255, 0);
+    pow(imgGamma, gamma, imgOut);
+    imgOut.convertTo(imgOut, CV_8U, 255, 0);
+
+    return imgOut;
+}
+
+//Laplace边缘锐化 scale = 6-10  越小越强
+cv::Mat sharpping(const cv::Mat& img, float scale)
+{
+    cv::Mat imgOut;
+
+    cv::Mat kern = (cv::Mat_<float>(5, 5) << -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1,
+            -1, -1, 40, -1, -1,
+            -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1);
+
+    kern = kern / scale;
+    cv::filter2D(img, imgOut, img.depth(), kern);
+
+    return imgOut;
+}
+
+
 
 } // namespace scv

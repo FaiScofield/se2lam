@@ -1,5 +1,6 @@
 //#include <ros/ros.h>
 //#include <image_transport/image_transport.h>
+#include "cvutil.h"
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -105,6 +106,12 @@ int main(int argc, char **argv)
         imgCur = imread(imgFiles[i], 1);
         if (imgCur.data == nullptr)
             continue;
+
+        Mat imgShap, imgGamma;
+        imgShap = cvu::sharpping(imgCur, 12);
+        imgGamma = cvu::gamma(imgShap, 1.2);
+        imshow("imgShap", imgShap);
+        imshow("imgGamma", imgGamma);
 
         //! Canny
         Canny(imgCur, outImageCanny, 50, 200, 3); // 输出图像会变黑白
