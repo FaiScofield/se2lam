@@ -228,7 +228,7 @@ bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
     return true;
 }
 
-// From ORB_SLAM
+// From ORB_SLAM. 找到在以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
 vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const float &r,
                                         int minLevel, int maxLevel) const
 {

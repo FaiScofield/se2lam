@@ -27,15 +27,16 @@ using namespace g2o;
 #ifdef TIME_TO_LOG_LOCAL_BA
 ofstream local_ba_time_log;
 #endif
-typedef lock_guard<mutex> locker;
+
 
 LocalMapper::LocalMapper()
 {
+    mbAcceptNewKF = true;
+
     mbUpdated = false;
     mbAbortBA = false;
-    mbAcceptNewKF = true;
     mbGlobalBABegin = false;
-    mbPrintDebugInfo = false;
+    mbPrintDebugInfo = true;
 
     mbFinished = false;
     mbFinishRequested = false;
@@ -52,16 +53,29 @@ void LocalMapper::setGlobalMapper(GlobalMapper *pGlobalMapper)
     mpGlobalMapper = pGlobalMapper;
 }
 
-
+/**
+ * @brief LocalMapper::addNewKF 添加KF,更新共视关系,然后插入到Map里
+ * @param pKF           待添加的KF
+ * @param localMPs      在Tracker里计算出来的MP候选，根据参考帧的观测得到的
+ * @param vMatched12    参考帧里KP匹配上当前帧KP的索引
+ * @param vbGoodPrl     参考帧里KP匹配上但没有MP对应的点对里，视差比较好的flag
+ */
 void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
                            const vector<int> &vMatched12, const vector<bool> &vbGoodPrl)
 {
-    mNewKF = pKF;
+    {
+        unique_lock<mutex> lock(mMutexNewKFs);
+        mpNewKF = pKF;
+    }
 
-    // 这里有跟局部地图匹配更新共视关系
+    // TODO 用BOW加速匹配
+//    mNewKF->ComputeBoW(mpORBVoc);
+
+    //! 1.跟新局部地图匹配和共视关系，添加新的MP
     findCorrespd(vMatched12, localMPs, vbGoodPrl);
 
-    mpMap->updateCovisibility(mNewKF);
+    //! 2.更新Local Map里的共视关系，MP共同观测超过自身的30%则添加共视关系
+    mpMap->updateCovisibility(mpNewKF);
 
     {
         PtrKeyFrame pKF0 = mpMap->getCurrentKF();
@@ -79,6 +93,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
             pKF->setOdoMeasureTo(pKF0, measure, toCvMat6f(info));
         }
 
+        // 将KF插入地图
         mpMap->insertKF(pKF);
         mbUpdated = true;
     }
@@ -87,92 +102,109 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
     mbAcceptNewKF = false;
 }
 
+/**
+ * @brief LocalMapper::findCorrespd 根据和参考帧和局部地图的匹配关系关联MP，或生成新的MP并插入到Map里
+ * 能关联上的MP都关联上，存在当前帧的mViewMPs变量里。不能关联上MP但和参考帧有匹配的KP，则三角化生成新的MP
+ * @param vMatched12    参考帧到当前帧的KP匹配情况
+ * @param localMPs      当前帧的MP粗观测
+ * @param vbGoodPrl     参考帧与当前帧KP匹配中没有MP但视差好的标志，生成新MP时要对它的视差好坏进行标记
+ */
 void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point3f> &localMPs,
                                const vector<bool> &vbGoodPrl)
 {
-
     bool bNoMP = (mpMap->countMPs() == 0);
 
     // Identify tracked map points
-    PtrKeyFrame pPrefKF = mpMap->getCurrentKF();
+    PtrKeyFrame pPrefKF = mpMap->getCurrentKF(); // 这是上一参考帧KF
+
+    // 如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP
     if (!bNoMP) {
         for (int i = 0, iend = pPrefKF->N; i < iend; i++) {
+
             if (pPrefKF->hasObservation(i) && vMatched12[i] >= 0) {
                 PtrMapPoint pMP = pPrefKF->getObservation(i);
                 if (!pMP) {
-                    printf("This is NULL. /in LM\n");  //! NOTE @Vance:是否需要continue？
-//                    continue;
+                    cerr << "This is NULL. 这不应该发生啊！！！" << endl;
+                    continue;
                 }
                 Eigen::Matrix3d xyzinfo, xyzinfo0;
                 Track::calcSE3toXYZInfo(pPrefKF->mViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1),
-                                        mNewKF->Tcr, xyzinfo0, xyzinfo);
-                mNewKF->setViewMP(cvu::se3map(mNewKF->Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo);
-                mNewKF->addObservation(pMP, vMatched12[i]);
-                pMP->addObservation(mNewKF, vMatched12[i]);
+                                        mpNewKF->Tcr, xyzinfo0, xyzinfo);
+                mpNewKF->setViewMP(cvu::se3map(mpNewKF->Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo);
+                mpNewKF->addObservation(pMP, vMatched12[i]);
+                pMP->addObservation(mpNewKF, vMatched12[i]);
             }
         }
     }
 
-
     // Match features of MapPoints with those in NewKF
+    // 和局部地图匹配，关联局部地图里的MP
     if (!bNoMP) {
         // vector<PtrMapPoint> vLocalMPs(mLocalGraphMPs.begin(),
         // mLocalGraphMPs.end());
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
         ORBmatcher matcher;
-        matcher.MatchByProjection(mNewKF, vLocalMPs, 15, 2, vMatchedIdxMPs);
-        for (int i = 0; i < mNewKF->N; i++) {
+        matcher.MatchByProjection(mpNewKF, vLocalMPs, 15, 2, vMatchedIdxMPs);
+        for (int i = 0; i < mpNewKF->N; i++) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
             PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
-            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mNewKF->keyPointsUn[i].pt,
+            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->keyPointsUn[i].pt,
                                            Config::Kcam * pMP->mMainKF->Tcw.rowRange(0, 3),
-                                           Config::Kcam * mNewKF->Tcw.rowRange(0, 3));
-            Point3f posNewKF = cvu::se3map(mNewKF->Tcw, x3d);
-            if (!pMP->acceptNewObserve(posNewKF, mNewKF->keyPoints[i])) {
+                                           Config::Kcam * mpNewKF->Tcw.rowRange(0, 3));
+            Point3f posNewKF = cvu::se3map(mpNewKF->Tcw, x3d);
+            if (!pMP->acceptNewObserve(posNewKF, mpNewKF->keyPoints[i])) {
                 continue;
             }
             if (posNewKF.z > Config::UPPER_DEPTH || posNewKF.z < Config::LOWER_DEPTH)
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, mNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
-            mNewKF->setViewMP(posNewKF, i, infoNew);
-            mNewKF->addObservation(pMP, i);
-            pMP->addObservation(mNewKF, i);
+            Track::calcSE3toXYZInfo(posNewKF, mpNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
+            mpNewKF->setViewMP(posNewKF, i, infoNew);
+            mpNewKF->addObservation(pMP, i);
+            pMP->addObservation(mpNewKF, i);
         }
     }
 
-    // Add new points from mNewKF to the map
+    // Add new points from mNewKF to the map. 给新的KF添加MP
+    // 首帧没有处理到这，第二帧进来有了参考帧，但还没有MPS，就会直接执行到这，生成MPs，所以第二帧才有MP
     for (int i = 0, iend = pPrefKF->N; i < iend; i++) {
+        // 上一参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
         if (!pPrefKF->hasObservation(i) && vMatched12[i] >= 0) {
-            if (mNewKF->hasObservation(vMatched12[i]))
+            if (mpNewKF->hasObservation(vMatched12[i]))
                 continue;
 
+            //! TODO 这里对localMPs的坐标系要再确认一下！
             Point3f posW = cvu::se3map(cvu::inv(pPrefKF->Tcw), localMPs[i]);
-            Point3f posKF = cvu::se3map(mNewKF->Tcr, localMPs[i]);
+            Point3f posKF = cvu::se3map(mpNewKF->Tcr, localMPs[i]);
             Eigen::Matrix3d xyzinfo, xyzinfo0;
-            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->Tcw, mNewKF->Tcw, xyzinfo0, xyzinfo);
+            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->Tcw, mpNewKF->Tcw, xyzinfo0, xyzinfo);
 
-            mNewKF->setViewMP(posKF, vMatched12[i], xyzinfo);
+            mpNewKF->setViewMP(posKF, vMatched12[i], xyzinfo);
             pPrefKF->setViewMP(localMPs[i], i, xyzinfo0);
             // PtrMapPoint pMP = make_shared<MapPoint>(mNewKF, vMatched12[i],
             // posW, vbGoodPrl[i]);
             PtrMapPoint pMP = make_shared<MapPoint>(posW, vbGoodPrl[i]);
 
             pMP->addObservation(pPrefKF, i);
-            pMP->addObservation(mNewKF, vMatched12[i]);
+            pMP->addObservation(mpNewKF, vMatched12[i]);
             pPrefKF->addObservation(pMP, i);
-            mNewKF->addObservation(pMP, vMatched12[i]);
+            mpNewKF->addObservation(pMP, vMatched12[i]);
 
             mpMap->insertMP(pMP);
         }
     }
 }
 
+/**
+ * @brief LocalMapper::removeOutlierChi2
+ * 把Local Map中的KFs和MPs添加到图中进行优化，然后解除离群MPs的联接关系.
+ * 离群MPs观测数小于2时会被删除
+ */
 void LocalMapper::removeOutlierChi2()
 {
     unique_lock<mutex> lockmapper(mutexMapper);
@@ -180,6 +212,7 @@ void LocalMapper::removeOutlierChi2()
     SlamOptimizer optimizer;
     initOptimizer(optimizer);
 
+    // 通过Map给优化器添加节点和边，添加的节点和边还会存在下面两个变量里
     vector<vector<EdgeProjectXYZ2UV *>> vpEdgesAll;
     vector<vector<int>> vnAllIdx;
     mpMap->loadLocalGraph(optimizer, vpEdgesAll, vnAllIdx);
@@ -192,15 +225,14 @@ void LocalMapper::removeOutlierChi2()
     optimizer.initializeOptimization(0);
     optimizer.optimize(10);
 
+    // 优化后去除离群MP
     const int nAllMP = vpEdgesAll.size();
     int nBadMP = 0;
     vector<vector<int>> vnOutlierIdxAll;
 
     for (int i = 0; i < nAllMP; i++) {
-
         vector<int> vnOutlierIdx;
         for (int j = 0, jend = vpEdgesAll[i].size(); j < jend; j++) {
-
             EdgeProjectXYZ2UV *eij = vpEdgesAll[i][j];
 
             if (eij->level() > 0)
@@ -227,17 +259,18 @@ void LocalMapper::removeOutlierChi2()
     vpEdgesAll.clear();
     vnAllIdx.clear();
 
-    if (mbPrintDebugInfo) {
-        fprintf(stderr, "[LocalMap]: #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
-                mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, timer.time);
-        fprintf(stderr, "[LocalMap]: #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
-                mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, nBadMP, nAllMP);
-    }
+    fprintf(stderr, "[Local] #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
+            mpNewKF->id, mpNewKF->mIdKF, timer.time);
+    fprintf(stderr, "[Local] #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
+            mpNewKF->id, mpNewKF->mIdKF, nBadMP, nAllMP);
 }
 
+/**
+ * @brief LocalMapper::localBA 局部图优化
+ */
 void LocalMapper::localBA()
 {
-
+    // 如果这时候全局优化在执行则不会做局部优化
     if (mbGlobalBABegin)
         return;
 
@@ -283,7 +316,7 @@ void LocalMapper::localBA()
 #endif
 
 //    if (mbPrintDebugInfo) {
-//        cerr << "[LocalMap] LocalBA cost time " << timer.time << ", number of KFs: "
+//        cerr << "[Local] LocalBA cost time " << timer.time << ", number of KFs: "
 //             << mpMap->getLocalKFs().size()
 ////                 << ", number of MP " << vpEdgesAll.size()
 //             << endl;
@@ -302,7 +335,7 @@ void LocalMapper::localBA()
     }
 
 #ifndef TIME_TO_LOG_LOCAL_BA
-    mpMap->optimizeLocalGraph(optimizer);
+    mpMap->optimizeLocalGraph(optimizer);   // 用优化后的结果更新KFs和MPs
 #endif
 }
 
@@ -315,44 +348,48 @@ void LocalMapper::run()
 
 
 #ifdef TIME_TO_LOG_LOCAL_BA
-    local_ba_time_log.open("/home/vance/Documents/se2lam_lobal_time.txt");
+    local_ba_time_log.open("/home/vance/output/se2lam_lobal_time.log");
 #endif
 
     ros::Rate rate(Config::FPS * 10);
-
     while (ros::ok()) {
-
+        //! 在处理完addNewKF()函数后(关联并添加MP和连接关系，KF加入LocalMap)，mbUpdated才为true.
         if (mbUpdated) {
+            setAcceptNewKF(false);      // 干活了，这单先处理，现在不接单了
 
             WorkTimer timer;
             timer.start();
 
-            updateLocalGraphInMap();
+            //! 更新了Map里面mLocalGraphKFs,mRefKFs和mLocalGraphMPs三个成员变量
+            updateLocalGraphInMap();    // 加了新的KF进来，要更新一下Local Map
 
+            //! 去除冗余的KF和MP，共视关系会被取消，mLocalGraphKFs和mLocalGraphMPs会更新
             pruneRedundantKFinMap();
 
             //! NOTE 原作者把这个步骤给注释掉了.
-            removeOutlierChi2();  // 这里做了一次LocalBA,并剔除离群KF
+            removeOutlierChi2();        // 这里做了一次LocalBA,并对离群MPs取消联接关系,但没有更新位姿
 
+            //! 再次更新LocalMap，由于冗余的KF和MP共视关系已经被取消，所以不必但心它们被添加回来
             updateLocalGraphInMap();
 
-            localBA();  // 这里又做了一次LocalBA
+            //! LocalMap优化，并更新Local KFs和MPs的位姿
+            localBA();                  // 这里又做了一次LocalBA，有更新位姿
 
             timer.stop();
+            fprintf(stderr, "[Local] #%d(KF#%d) Time cost for LocalMapper's process: %fms.\n",
+                    mpNewKF->id, mpNewKF->mIdKF, timer.time);
 
-            if (mbPrintDebugInfo) {
-                fprintf(stderr, "[LocalMap] #%d(KF#%d) Time cost for Local BA: %fms.\n",
-                        mpMap->getCurrentKF()->id, mpMap->getCurrentKF()->mIdKF, timer.time);
-            }
-
+            //! 标志位置为false防止多次处理，直到加入新的KF才会再次启动
             mbUpdated = false;
 
+            //! 看全局地图有没有在执行Global BA，如果在执行会等它先执行完毕
             mpGlobalMapper->waitIfBusy();
 
+            //! 第三次更新LocalMap！
             updateLocalGraphInMap();
         }
 
-        mbAcceptNewKF = true;
+        setAcceptNewKF(true);   // 干完了上一单才能告诉Tracker准备好干下一单了
 
         if (checkFinish())
             break;
@@ -364,7 +401,7 @@ void LocalMapper::run()
     local_ba_time_log.close();
 #endif
 
-    cout << "[LocalMap] Exiting localmapper .." << endl;
+    cout << "[Local] Exiting localmapper .." << endl;
 
     setFinish();
 }
@@ -376,12 +413,18 @@ void LocalMapper::setAbortBA()
 
 bool LocalMapper::acceptNewKF()
 {
+    unique_lock<mutex> lock(mMutexAccept);
     return mbAcceptNewKF;
+}
+
+void LocalMapper::setAcceptNewKF(bool flag)
+{
+    unique_lock<mutex> lock(mMutexAccept);
+    mbAcceptNewKF = flag;
 }
 
 void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
 {
-
     // for odometry edges
     for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
         g2o::EdgeSE3Expmap *pEdge = static_cast<g2o::EdgeSE3Expmap *>(*it);
@@ -389,7 +432,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (max(id0, id1) > (mNewKF->mIdKF)) {
+            if (max(id0, id1) > (mpNewKF->mIdKF)) {
                 // Not odometry edge
                 continue;
             }
@@ -431,7 +474,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (max(id0, id1) > (mNewKF->mIdKF)) {
+            if (max(id0, id1) > (mpNewKF->mIdKF)) {
                 if (pEdge->chi2() < 10)
                     continue;
                 cerr << "XYZ2UV edge: ";
@@ -454,15 +497,20 @@ void LocalMapper::updateLocalGraphInMap()
     mpMap->updateLocalGraph();
 }
 
+//! 去除冗余关键帧
+//! 只要有冗余就一直去除冗余的KF，直到去不了为止; 但也不能去太狠，最多去5帧。
 void LocalMapper::pruneRedundantKFinMap()
 {
-    unique_lock<mutex> lockmapper(mutexMapper);
+    unique_lock<mutex> lock(mutexMapper);
     bool bPruned = false;
     int countPrune = 0;
     do {
         bPruned = mpMap->pruneRedundantKF();
         countPrune++;
     } while (bPruned && countPrune < 5);
+
+    printf("[Local] #%d(KF#%d) Prune %d Redundant Local KFs\n",
+           mpNewKF->id, mpNewKF->mIdKF, countPrune);
 }
 
 void LocalMapper::setGlobalBABegin(bool value)
@@ -479,6 +527,7 @@ void LocalMapper::requestFinish()
     mbFinishRequested = true;
 }
 
+//! checkFinish()成功后break跳出主循环,然后就会调用setFinish()结束线程
 bool LocalMapper::checkFinish()
 {
     unique_lock<mutex> lock(mMutexFinish);
@@ -496,5 +545,10 @@ void LocalMapper::setFinish()
     unique_lock<mutex> lock(mMutexFinish);
     mbFinished = true;
 }
+
+//void LocalMapper::getNumFKsInQueue(){
+//    unique_lock<mutex> lock(mMutexNewKFs);
+//    return mlNewKeyFrames.size();
+//}
 
 }  // namespace se2lam

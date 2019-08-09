@@ -61,7 +61,7 @@ public:
 
     static cv::Point2f compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, std::set<PtrMapPoint>& spMPs);
 
-    static double compareViewMPs(const PtrKeyFrame & pKF, const set<PtrKeyFrame> & vpKFs, std::set<PtrMapPoint> & vpMPs, int k = 2);
+    static double compareViewMPs(const PtrKeyFrame & pKF, const set<PtrKeyFrame> & spKFs, std::set<PtrMapPoint> & spMPs, int k = 2);
 
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
 

@@ -25,8 +25,7 @@ enum eTrackingState {
     NO_READY_YET = -1,
     FIRST_FRAME = 0,
     OK = 1,
-    TEMPORARY_LOST = 2,
-    LOST = 3
+    LOST = 2
 };
 
 Mat inv(const Mat& T4x4);
@@ -45,9 +44,9 @@ void pts2Ftrs(const vector<cv::KeyPoint>& _orgnFtrs, const vector<Point2f>& _poi
 
 void normalizeYawAngle(se2lam::Se2& odom);
 
-cv::Mat gamma(const cv::Mat& grayImg, float gamma);
+cv::Mat gamma(const cv::Mat& grayImg, float gamma = 1.2);
 
-cv::Mat sharpping(const cv::Mat& img, float scale);
+cv::Mat sharpping(const cv::Mat& img, float scale = 12);
 
 } // namespace scv
 

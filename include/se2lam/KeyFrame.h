@@ -96,14 +96,16 @@ public:
 
     vector<cv::Point3f> mViewMPs;
     vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mViewMPsInfo;
+
+    //! NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
     void setViewMP(cv::Point3f pt3f, int idx, Eigen::Matrix3d info);
 
 
     // KeyFrame contraints: From this or To this
-    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureFrom;
-    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureTo;
-    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureFrom;
-    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureTo;
+    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureFrom;  // 特征图中后面的连接
+    std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureTo;    // 特征图中前面的连接
+    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureFrom; // 和后一帧的里程约束
+    std::pair<shared_ptr<KeyFrame>, SE3Constraint> mOdoMeasureTo;   // 和前一帧的里程约束
 
     std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomFromSelf;
     std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomToSelf;

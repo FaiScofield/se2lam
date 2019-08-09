@@ -9,15 +9,17 @@
 #include "OdoSLAM.h"
 #include <opencv2/highgui/highgui.hpp>
 
-#endif // ODOSLAM_CPP
+#endif  // ODOSLAM_CPP
 
-namespace se2lam {
+namespace se2lam
+{
 using namespace std;
 using namespace cv;
 
 std::mutex mMutexFinish;
 
-OdoSLAM::~OdoSLAM(){
+OdoSLAM::~OdoSLAM()
+{
     delete mpMapPub;
     delete mpLocalizer;
     delete mpTrack;
@@ -29,19 +31,20 @@ OdoSLAM::~OdoSLAM(){
     delete mpSensors;
 }
 
-OdoSLAM::OdoSLAM(){
+OdoSLAM::OdoSLAM()
+{}
 
-}
-
-void OdoSLAM::setVocFileBin(const char *strVoc){
+void OdoSLAM::setVocFileBin(const char *strVoc)
+{
     cout << "\n###\n"
          << "###  se2lam: On-SE(2) Localization and Mapping with SE(2)-XYZ Constraints.\n"
-         << "###\n" << endl;
+         << "###\n"
+         << endl;
 
     cout << endl << "[System] Set ORB Vocabulary to: " << strVoc << endl;
     cout << "[System] Loading ORB Vocabulary. This could take a while." << endl;
 
-    //Init ORB BoW
+    // Init ORB BoW
     string strVocFile = strVoc;
     mpVocabulary = new ORBVocabulary();
     bool bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
@@ -52,7 +55,8 @@ void OdoSLAM::setVocFileBin(const char *strVoc){
     cout << "[System] Vocabulary loaded!" << endl << endl;
 }
 
-void OdoSLAM::setDataPath(const char *strDataPath){
+void OdoSLAM::setDataPath(const char *strDataPath)
+{
     cout << "[System] Set Data Path to: " << strDataPath << endl;
     Config::readConfig(strDataPath);
 }
@@ -72,7 +76,8 @@ cv::Mat OdoSLAM::getCurrentCameraPoseCW()
     return mpMap->getCurrentFramePose();
 }
 
-void OdoSLAM::start() {
+void OdoSLAM::start()
+{
 
     // Construct the system
     mpMap = new Map;
@@ -107,7 +112,7 @@ void OdoSLAM::start() {
     mpMapPub->setFramePub(mpFramePub);
     mpMapPub->setLocalizer(mpLocalizer);
 
-    if (Config::USE_PREV_MAP){
+    if (Config::USE_PREV_MAP) {
         mpMapStorage->setFilePath(Config::READ_MAP_FILE_PATH, Config::READ_MAP_FILE_NAME);
         mpMapStorage->loadMap();
     }
@@ -149,26 +154,20 @@ void OdoSLAM::start() {
     threadWait.detach();
 }
 
-void OdoSLAM::wait(OdoSLAM* system){
+void OdoSLAM::wait(OdoSLAM *system)
+{
 
-    ros::Rate rate(Config::FPS/* * 10*/);
-//    cv::Mat empty(100, 640, CV_8U, cv::Scalar(0));
-
-    //cv::namedWindow("Press q on this window to exit...");
+    ros::Rate rate(Config::FPS * 5);  // *10
     while (1) {
         if (system->checkFinish()) {
 
+            //! 系统其他模块的退出都是在这里发出信号的
             system->sendRequestFinish();
 
             break;
         }
-//        cv::imshow("Press q on this window to exit...", empty);
-//        if (cv::waitKey(5) == 'q') {
-//            system->requestFinish();
-//        }
         rate.sleep();
     }
-//    cv::destroyAllWindows();
 
     system->saveMap();
 
@@ -181,49 +180,50 @@ void OdoSLAM::wait(OdoSLAM* system){
     cerr << "[System] System is cleared .." << endl;
 }
 
-void OdoSLAM::saveMap() {
+void OdoSLAM::saveMap()
+{
     if (se2lam::Config::LOCALIZATION_ONLY)
         return;
 
-    if (se2lam::Config::SAVE_NEW_MAP){
-        mpMapStorage->setFilePath(se2lam::Config::WRITE_MAP_FILE_PATH, se2lam::Config::WRITE_MAP_FILE_NAME);
+    if (se2lam::Config::SAVE_NEW_MAP) {
+        mpMapStorage->setFilePath(se2lam::Config::WRITE_MAP_FILE_PATH,
+                                  se2lam::Config::WRITE_MAP_FILE_NAME);
         printf("[System] Begin save map.\n");
         mpMapStorage->saveMap();
     }
 
     // Save keyframe trajectory
     cerr << "\n[System] Finished. Saving keyframe trajectory ..." << endl;
-    ofstream towrite(se2lam::Config::WRITE_MAP_FILE_PATH  + "/se2lam_kf_trajectory.txt");
+    ofstream towrite(se2lam::Config::WRITE_MAP_FILE_PATH + "/se2lam_kf_trajectory.txt");
     vector<se2lam::PtrKeyFrame> vct = mpMap->getAllKF();
-    for (size_t i = 0; i<vct.size(); i++){
-        if (!vct[i]->isNull()){
+    for (size_t i = 0; i < vct.size(); i++) {
+        if (!vct[i]->isNull()) {
             Mat wTb = cvu::inv(se2lam::Config::bTc * vct[i]->getPose());
             Mat wRb = wTb.rowRange(0, 3).colRange(0, 3);
             g2o::Vector3D euler = g2o::internal::toEuler(se2lam::toMatrix3d(wRb));
-            towrite << vct[i]->id << " " <<
-                       wTb.at<float>(0, 3) << " " <<
-                       wTb.at<float>(1, 3) << " " <<
-                       wTb.at<float>(2, 3) << " " <<
-                       euler(2) << endl;
+            towrite << vct[i]->id << " " << wTb.at<float>(0, 3) << " " << wTb.at<float>(1, 3) << " "
+                    << wTb.at<float>(2, 3) << " " << euler(2) << endl;
         }
     }
 }
 
-void OdoSLAM::requestFinish() {
+void OdoSLAM::requestFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
-bool OdoSLAM::checkFinish(){
+bool OdoSLAM::checkFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
-    if(se2lam::Config::LOCALIZATION_ONLY){
-        if(mpLocalizer->isFinished() || mpMapPub->isFinished()){
+    if (se2lam::Config::LOCALIZATION_ONLY) {
+        if (mpLocalizer->isFinished() || mpMapPub->isFinished()) {
             mbFinishRequested = true;
             return true;
         }
     } else {
-        if(mpTrack->isFinished() || mpLocalMapper->isFinished() ||
-                mpGlobalMapper->isFinished() || mpMapPub->isFinished()) {
+        if (mpTrack->isFinished() || mpLocalMapper->isFinished() || mpGlobalMapper->isFinished() ||
+            mpMapPub->isFinished()) {
             mbFinishRequested = true;
             return true;
         }
@@ -232,7 +232,9 @@ bool OdoSLAM::checkFinish(){
     return mbFinishRequested;
 }
 
-void OdoSLAM::sendRequestFinish(){
+
+void OdoSLAM::sendRequestFinish()
+{
     if (Config::LOCALIZATION_ONLY) {
         mpLocalizer->requestFinish();
         mpMapPub->RequestFinish();
@@ -244,7 +246,8 @@ void OdoSLAM::sendRequestFinish(){
     }
 }
 
-void OdoSLAM::checkAllExit() {
+void OdoSLAM::checkAllExit()
+{
     if (Config::LOCALIZATION_ONLY) {
         while (1) {
             if (mpLocalizer->isFinished() && mpMapPub->isFinished())
@@ -255,7 +258,7 @@ void OdoSLAM::checkAllExit() {
     } else {
         while (1) {
             if (mpTrack->isFinished() && mpLocalMapper->isFinished() &&
-                    mpGlobalMapper->isFinished() && mpMapPub->isFinished()) {
+                mpGlobalMapper->isFinished() && mpMapPub->isFinished()) {
                 break;
             } else {
                 std::this_thread::sleep_for(std::chrono::microseconds(2));
@@ -265,11 +268,12 @@ void OdoSLAM::checkAllExit() {
 }
 
 //@Vance:这个没实现？
-void OdoSLAM::clear() {
-
+void OdoSLAM::clear()
+{
 }
 
-void OdoSLAM::waitForFinish(){
+void OdoSLAM::waitForFinish()
+{
     while (1) {
         if (mbFinished) {
             break;
@@ -281,9 +285,10 @@ void OdoSLAM::waitForFinish(){
     cerr << "[System] Wait for finish thread finished..." << endl;
 }
 
-bool OdoSLAM::ok(){
+bool OdoSLAM::ok()
+{
     unique_lock<mutex> lock(mMutexFinish);
     return !mbFinishRequested;
 }
 
-} // namespace se2lam
+}  // namespace se2lam

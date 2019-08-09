@@ -24,69 +24,62 @@ public:
     void run();
 
     void setMap(Map *pMap);
-    ///
-    /// \brief setGlobalMapper
-    /// \param pGlobalMapper
-    ///
     void setGlobalMapper(GlobalMapper* pGlobalMapper);
 
-    /**
-     * @brief addNewKF
-     * @param pKF - key frame pointer
-     * @param localMPs - local map points
-     * @param vMatched12 - matches
-     * @param vbGoodPrl - vector of flags for map points with good parallax
-     */
     void addNewKF(PtrKeyFrame &pKF, const std::vector<cv::Point3f>& localMPs, const std::vector<int> &vMatched12, const std::vector<bool>& vbGoodPrl);
 
-    /**
-     * @brief findCorrespd
-     * @param vMatched12
-     * @param localMPs
-     * @param vbGoodPrl
-     */
     void findCorrespd(const std::vector<int> &vMatched12, const std::vector<cv::Point3f> &localMPs, const std::vector<bool>& vbGoodPrl);
 
     void removeOutlierChi2();
 
     void localBA();
-
     void setAbortBA();
-
     bool acceptNewKF();
-
+    void setAcceptNewKF(bool value);
     void setGlobalBABegin(bool value);
 
-    void printOptInfo(const SlamOptimizer & _optimizer);    // For debugging by hbtang
+    // For debugging by hbtang
+    void printOptInfo(const SlamOptimizer & _optimizer);
 
     void requestFinish();
     bool isFinished();
 
     void updateLocalGraphInMap();
-
     void pruneRedundantKFinMap();
 
+//    int getNumFKsInQueue();
+
     bool mbPrintDebugInfo;
+
     std::mutex mutexMapper;
 
 protected:
     Map* mpMap;
     GlobalMapper* mpGlobalMapper;
-    PtrKeyFrame mNewKF;
+    ORBVocabulary* mpORBVoc;
 
-    bool mbUpdated;
-    bool mbAbortBA;
+//    std::list<PtrKeyFrame> mlNewKFs;
+    PtrKeyFrame mpNewKF;
+    std::mutex mMutexNewKFs;
+
     bool mbAcceptNewKF;
-    bool mbGlobalBABegin;
+    bool mbUpdated;
+    std::mutex mMutexAccept;
 
+    bool mbAbortBA;
+    bool mbGlobalBABegin;
     std::mutex mMutexLocalGraph;
 
     bool checkFinish();
     void setFinish();
     bool mbFinishRequested;
     bool mbFinished;
-
     std::mutex mMutexFinish;
+
+//    bool mbStopped;
+//    bool mbStopRequested;
+//    bool mbNotStop;
+//    std::mutex mMutexStop;
 };
 
 }

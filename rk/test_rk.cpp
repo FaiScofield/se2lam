@@ -35,7 +35,7 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
 {
     fs::path path(dataFolder);
     if (!fs::exists(path)) {
-        cerr << "[Main] Data folder doesn't exist!" << endl;
+        cerr << "[main ] Data folder doesn't exist!" << endl;
         return;
     }
 
@@ -55,10 +55,10 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
     }
 
     if (allImages.empty()) {
-        cerr << "[Main] Not image data in the folder!" << endl;
+        cerr << "[main ] Not image data in the folder!" << endl;
         return;
     } else
-        cout << "[Main] Read " << allImages.size() << " files in the folder." << endl;
+        cout << "[main ] Read " << allImages.size() << " files in the folder." << endl;
 
 
     //! 注意不能直接对string排序
@@ -90,10 +90,14 @@ int main(int argc, char **argv)
 
     string fullOdoName = se2lam::Config::DataPath + "/odo_raw.txt";
     ifstream rec(fullOdoName);
+    if (!rec.is_open()) {
+        cerr << "[main ] Error in opening the odo_raw.txt file! Please check if exists!" << endl;
+        rec.close();
+        ros::shutdown();
+        return -1;
+    }
     float x,y,theta;
     string line;
-
-    ros::Rate rate(se2lam::Config::FPS);
 
     size_t n = static_cast<size_t>(se2lam::Config::ImgIndex);
     size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
@@ -102,6 +106,7 @@ int main(int argc, char **argv)
     vector<string> allImages;
     readImagesRK(imageFolder, allImages);
     n = min(allImages.size(), n);
+    ros::Rate rate(se2lam::Config::FPS);
     for(size_t i = 0; i < n && system.ok(); i++) {
         // 起始帧不为0的时候保证odom数据跟image对应
         if (i < m) {
@@ -110,10 +115,10 @@ int main(int argc, char **argv)
         }
 
         string fullImgName = allImages[i];
-//        cout << "[Main] reading image: " << fullImgName << endl;
+//        cout << "[main ] reading image: " << fullImgName << endl;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
-            cerr << "[Main] No image data for image " << fullImgName << endl;
+            cerr << "[main ] No image data for image " << fullImgName << endl;
             continue;
         }
         std::getline(rec, line);
@@ -125,16 +130,16 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
-    cout << "[Main] Finish test..." << endl;
+    cout << "[main ] Finish test..." << endl;
 
     system.requestFinish();
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "[Main] Rec close..." << endl;
+    cout << "[main ] Rec close..." << endl;
     rec.close();
-    cout << "[Main] Exit test..." << endl;
+    cout << "[main ] Exit test..." << endl;
     return 0;
 
 }

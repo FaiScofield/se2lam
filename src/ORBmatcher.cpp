@@ -283,7 +283,9 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int> &m
 }
 
 /**
- * @brief ORBmatcher::MatchByWindow 根据窗口cell选出匹配点
+ * @brief ORBmatcher::MatchByWindow
+ * 先获得cell里的粗匹配候选，再从候选的KF中根据描述子计算最小和次小距离，剔除错匹配
+ *
  * @param frame1        参考帧
  * @param frame2        当前帧
  * @param vbPrevMatched 参考帧特征点[update]
@@ -316,7 +318,7 @@ int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2, vector<Point2f
         if (level1 > maxLevel || level1 < minLevel)
             continue;
         int minLevel2 = level1 - levelOffset > 0 ? level1 - levelOffset : 0;
-        //! 按cell粗匹配？
+        //! 先获得cell里的粗匹配候选
         vector<size_t> vIndices2 = frame2.GetFeaturesInArea(
             vbPrevMatched[i1].x, vbPrevMatched[i1].y, winSize, minLevel2, level1 + levelOffset);
         if (vIndices2.empty())
@@ -348,9 +350,9 @@ int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2, vector<Point2f
             }
         }
 
-        //! 最小距离小于75且小于0.6倍次小距离，则认为匹配正确
+        //! 最小距离小于TH_LOW且小于mfNNratio倍次小距离，则认为匹配正确
         if (bestDist <= TH_LOW) {
-            if (bestDist < (float)bestDist2 * mfNNratio) {  // mfNNratio = 0.6
+            if (bestDist < (float)bestDist2 * mfNNratio) {
                 //! 防止多个点匹配到同一个点的情况
                 if (vnMatches21[bestIdx2] >= 0) {
                     vnMatches12[vnMatches21[bestIdx2]] = -1;

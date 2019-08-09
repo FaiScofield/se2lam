@@ -70,7 +70,8 @@ list(APPEND LINK_LIBS
 #)
 
 include_directories(
-  include/se2lam/
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/include/se2lam
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${EIGEN_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}

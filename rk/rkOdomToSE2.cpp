@@ -198,8 +198,8 @@ int main(int argc, char *argv[])
         ofs2 << t << " " << vOdomRaws[r].timestamp << " " << vOdomRaws[l].timestamp
              << " " << x << " " << y << " " << normalizeAngle(theta) << "\n";
     }
-
-    printf("因为找不到对应帧共计跳过%d帧.\n", skipFrames);
+    if (skipFrames > 0)
+        printf("因为找不到对应帧共计跳过%d帧.\n", skipFrames);
     cout << "done." << endl;
     return 0;
 }

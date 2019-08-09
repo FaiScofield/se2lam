@@ -361,17 +361,10 @@ void Localizer::DetectIfLost() {
     int numKFLocal = GetLocalKFs().size();
     if (numKFLocal > 0) {
         mbIsTracked = true;
-
-        nLostFrames = 0;
         mState = cvu::OK;
     } else {
         mbIsTracked = false;
-
-        mState = cvu::TEMPORARY_LOST;
-        if (mLastState == cvu::TEMPORARY_LOST)
-            nLostFrames++;
-        if (nLostFrames > 100)
-            mState = cvu::LOST;
+        mState = cvu::LOST;
     }
     mLastState = mState;
 }

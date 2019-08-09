@@ -16,7 +16,7 @@ using namespace std;
 
 typedef lock_guard<mutex> locker;
 
-int KeyFrame::mNextIdKF = 0;
+int KeyFrame::mNextIdKF = 1;    // KF和MP的编号都是从1开始
 
 KeyFrame::KeyFrame()
 {

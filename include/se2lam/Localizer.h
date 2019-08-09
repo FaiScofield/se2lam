@@ -107,6 +107,7 @@ public:
 
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
+
 protected:
     bool checkFinish();
     void setFinish();

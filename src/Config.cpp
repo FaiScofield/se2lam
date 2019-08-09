@@ -9,6 +9,7 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <cmath>
 
+
 namespace se2lam{
 
 #ifndef M_PI
