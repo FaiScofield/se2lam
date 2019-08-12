@@ -621,15 +621,14 @@ void MapPublish::run()
                 dt -= 360;
             else if (dt < -180.)
                 dt += 360;
+
+            // 显示保留两位小数
             char dt_char[10];
-//            sprintf(dt_char, "%2f", dt);
-            //! FIXME 角度不要输出超过小数点后2位!!!
-            int dt_int1 = int(dt * 10000) / 10000;  // 保留两位小数
-            int dt_int2 = int(100 * (dt - dt_int1));
-            string strTheta = "d_theta: " + string(dt_int1) + "." + to_string(dt_int2) + "deg";
-            string strKFID = "KF_id: " + to_string(pKP->mIdKF);
-            cv::putText(imgMatch, strTheta, Point(30, 15), 1, 1.1, Scalar(0, 0, 255), 2);
-            cv::putText(imgMatch, strKFID, Point(530, 15), 1, 1.1, Scalar(0, 0, 255), 2);
+            sprintf(dt_char, "%.2f", dt);
+            string strTheta = "d_ϴ: " + string(dt_char) + "deg";
+            string strKFID = "kf_id: " + to_string(pKP->mIdKF);
+            cv::putText(imgMatch, strTheta, Point(20, 15), 1, 1.1, Scalar(0, 255, 0), 2);
+            cv::putText(imgMatch, strKFID, Point(540, 15), 1, 1.1, Scalar(0, 255, 0), 2);
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
             pubImgMatches.publish(msgMatch);

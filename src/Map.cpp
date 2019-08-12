@@ -346,7 +346,7 @@ void Map::updateLocalGraph()
     setLocalKFs.insert(mCurrentKF);
 
     //!@Vance: 获得当前KF附近的所有KF，组成localKFs
-    int searchLevel = 3;
+    int searchLevel = 2;    // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; i++) {
