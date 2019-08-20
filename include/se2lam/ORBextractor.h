@@ -27,43 +27,54 @@
 #ifndef ORBEXTRACTOR_H
 #define ORBEXTRACTOR_H
 
-#include <vector>
 #include <list>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <vector>
+
+#include "lineDetection.h"
+
 
 namespace se2lam
 {
 
+struct pointLineLable {
+    int pointLable;
+    int lineLable;
+    double lent;
+};
+
 class ORBextractor
 {
 public:
+    enum { HARRIS_SCORE = 0, FAST_SCORE = 1 };
 
-    enum {HARRIS_SCORE=0, FAST_SCORE=1 };
+    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 1,
+                 int scoreType = FAST_SCORE, int fastTh = 15);  // 20
 
-    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 8, int scoreType=FAST_SCORE, int fastTh = 20);
-
-    ~ORBextractor(){}
+    ~ORBextractor() {}
 
     // Compute the ORB features and descriptors on an image
-    void operator()( cv::InputArray image, cv::InputArray mask,
-      std::vector<cv::KeyPoint>& keypoints,
-      cv::OutputArray descriptors);
+    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
+                    cv::OutputArray descriptors);
 
-    int inline GetLevels(){
-        return nlevels;}
+    int inline GetLevels() { return nlevels; }
 
-    float inline GetScaleFactor(){
-        return scaleFactor;}
+    float inline GetScaleFactor() { return scaleFactor; }
 
+    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
+                    std::vector<lineSort_S> &linefeature, cv::OutputArray descriptors);
+    std::vector<pointLineLable> pointAndLineLable;
+    std::vector<std::vector<int>> lineIncluePoints;
 
 protected:
-
-    void ComputePyramid(cv::Mat image, cv::Mat Mask=cv::Mat());
-    void ComputeKeyPoints(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
-    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
+    void ComputePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());
+    void ComputeKeyPoints(std::vector<std::vector<cv::KeyPoint>> &allKeypoints);
+    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint>> &allKeypoints);
+    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint> &vToDistributeKeys,
+                                                const int &minX, const int &maxX, const int &minY,
+                                                const int &maxY, const int &nFeatures,
+                                                const int &level);
 
     std::vector<cv::Point> pattern;
 
@@ -82,10 +93,8 @@ protected:
 
     std::vector<cv::Mat> mvImagePyramid;
     std::vector<cv::Mat> mvMaskPyramid;
-
 };
 
-} //namespace se2lam
+}  // namespace se2lam
 
 #endif
-

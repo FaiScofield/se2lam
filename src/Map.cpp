@@ -346,7 +346,7 @@ void Map::updateLocalGraph()
     setLocalKFs.insert(mCurrentKF);
 
     //!@Vance: 获得当前KF附近的所有KF，组成localKFs
-    int searchLevel = 2;    // 3
+    int searchLevel = 3;    // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; i++) {
@@ -996,8 +996,8 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame &_pKF)
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GLOBAL_PRINT) {
-                cerr << "[ Map ] GlobalMap - Add feature constraint from KF#" << ptKFFrom->id << " to KF#"
-                     << ptKFTo->id << endl;
+                cerr << "[ Map ] GlobalMap - Add feature constraint from KF#" << ptKFFrom->mIdKF << " to KF#"
+                     << ptKFTo->mIdKF << endl;
             }
         } else {
             if (Config::GLOBAL_PRINT)

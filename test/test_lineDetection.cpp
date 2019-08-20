@@ -16,7 +16,7 @@
 using namespace std;
 using namespace cv;
 using namespace line_descriptor;
-namespace fs =  boost::filesystem;
+namespace bf =  boost::filesystem;
 
 const char *g_vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
 
@@ -38,25 +38,23 @@ bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
 
 void readImagesRK(const string& dataFolder, vector<string>& files)
 {
-    fs::path path(dataFolder);
-    if (!fs::exists(path)) {
+    bf::path path(dataFolder);
+    if (!bf::exists(path)) {
         cerr << "[Main] Data folder doesn't exist!" << endl;
         return;
     }
 
     vector<RK_IMAGE> allImages;
-    fs::directory_iterator end_iter;
-    for (fs::directory_iterator iter(path); iter != end_iter; ++iter) {
-        if (fs::is_directory(iter->status()))
+    bf::directory_iterator end_iter;
+    for (bf::directory_iterator iter(path); iter != end_iter; ++iter) {
+        if (bf::is_directory(iter->status()))
             continue;
-        if (fs::is_regular_file(iter->status())) {
+        if (bf::is_regular_file(iter->status())) {
             // format: /frameRaw12987978101.jpg
             string s = iter->path().string();
-            auto i = s.find_last_of('/');
+            auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
-            auto t = atoll(s.substr(i+8+1, j-i-8-1).c_str());
-            cout << s << endl;
-            cout << t << endl;
+            auto t = atoll(s.substr(i+1, j-i-1).c_str());
             allImages.push_back(RK_IMAGE(s, t));
         }
     }
@@ -129,7 +127,7 @@ int main(int argc, char **argv)
         Ptr<LSDDetector> lsd = LSDDetector::createLSDDetector();
         lsd->detect(imgCur, keyLines, 2, 2);
         drawKeylines(imgCur, keyLines, outImageLSD, Scalar(0,255,0));
-//        imshow("LSD lines", outImageLSD);
+        imshow("LSD lines", outImageLSD);
 
         Mat outOneImg(2*outImageLSD.rows, outImageLSD.cols, CV_8UC3);
         cvtColor(outImageCanny, outImageCanny, COLOR_GRAY2BGR);

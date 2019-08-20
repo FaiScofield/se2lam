@@ -4,17 +4,17 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
-
-#include "OdoSLAM.h"
+#include <cv_bridge/cv_bridge.h>
+#include <geometry_msgs/Vector3Stamped.h>
+#include <image_transport/image_transport.h>
 #include <opencv2/opencv.hpp>
+#include <ros/ros.h>
+
 #include <boost/filesystem.hpp>
 
-using namespace std;
 using namespace cv;
-using namespace Eigen;
+using namespace std;
 namespace bf = boost::filesystem;
-
-const char *vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
 
 struct RK_IMAGE
 {
@@ -47,9 +47,9 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
         if (bf::is_regular_file(iter->status())) {
             // format: /frameRaw12987978101.jpg
             string s = iter->path().string();
-            auto i = s.find_last_of('/');
+            auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
-            auto t = atoll(s.substr(i+8+1, j-i-8-1).c_str());
+            auto t = atoll(s.substr(i+1, j-i-1).c_str());
             allImages.push_back(RK_IMAGE(s, t));
         }
     }
@@ -72,75 +72,54 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
 
 int main(int argc, char **argv)
 {
-    //! ROS Initialize
-    ros::init(argc, argv, "test_vn");
+    ros::init(argc, argv, "datapub");
     ros::start();
 
-    if (argc < 2){
-        cerr << "Usage: rosrun se2lam test_rk rk_dataPath" << endl;
+    if (argc != 2) {
+        cerr << "Usage: rosrun se2lam test_dataPab <dataset_folder> <Number_of_images>" << endl;
         ros::shutdown();
         return -1;
     }
 
-    se2lam::OdoSLAM system;
+    const char *ImgTopic = "/camera/image_gray";
+    const char *OdoTopic = "/odo_raw";
 
-    system.setVocFileBin(vocFile);
-    system.setDataPath(argv[1]);
-    system.start();
+    std::string path = argv[1];
+    int N = min(100, atoi(argv[2]));  // Number of images
 
-    string fullOdoName = se2lam::Config::DataPath + "/odo_raw.txt";
+    string fullOdoName = path + "/odo_raw.txt";
     ifstream rec(fullOdoName);
-    if (!rec.is_open()) {
-        cerr << "[main ] Error in opening the odo_raw.txt file! Please check if exists!" << endl;
-        rec.close();
-        ros::shutdown();
-        return -1;
-    }
-    float x,y,theta;
+    float x, y, theta;
     string line;
 
-    size_t n = static_cast<size_t>(se2lam::Config::ImgIndex);
-    size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
+    ros::NodeHandle nh;
+    image_transport::ImageTransport it(nh);
+    image_transport::Publisher img_pub = it.advertise(ImgTopic, 1);
+    ros::Publisher odo_pub = nh.advertise<geometry_msgs::Vector3Stamped>(OdoTopic, 100);
 
-    string imageFolder = se2lam::Config::DataPath + "/slamimg";
-    vector<string> allImages;
-    readImagesRK(imageFolder, allImages);
-    n = min(allImages.size(), n);
-    ros::Rate rate(se2lam::Config::FPS);
-    for(size_t i = 0; i < n && system.ok(); i++) {
-        // 起始帧不为0的时候保证odom数据跟image对应
-        if (i < m) {
-            std::getline(rec, line);
-            continue;
-        }
 
-        string fullImgName = allImages[i];
-//        cout << "[main ] reading image: " << fullImgName << endl;
+    ros::Rate rate(10);
+    for (int i = 0; i < N && ros::ok(); i++) {
+        string fullImgName = path + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
-        if (!img.data) {
-            cerr << "[main ] No image data for image " << fullImgName << endl;
-            continue;
-        }
-        std::getline(rec, line);
+        getline(rec, line);
         istringstream iss(line);
         iss >> x >> y >> theta;
+        sensor_msgs::ImagePtr img_msg =
+            cv_bridge::CvImage(std_msgs::Header(), "mono8", img).toImageMsg();
+        geometry_msgs::Vector3Stamped odo_msg;
 
-        system.receiveOdoData(x, y, theta);
-        system.receiveImgData(img);
+        img_msg->header.stamp = ros::Time::now();
+        odo_msg.header.stamp = img_msg->header.stamp;
+        odo_msg.vector.x = x;
+        odo_msg.vector.y = y;
+        odo_msg.vector.z = theta;
 
+        img_pub.publish(img_msg);
+        odo_pub.publish(odo_msg);
         rate.sleep();
     }
-    cout << "[main ] Finish test..." << endl;
-
-    system.requestFinish();
-    system.waitForFinish();
 
     ros::shutdown();
-
-    cout << "[main ] Rec close..." << endl;
-    rec.close();
-    cout << "[main ] Exit test..." << endl;
     return 0;
-
 }
-

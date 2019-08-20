@@ -5,8 +5,8 @@
 * (github.com/hbtang)
 */
 
-#include "Config.h"
 #include "Track.h"
+#include "Config.h"
 #include "LocalMapper.h"
 #include "Map.h"
 #include "ORBmatcher.h"
@@ -94,16 +94,16 @@ void Track::run()
             Point3f odo_3f;
             mpSensors->readData(odo_3f, img);
             odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
-//            Mat imgShap = cvu::sharpping(img, 12);
-//            Mat imgGamma = cvu::gamma(imgShap, 1.2);
+            //            Mat imgShap = cvu::sharpping(img, 12);
+            //            Mat imgGamma = cvu::gamma(imgShap, 1.2);
             {
                 locker lock(mMutexForPub);
-//                bool noFrame = !(Frame::nextId);
+                //                bool noFrame = !(Frame::nextId);
                 if (mState == cvu::FIRST_FRAME) {
                     mCreateFrame(img, odo);
                 } else if (mState == cvu::OK) {
                     mTrack(img, odo);
-                } else  {
+                } else {
                     relocalization(img, odo);
                 }
             }
@@ -174,17 +174,23 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
     cout << "[Track] #" << mFrame.id << " ORBmatcher get valid/tatal matches " << nMatched << "/"
          << nMatchedSum << endl;
 
+    //点线匹配
+    double th = mRefFrame.odom.theta - mFrame.odom.theta;
+    vector<int> vMatchesDistance(mFrame.N, INT_MAX);
+    int nMatchedTmp = matcher.MatchByPointAndLine(mRefFrame, mFrame, mPrevMatched, 30, mMatchIdx,
+                                                  vMatchesDistance, th);  //通过窗口内一对多匹配
+
     updateFramePose();
 
     // 内点数小于10时图像匹配失败，则用运动先验进行跟踪
-//    if (nMatched == 0) {
-//        TrackWithMotionModel();
-//        nMatched = matcher.MatchByProjection();
-//        if (nMatched < 10) {
-//            mState = cvu::LOST;
-//            return
-//        }
-//    }
+    //    if (nMatched == 0) {
+    //        TrackWithMotionModel();
+    //        nMatched = matcher.MatchByProjection();
+    //        if (nMatched < 10) {
+    //            mState = cvu::LOST;
+    //            return
+    //        }
+    //    }
 
     // 跟踪成功后则三角化计算MP，获取 匹配上参考帧的MP数量 和 未匹配上MP但有良好视差的点对数
     // Check parallax and do triangulation
@@ -271,7 +277,7 @@ void Track::resetLocalTrack()
     mFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
     mFrame.Trb = Se2(0, 0, 0);
     mRefFrame = mFrame;
-    KeyPoint::convert(mFrame.keyPoints, mPrevMatched); // cv::KeyPoint 转 cv::Point2f
+    KeyPoint::convert(mFrame.keyPoints, mPrevMatched);  // cv::KeyPoint 转 cv::Point2f
 
     // 更新当前Local MP为参考帧观测到的MP
     mLocalMPs = mpKF->mViewMPs;
@@ -337,8 +343,8 @@ void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc, g2o::Matrix6d &Info_
 }
 
 // 后端优化用，计算约束(R^t)*∑*R
-void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2,
-                             Eigen::Matrix3d &info1, Eigen::Matrix3d &info2)
+void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eigen::Matrix3d &info1,
+                             Eigen::Matrix3d &info2)
 {
     Point3f O1 = Point3f(cvu::inv(Tcw1).rowRange(0, 3).col(3));
     Point3f O2 = Point3f(cvu::inv(Tcw2).rowRange(0, 3).col(3));
@@ -408,7 +414,7 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
 
     vector<unsigned char> mask;
     if (pt1.size() != 0)
-        findFundamentalMat(pt1, pt2, FM_RANSAC, 2, 0.99, mask); // 默认RANSAC法计算F矩阵
+        findFundamentalMat(pt1, pt2, FM_RANSAC, 2, 0.99, mask);  // 默认RANSAC法计算F矩阵
 
     int nInlier = 0;
     for (int i = 0, iend = mask.size(); i < iend; i++) {
@@ -431,11 +437,13 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
 bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 {
     int nOldKP = mpKF->getSizeObsMP();
-    bool c0 = mFrame.id - mpKF->id > nMinFrames;            // 1.间隔首先要足够大
-    bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f; // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
-    bool c2 = mnGoodPrl > 40;                               // 且没匹配上的KP中拥有良好视差的点数大于40
-    bool c3 = mFrame.id - mpKF->id > nMaxFrames;            // 2.2 或间隔达到上限了
-    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;  // 2.3 或匹配对小于1/10最大特征点数
+    bool c0 = mFrame.id - mpKF->id > nMinFrames;  // 1.间隔首先要足够大
+    bool c1 = (float)nTrackedOldMP <=
+              (float)nOldKP * 0.5f;  // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
+    bool c2 = mnGoodPrl > 40;        // 且没匹配上的KP中拥有良好视差的点数大于40
+    bool c3 = mFrame.id - mpKF->id > nMaxFrames;  // 2.2 或间隔达到上限了
+    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber ||
+              nMatched < 20;  // 2.3 或匹配对小于1/10最大特征点数
     // 满足条件1，和条件2中的一个(共2个条件)，则可能需要加入关键帧，实际还得看odom那边的条件
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
@@ -443,7 +451,8 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
         bool c5 = abs(dOdo.theta) >= 0.0349f;  // NOTE 相机的旋转量超过2°，这里原来少了绝对值符号
-        cv::Mat cTc = Config::cTb * dOdo.toCvSE3() * Config::bTc; // NOTE 注意相机的平移量不等于里程的平移量
+        cv::Mat cTc =
+            Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= (0.0523f * Config::UPPER_DEPTH * 0.1f);  // 相机的平移量足够大
 
@@ -542,164 +551,184 @@ void Track::setFinish()
 }
 
 
-//! TODO 完成重定位功能
-void Track::relocalization(const Mat &img, const Se2 &odo)
-{}
-    /*
-    // 步骤1：计算当前帧特征点的Bow映射
-    mFrame.ComputeBoW();
-
-    // 步骤2：找到与当前帧相似的候选关键帧
-    vector<KeyFrame *> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mFrame);
-
-    if (vpCandidateKFs.empty())
-        return false;
-
-    const size_t nKFs = vpCandidateKFs.size();
-
-    // We perform first an ORB matching with each candidate
-    // If enough matches are found we setup a PnP solver
-    ORBmatcher matcher(0.75, true);
-
-    vector<PnPsolver*> vpPnPsolvers;
-    vpPnPsolvers.resize(nKFs);
-
-    vector<vector<MapPoint *>> vvpMapPointMatches;
-    vvpMapPointMatches.resize(nKFs);
-
-    vector<bool> vbDiscarded;
-    vbDiscarded.resize(nKFs);
-
-    int nCandidates = 0;
-
-    for (size_t i = 0; i < nKFs; i++) {
-        KeyFrame *pKF = vpCandidateKFs[i];
-        if (pKF->isBad())
-            vbDiscarded[i] = true;
-        else {
-            // 步骤3：通过BoW进行匹配
-            int nmatches =
-                matcher.SearchByBoW(pKF, mCurrentFrame, vvpMapPointMatches[i]);
-            if (nmatches < 15) {
-                vbDiscarded[i] = true;
-                continue;
-            } else {
-                // 初始化PnPsolver
-                PnPsolver *pSolver =
-                    new PnPsolver(mCurrentFrame, vvpMapPointMatches[i]);
-                pSolver->SetRansacParameters(0.99, 10, 300, 4, 0.5, 5.991f);
-                vpPnPsolvers[i] = pSolver;
-                nCandidates++;
-            }
+void Track::DrawMachesPoints(const cv::Mat fmg, const cv::Mat img,
+                             std::vector<int> vMatchesDistance)
+{
+    Mat grayImgInition = fmg.clone();
+    Mat grayImgCurrent = img.clone();
+    cv::Mat MatchesImage;
+    vector<DMatch> GoodmatchePoints;
+    for (int i = 0; i < mMatchIdx.size(); i++) {
+        if (mMatchIdx[i] > 0) {
+            DMatch dmatches(i, mMatchIdx[i], vMatchesDistance[i]);
+            GoodmatchePoints.push_back(dmatches);
         }
     }
+    drawMatches(grayImgInition, mRefFrame.keyPointsUn, grayImgCurrent, mFrame.keyPointsUn,
+                GoodmatchePoints, MatchesImage);
+    //    cv::imshow("MatchesImage",MatchesImage);
+    //    cv::waitKey(1);
+}
 
-    // Alternatively perform some iterations of P4P RANSAC
-    // Until we found a camera pose supported by enough inliers
-    bool bMatch = false;
-    ORBmatcher matcher2(0.9f, true);
+//! TODO 完成重定位功能
+void Track::relocalization(const Mat &img, const Se2 &odo)
+{
+}
+/*
+// 步骤1：计算当前帧特征点的Bow映射
+mFrame.ComputeBoW();
 
-    while (nCandidates > 0 && !bMatch) {
-        for (size_t i = 0; i < nKFs; i++) {
-            if (vbDiscarded[i])
-                continue;
+// 步骤2：找到与当前帧相似的候选关键帧
+vector<KeyFrame *> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mFrame);
 
-            // Perform 5 Ransac Iterations
-            vector<bool> vbInliers;
-            int nInliers;
-            bool bNoMore;
+if (vpCandidateKFs.empty())
+    return false;
 
-            // 步骤4：通过EPnP算法估计姿态
-            PnPsolver *pSolver = vpPnPsolvers[i];
-            cv::Mat Tcw = pSolver->iterate(5, bNoMore, vbInliers, nInliers);
+const size_t nKFs = vpCandidateKFs.size();
 
-            // If Ransac reachs max. iterations discard keyframe
-            if (bNoMore) {
-                vbDiscarded[i] = true;
-                nCandidates--;
+// We perform first an ORB matching with each candidate
+// If enough matches are found we setup a PnP solver
+ORBmatcher matcher(0.75, true);
+
+vector<PnPsolver*> vpPnPsolvers;
+vpPnPsolvers.resize(nKFs);
+
+vector<vector<MapPoint *>> vvpMapPointMatches;
+vvpMapPointMatches.resize(nKFs);
+
+vector<bool> vbDiscarded;
+vbDiscarded.resize(nKFs);
+
+int nCandidates = 0;
+
+for (size_t i = 0; i < nKFs; i++) {
+    KeyFrame *pKF = vpCandidateKFs[i];
+    if (pKF->isBad())
+        vbDiscarded[i] = true;
+    else {
+        // 步骤3：通过BoW进行匹配
+        int nmatches =
+            matcher.SearchByBoW(pKF, mCurrentFrame, vvpMapPointMatches[i]);
+        if (nmatches < 15) {
+            vbDiscarded[i] = true;
+            continue;
+        } else {
+            // 初始化PnPsolver
+            PnPsolver *pSolver =
+                new PnPsolver(mCurrentFrame, vvpMapPointMatches[i]);
+            pSolver->SetRansacParameters(0.99, 10, 300, 4, 0.5, 5.991f);
+            vpPnPsolvers[i] = pSolver;
+            nCandidates++;
+        }
+    }
+}
+
+// Alternatively perform some iterations of P4P RANSAC
+// Until we found a camera pose supported by enough inliers
+bool bMatch = false;
+ORBmatcher matcher2(0.9f, true);
+
+while (nCandidates > 0 && !bMatch) {
+    for (size_t i = 0; i < nKFs; i++) {
+        if (vbDiscarded[i])
+            continue;
+
+        // Perform 5 Ransac Iterations
+        vector<bool> vbInliers;
+        int nInliers;
+        bool bNoMore;
+
+        // 步骤4：通过EPnP算法估计姿态
+        PnPsolver *pSolver = vpPnPsolvers[i];
+        cv::Mat Tcw = pSolver->iterate(5, bNoMore, vbInliers, nInliers);
+
+        // If Ransac reachs max. iterations discard keyframe
+        if (bNoMore) {
+            vbDiscarded[i] = true;
+            nCandidates--;
+        }
+
+        // If a Camera Pose is computed, optimize
+        if (!Tcw.empty()) {
+            Tcw.copyTo(mCurrentFrame.mTcw);
+
+            set<MapPoint *> sFound;
+
+            const size_t np = vbInliers.size();
+
+            for (size_t j = 0; j < np; j++) {
+                if (vbInliers[j]) {
+                    mCurrentFrame.mvpMapPoints[j] =
+                        vvpMapPointMatches[i][j];
+                    sFound.insert(vvpMapPointMatches[i][j]);
+                } else
+                    mCurrentFrame.mvpMapPoints[j] = NULL;
             }
 
-            // If a Camera Pose is computed, optimize
-            if (!Tcw.empty()) {
-                Tcw.copyTo(mCurrentFrame.mTcw);
+            // 步骤5：通过PoseOptimization对姿态进行优化求解
+            int nGood = Optimizer::PoseOptimization(&mCurrentFrame);
 
-                set<MapPoint *> sFound;
+            if (nGood < 10)
+                continue;
 
-                const size_t np = vbInliers.size();
+            for (int io = 0; io < mCurrentFrame.N; io++)
+                if (mCurrentFrame.mvbOutlier[io])
+                    mCurrentFrame.mvpMapPoints[io] =
+                        static_cast<MapPoint *>(NULL);
 
-                for (size_t j = 0; j < np; j++) {
-                    if (vbInliers[j]) {
-                        mCurrentFrame.mvpMapPoints[j] =
-                            vvpMapPointMatches[i][j];
-                        sFound.insert(vvpMapPointMatches[i][j]);
-                    } else
-                        mCurrentFrame.mvpMapPoints[j] = NULL;
-                }
+            // If few inliers, search by projection in a coarse window and
+            // optimize again
+            // 步骤6：如果内点较少，则通过投影的方式对之前未匹配的点进行匹配，再进行优化求解
+            if (nGood < 50) {
+                int nadditional = matcher2.SearchByProjection(
+                    mCurrentFrame, vpCandidateKFs[i], sFound, 10, 100);
 
-                // 步骤5：通过PoseOptimization对姿态进行优化求解
-                int nGood = Optimizer::PoseOptimization(&mCurrentFrame);
+                if (nadditional + nGood >= 50) {
+                    nGood = Optimizer::PoseOptimization(&mCurrentFrame);
 
-                if (nGood < 10)
-                    continue;
+                    // If many inliers but still not enough, search by
+                    // projection again in a narrower window
+                    // the camera has been already optimized with many
+                    // points
+                    if (nGood > 30 && nGood < 50) {
+                        sFound.clear();
+                        for (int ip = 0; ip < mCurrentFrame.N; ip++)
+                            if (mCurrentFrame.mvpMapPoints[ip])
+                                sFound.insert(
+                                    mCurrentFrame.mvpMapPoints[ip]);
+                        nadditional = matcher2.SearchByProjection(
+                            mCurrentFrame, vpCandidateKFs[i], sFound, 3,
+                            64);
 
-                for (int io = 0; io < mCurrentFrame.N; io++)
-                    if (mCurrentFrame.mvbOutlier[io])
-                        mCurrentFrame.mvpMapPoints[io] =
-                            static_cast<MapPoint *>(NULL);
+                        // Final optimization
+                        if (nGood + nadditional >= 50) {
+                            nGood =
+                                Optimizer::PoseOptimization(&mCurrentFrame);
 
-                // If few inliers, search by projection in a coarse window and
-                // optimize again
-                // 步骤6：如果内点较少，则通过投影的方式对之前未匹配的点进行匹配，再进行优化求解
-                if (nGood < 50) {
-                    int nadditional = matcher2.SearchByProjection(
-                        mCurrentFrame, vpCandidateKFs[i], sFound, 10, 100);
-
-                    if (nadditional + nGood >= 50) {
-                        nGood = Optimizer::PoseOptimization(&mCurrentFrame);
-
-                        // If many inliers but still not enough, search by
-                        // projection again in a narrower window
-                        // the camera has been already optimized with many
-                        // points
-                        if (nGood > 30 && nGood < 50) {
-                            sFound.clear();
-                            for (int ip = 0; ip < mCurrentFrame.N; ip++)
-                                if (mCurrentFrame.mvpMapPoints[ip])
-                                    sFound.insert(
-                                        mCurrentFrame.mvpMapPoints[ip]);
-                            nadditional = matcher2.SearchByProjection(
-                                mCurrentFrame, vpCandidateKFs[i], sFound, 3,
-                                64);
-
-                            // Final optimization
-                            if (nGood + nadditional >= 50) {
-                                nGood =
-                                    Optimizer::PoseOptimization(&mCurrentFrame);
-
-                                for (int io = 0; io < mCurrentFrame.N; io++)
-                                    if (mCurrentFrame.mvbOutlier[io])
-                                        mCurrentFrame.mvpMapPoints[io] = NULL;
-                            }
+                            for (int io = 0; io < mCurrentFrame.N; io++)
+                                if (mCurrentFrame.mvbOutlier[io])
+                                    mCurrentFrame.mvpMapPoints[io] = NULL;
                         }
                     }
                 }
+            }
 
-                // If the pose is supported by enough inliers stop ransacs and
-                // continue
-                if (nGood >= 50) {
-                    bMatch = true;
-                    break;
-                }
+            // If the pose is supported by enough inliers stop ransacs and
+            // continue
+            if (nGood >= 50) {
+                bMatch = true;
+                break;
             }
         }
     }
+}
 
-    if (!bMatch) {
-        return false;
-    } else {
-        mnLastRelocFrameId = mCurrentFrame.mnId;
-        return true;
-    }
+if (!bMatch) {
+    return false;
+} else {
+    mnLastRelocFrameId = mCurrentFrame.mnId;
+    return true;
+}
 }
 */
 

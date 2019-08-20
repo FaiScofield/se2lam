@@ -49,8 +49,69 @@ using namespace cv;
 using namespace std;
 
 const int ORBmatcher::TH_HIGH = 100;
-const int ORBmatcher::TH_LOW = 65;  // 75
+const int ORBmatcher::TH_LOW = 60;  // 75
 const int ORBmatcher::HISTO_LENGTH = 30;
+
+
+//获取匹配线段的起始匹配点
+void getMatcheLines_Star_Eend(const Frame frame1, const Frame frame2,
+                              std::vector<line_s_e> &matchesLine1_S_E, int linelable1,
+                              int linelable2, int pl1, int pl2)
+{
+    double k1 = frame1.lineFeature[linelable1].k;
+    Point2f s = frame1.keyPointsUn[pl1].pt;
+    Point2f e = frame1.keyPointsUn[pl1].pt;
+    Point2f ms = frame2.keyPointsUn[pl2].pt;
+    Point2f me = frame2.keyPointsUn[pl2].pt;
+    if (abs(k1 < 1)) {
+        if (abs(matchesLine1_S_E[linelable1].star_p.x - 0) < 0.01) {
+            matchesLine1_S_E[linelable1].star_p = s;
+            matchesLine1_S_E[linelable1].end_p = e;
+            matchesLine1_S_E[linelable1].match_star = ms;
+            matchesLine1_S_E[linelable1].match_end = me;
+        } else {
+            Point2f ss = matchesLine1_S_E[linelable1].star_p;
+            Point2f ee = matchesLine1_S_E[linelable1].end_p;
+            if (s.x < ss.x) {
+                matchesLine1_S_E[linelable1].star_p = s;
+                matchesLine1_S_E[linelable1].match_star = ms;
+            } else if (e.x > ee.x) {
+                matchesLine1_S_E[linelable1].end_p = e;
+                matchesLine1_S_E[linelable1].match_end = me;
+            }
+        }
+    } else {
+        if (abs(matchesLine1_S_E[linelable1].star_p.x - 0) < 0.01) {
+            matchesLine1_S_E[linelable1].star_p = s;
+            matchesLine1_S_E[linelable1].end_p = e;
+            matchesLine1_S_E[linelable1].match_star = ms;
+            matchesLine1_S_E[linelable1].match_end = me;
+        } else {
+            Point2f ss = matchesLine1_S_E[linelable1].star_p;
+            Point2f ee = matchesLine1_S_E[linelable1].end_p;
+            if (s.y < ss.y) {
+                matchesLine1_S_E[linelable1].star_p = s;
+                matchesLine1_S_E[linelable1].match_star = ms;
+            } else if (e.y > ee.y) {
+                matchesLine1_S_E[linelable1].end_p = e;
+                matchesLine1_S_E[linelable1].match_end = me;
+            }
+        }
+    }
+}
+
+void GetRotatePoints(Mat img, cv::Point2f origenPoint, cv::Point2f &rotatePoint, double angle)
+{
+    float x1 = origenPoint.x;
+    float y1 = img.rows - origenPoint.y;
+    float x2 = img.cols / 2;
+    float y2 = img.rows - img.rows / 2 + 20;
+    rotatePoint.x = cvRound((x1 - x2) * cos(angle) - (y1 - y2) * sin(angle) + x2);
+    rotatePoint.y = cvRound((x1 - x2) * sin(angle) + (y1 - y2) * cos(angle) + y2);
+    rotatePoint.y = img.rows - rotatePoint.y;
+    // cout<<angle<<"  "<<rotatePoint<<endl;
+}
+
 
 /**
  * Constructor
@@ -492,5 +553,211 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF, std::vector<PtrMapPoint> 
     return nmatches;
 }
 
+
+int ORBmatcher::MatchByPointAndLine(const Frame &frame1, Frame &frame2,
+                                    vector<Point2f> &vbPrevMatched, const int winSize,
+                                    vector<int> &vnMatches12, vector<int> &vMatchesDistance,
+                                    double angle, const int levelOffset, const int minLevel,
+                                    const int maxLevel)
+{
+    //线匹配容器初始化
+    int m = frame1.lineIncludePoints.size();
+    int n = frame2.lineIncludePoints.size();
+    std::vector<std::vector<int>> lineToLineLable(m);  //点线匹配关系
+    for (int i = 0; i < m; i++)
+        lineToLineLable[i].resize(n, 0);
+    std::vector<int> matcherLineLable(m, -1);  //线线匹配关系
+
+    //匹配线所包含的匹配点的lable
+    std::vector<std::vector<int>> matchesLine1IncludePoints(m);  //点线匹配关系
+    std::vector<std::vector<int>> matchesLine2IncludePoints(n);  //点线匹配关系
+
+    //匹配线的匹配点的起点和终点
+    std::vector<line_s_e> matchesLine1_S_E(m);
+    std::vector<line_s_e> matchesLine2_S_E(n);
+
+    int nmatches = 0;
+    vnMatches12 = vector<int>(frame1.N, -1);
+
+    vector<int> rotHist[HISTO_LENGTH];
+    for (int i = 0; i < HISTO_LENGTH; i++)
+        rotHist[i].reserve(500);
+    const float factor = 1.f / (float)HISTO_LENGTH;
+
+    // vector<int> vMatchesDistance(frame2.N, INT_MAX);
+
+    // 7.17日修改
+
+    vector<int> vnMatches21(frame2.N, -1);
+
+    int minDist = INT_MAX;
+    for (int i1 = 0, iend1 = frame1.N; i1 < iend1; i1++) {
+        KeyPoint kp1 = frame1.keyPointsUn[i1];
+        int level1 = kp1.octave;
+        if (level1 > maxLevel || level1 < minLevel)
+            continue;
+        int minLevel2 = level1 - levelOffset > 0 ? level1 - levelOffset : 0;
+
+        cv::Point2f rotatePoint;
+        // GetRotatePoints(frame1.img,vbPrevMatched[i1],rotatePoint,-angle);
+
+
+        vector<size_t> vIndices2 = frame2.GetFeaturesInArea(
+            vbPrevMatched[i1].x, vbPrevMatched[i1].y, winSize, minLevel2, level1 + levelOffset);
+        if (vIndices2.empty())
+            continue;
+
+        cv::Mat d1 = frame1.descriptors.row(i1);
+
+
+        int bestDist = INT_MAX;
+        int bestDist2 = INT_MAX;
+        int bestIdx2 = -1;
+
+        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
+            size_t i2 = *vit;
+
+            cv::Mat d2 = frame2.descriptors.row(i2);
+
+            int dist = DescriptorDistance(d1, d2);
+
+            if (vMatchesDistance[i2] <= dist)
+                continue;
+
+            if (dist < bestDist) {
+                bestDist2 = bestDist;
+                bestDist = dist;
+                bestIdx2 = i2;
+            } else if (dist < bestDist2) {
+                bestDist2 = dist;
+            }
+        }
+
+        if (bestDist <= TH_LOW) {
+            if (bestDist < (float)bestDist2 * mfNNratio) {  // mfNNratio
+                if (vnMatches21[bestIdx2] >= 0) {
+                    vnMatches12[vnMatches21[bestIdx2]] = -1;
+                    nmatches--;
+                }
+                vnMatches12[i1] = bestIdx2;
+                vnMatches21[bestIdx2] = i1;
+                vMatchesDistance[bestIdx2] = bestDist;
+                if (bestDist < minDist)
+                    minDist = bestDist;
+                nmatches++;
+
+                // for orientation check
+                float rot = frame1.keyPointsUn[i1].angle - frame2.keyPointsUn[bestIdx2].angle;
+                if (rot < 0.0)
+                    rot += 360.f;
+                int bin = round(rot * factor);
+                if (bin == HISTO_LENGTH)
+                    bin = 0;
+                rotHist[bin].push_back(i1);
+            }
+        }
+    }
+
+
+    // orientation check
+    {
+        int ind1 = -1;
+        int ind2 = -1;
+        int ind3 = -1;
+
+        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
+
+        for (int i = 0; i < HISTO_LENGTH; i++) {
+            if (i == ind1 || i == ind2 || i == ind3)
+                continue;
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+                int idx1 = rotHist[i][j];
+                if (vnMatches12[idx1] >= 0) {
+                    vnMatches12[idx1] = -1;
+                    nmatches--;
+                }
+            }
+        }
+    }
+
+
+    for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
+        if (vnMatches12[i1] >= 0) {
+            //线匹配lable对应关系
+            //图1中每条线对应的图2中匹配线（1对多）
+            int line1lable, line2lable, linenuber;
+            line1lable = frame1.pointAndLineLable[i1].lineLable;
+            line2lable = frame2.pointAndLineLable[vnMatches12[i1]].lineLable;
+            //不在线上的点不考虑
+            if (line1lable == -1 || line2lable == -1)
+                continue;
+            linenuber = lineToLineLable[line1lable][line2lable];
+            lineToLineLable[line1lable][line2lable] = linenuber + 1;
+
+            //匹配线所包含的匹配点的lable
+            matchesLine1IncludePoints[line1lable].push_back(i1);
+            matchesLine2IncludePoints[line2lable].push_back(vnMatches12[i1]);
+        }
+
+    //线与线的匹配关系（一对一）
+    for (int i = 0; i < lineToLineLable.size(); i++) {
+        std::vector<int>::iterator biggest =
+            std::max_element(std::begin(lineToLineLable[i]), std::end(lineToLineLable[i]));
+        if (*biggest > 2) {
+            int position = std::distance(std::begin(lineToLineLable[i]), biggest);
+            matcherLineLable[i] = position;
+
+            for (int j = 0; j < matchesLine1IncludePoints[i].size(); j++) {
+                int pl1 = matchesLine1IncludePoints[i][j];
+                int pl2 = vnMatches12[pl1];
+                if (frame2.pointAndLineLable[pl2].lineLable == position) {
+                    //获取匹配线断的起点和终点
+                    // getMatcheLines_Star_Eend(frame1,frame2,matchesLine1_S_E,i,position,pl1, pl2);
+
+                } else {
+                    vnMatches12[pl1] = -1;
+                }
+            }
+
+            cv::Point2f start1, end1, start2, end2;
+            //绘制线与线的匹配效果
+            //               start1 = matchesLine1_S_E[i].star_p; //直线起点
+            //               end1 = matchesLine1_S_E[i].end_p;   //直线终点
+            //               start2 = matchesLine1_S_E[i].match_star; //直线起点
+            //               end2 = matchesLine1_S_E[i].match_end;   //直线终点
+
+            //
+            //                start1 = frame1.lineFeature[i].star; //直线起点
+            //                end1 = frame1.lineFeature[i].end;   //直线终点
+            //                start2 = frame2.lineFeature[position].star; //直线起点
+            //                end2 = frame2.lineFeature[position].end;   //直线终点
+            //
+            //                Mat drawImg1 = frame1.img.clone();
+            //                Mat drawImg2 = frame2.img.clone();
+            //                cv::line(drawImg1, start1, end1, cv::Scalar(0, 0, 255),2);
+            //                cv::line(drawImg2, start2, end2, cv::Scalar(0, 0, 255),2);
+            //
+            //                imshow("lineImag1", drawImg1);
+            //                imshow("lineImag2", drawImg2);
+            //                waitKey();
+
+        } else {
+            //不在线上的点筛选掉
+            //                for(int j = 0; j < matchesLine1IncludePoints[i].size(); j++)
+            //                {
+            //                    int pl1 = matchesLine1IncludePoints[i][j];
+            //                    vnMatches12[pl1] = -1;
+            //                }
+        }
+    }
+
+    // update prev matched
+    for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
+        if (vnMatches12[i1] >= 0)
+            vbPrevMatched[i1] = frame2.keyPointsUn[vnMatches12[i1]].pt;
+
+
+    return nmatches;
+}
 
 }  // namespace ORB_SLAM

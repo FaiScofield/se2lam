@@ -47,13 +47,11 @@ public:
 
     void requestFinish();
     bool isFinished();
-
-    void writePose();
-
-    void relocalization(const cv::Mat &img, const Se2 &odo);
-
     bool checkFinish();
     void setFinish();
+
+    void relocalization(const cv::Mat &img, const Se2 &odo);
+    void DrawMachesPoints(const cv::Mat fmg, const cv::Mat img, std::vector<int> vMatchesDistance);
 
 
     bool mbFinishRequested;

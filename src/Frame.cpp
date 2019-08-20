@@ -11,6 +11,8 @@
 #include "converter.h"
 #include "cvutil.h"
 
+#include "Preprocess.h"
+
 namespace se2lam
 {
 using namespace cv;
@@ -28,11 +30,28 @@ Frame::Frame()
 Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
 {
     mpORBExtractor = extractor;
+
+    Preprocess pre;
+    Mat sharpImage = pre.sharpping(im,8);
+    Mat gammaImage = pre.GaMma(sharpImage,1.8);
+
+    Mat sharpImage1 = pre.sharpping(im,10);
+    Mat gammaImage1 = pre.GaMma(sharpImage1,1.2);
+
+
     //! 输入图像去畸变
-    undistort(im, img, Config::Kcam, Config::Dcam);
+    undistort(gammaImage1, img, Config::Kcam, Config::Dcam);
+//    undistort(im, img, Config::Kcam, Config::Dcam);
     //    im.copyTo(img);
 
-    (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
+    //7.27日添加计算掩模
+    Mat mask = getLineMask(gammaImage, lineFeature, false);
+    (*mpORBExtractor)(img, mask, keyPoints, lineFeature, descriptors);
+//    (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
+
+    //点和线的对应关系
+    pointAndLineLable = mpORBExtractor->pointAndLineLable;
+    lineIncludePoints = mpORBExtractor->lineIncluePoints;
 
     N = keyPoints.size();
     if (keyPoints.empty())
@@ -123,6 +142,10 @@ Frame::Frame(const Frame &f)
     odom = f.odom;
     Twb = f.Twb;
     Trb = f.Trb;
+
+    lineFeature = f.lineFeature;
+    pointAndLineLable = f.pointAndLineLable;
+    lineIncludePoints = f.lineIncludePoints;
 }
 
 Frame &Frame::operator=(const Frame &f)
@@ -156,6 +179,10 @@ Frame &Frame::operator=(const Frame &f)
     odom = f.odom;
     Twb = f.Twb;
     Trb = f.Trb;
+
+    lineFeature = f.lineFeature;
+    pointAndLineLable = f.pointAndLineLable;
+    lineIncludePoints = f.lineIncludePoints;
 
     return *this;
 }

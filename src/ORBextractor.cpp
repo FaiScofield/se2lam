@@ -78,9 +78,9 @@ using namespace std;
 
 const float HARRIS_K = 0.04f;
 
-const int PATCH_SIZE = 23;      // 31
-const int HALF_PATCH_SIZE = 11; // 15
-const int EDGE_THRESHOLD = 12;  // 16
+const int PATCH_SIZE = 23;       // 31
+const int HALF_PATCH_SIZE = 11;  // 15
+const int EDGE_THRESHOLD = 12;   // 16
 
 static void HarrisResponses(const Mat &img, vector<KeyPoint> &pts, int blockSize, float harris_k)
 {
@@ -119,7 +119,9 @@ static void HarrisResponses(const Mat &img, vector<KeyPoint> &pts, int blockSize
             b += Iy * Iy;
             c += Ix * Iy;
         }
-        pts[ptidx].response = ((float)a*b - (float)c*c - harris_k*((float)a+b) * ((float)a+b)) * scale_sq_sq;
+        pts[ptidx].response =
+            ((float)a * b - (float)c * c - harris_k * ((float)a + b) * ((float)a + b)) *
+            scale_sq_sq;
     }
 }
 
@@ -137,12 +139,12 @@ static float IC_Angle(const Mat &image, Point2f pt, const vector<int> &u_max)
     // Go line by line in the circuI853lar patch
     int step = (int)image.step1();
     for (int v = 1; v <= HALF_PATCH_SIZE; ++v) {
-        // Proceed over the two lines
+        // Proceed over the two lines 每次处理对称两行
         int v_sum = 0;
         int d = u_max[v];
         for (int u = -d; u <= d; ++u) {
             int val_plus = center[u + v * step], val_minus = center[u - v * step];
-            v_sum += (val_plus - val_minus);
+            v_sum += (val_plus - val_minus);    // 因为val_minus对应的是-v,为了统一符号，用减法
             m_10 += u * (val_plus + val_minus);
         }
         m_01 += v * v_sum;
@@ -460,8 +462,10 @@ static int bit_pattern_31_[256 * 4] = {
     -1,  -6,  0,   -11 /*mean (0.127148), correlation (0.547401)*/
 };
 
-ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _scoreType, int _fastTh)
-    : nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), scoreType(_scoreType), fastTh(_fastTh)
+ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _scoreType,
+                           int _fastTh)
+    : nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), scoreType(_scoreType),
+      fastTh(_fastTh)
 {
     // 计算每一层相对于原始图片的放大倍数
     mvScaleFactor.resize(nlevels);
@@ -483,7 +487,8 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int
     // 主要是将每层的特征点数量进行均匀控制
     mnFeaturesPerLevel.resize(nlevels);
     float factor = (float)(1.0 / scaleFactor);
-    float nDesiredFeaturesPerScale = nfeatures * (1 - factor) / (1 - (float)pow((double)factor, (double)nlevels));
+    float nDesiredFeaturesPerScale =
+        nfeatures * (1 - factor) / (1 - (float)pow((double)factor, (double)nlevels));
 
     int sumFeatures = 0;
     for (int level = 0; level < nlevels - 1; level++) {
@@ -545,11 +550,13 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>> &allKeypoints)
         const int levelCols = sqrt((float)nDesiredFeatures / (5 * imageRatio));
         const int levelRows = imageRatio * levelCols;
 
+        // 计算边界
         const int minBorderX = EDGE_THRESHOLD;
         const int minBorderY = minBorderX;
         const int maxBorderX = mvImagePyramid[level].cols - EDGE_THRESHOLD;
         const int maxBorderY = mvImagePyramid[level].rows - EDGE_THRESHOLD;
 
+        // 计算窗口的大小
         const int W = maxBorderX - minBorderX;
         const int H = maxBorderY - minBorderY;
         const int cellW = ceil((float)W / levelCols);
@@ -602,8 +609,8 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>> &allKeypoints)
                 }
 
 
-                Mat cellImage =
-                    mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
+                Mat cellImage = mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
+                Mat cellImageandMask = cellImage.clone();
 
                 Mat cellMask;
                 if (!mvMaskPyramid[level].empty())
@@ -611,12 +618,15 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>> &allKeypoints)
 
                 cellKeyPoints[i][j].reserve(nfeaturesCell * 5);
 
-                FAST(cellImage, cellKeyPoints[i][j], fastTh, true);
+                // 加入直线的mask
+                FAST(cellImageandMask, cellKeyPoints[i][j], fastTh, true);
+                KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
 
-                if (cellKeyPoints[i][j].size() <= 3) {
+                if (cellKeyPoints[i][j].size() <= 10) {     // 3
                     cellKeyPoints[i][j].clear();
-
-                    FAST(cellImage, cellKeyPoints[i][j], 7, true);
+//                    FAST(cellImage, cellKeyPoints[i][j], 7, true);
+                    FAST(cellImageandMask, cellKeyPoints[i][j], 3, true);  // 7
+                    KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
                 }
 
                 if (scoreType == ORB::HARRIS_SCORE) {
@@ -719,7 +729,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
 
     vector<vector<KeyPoint>> allKeypoints;
     ComputeKeyPoints(allKeypoints);  //!@Vance:这里没有用八叉树存储
-//    ComputeKeyPointsOctTree(allKeypoints);
+                                     //    ComputeKeyPointsOctTree(allKeypoints);
 
     Mat descriptors;
 
@@ -804,6 +814,110 @@ void ORBextractor::ComputePyramid(cv::Mat image, cv::Mat Mask)
         }
     }
 }
+
+
+void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint> &_keypoints,
+                              std::vector<lineSort_S> &linefeature, OutputArray _descriptors)
+{
+    //如果没有获取图片，返回
+    if (_image.empty())
+        return;
+
+    //获取图片信息赋给Mat类型的图片
+    Mat image = _image.getMat(), mask = _mask.getMat();
+    //判断通道是否为灰度图
+    assert(image.type() == CV_8UC1);
+
+    // Pre-compute the scale pyramids 构建高斯金字塔
+    ComputePyramid(image, mask);
+
+    //保存所有关键点
+    vector<vector<KeyPoint>> allKeypoints;
+    //计算关键点，找到Fast关键点
+    ComputeKeyPoints(allKeypoints);  //@Vance:这里没有用八叉树存储
+    // ComputeKeyPointsOctTree(allKeypoints);
+
+    Mat descriptors;
+
+    int nkeypoints = 0;
+    for (int level = 0; level < nlevels; ++level)
+        nkeypoints += (int)allKeypoints[level].size();
+    if (nkeypoints == 0)
+        _descriptors.release();
+    else {
+        _descriptors.create(nkeypoints, 32, CV_8U);
+        descriptors = _descriptors.getMat();
+    }
+
+    _keypoints.clear();
+    _keypoints.reserve(nkeypoints);
+
+    //计算每个特征点对应的描述子
+    int offset = 0;
+    for (int level = 0; level < nlevels; ++level) {
+        vector<KeyPoint> &keypoints = allKeypoints[level];
+        int nkeypointsLevel = (int)keypoints.size();
+
+        if (nkeypointsLevel == 0)
+            continue;
+
+        // preprocess the resized image 对图像进行高斯模糊
+        Mat &workingMat = mvImagePyramid[level];
+        //使用高斯模糊为了计算BRIEF的时候去噪
+        GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
+
+        // Compute the descriptors 计算描述子
+        //计算描述子,采用的是高斯分布取点，就是上面一长串的patten
+        Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
+        computeDescriptors(workingMat, keypoints, desc, pattern);
+
+        offset += nkeypointsLevel;
+
+        // Scale keypoint coordinates
+        //关键点的位置做尺度恢复，恢复到原图位置
+        if (level != 0) {
+            float scale = mvScaleFactor[level];  // getScale(level, firstLevel, scaleFactor);
+            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
+                                            keypointEnd = keypoints.end();
+                 keypoint != keypointEnd; ++keypoint)
+                keypoint->pt *= scale;
+        }
+        // cout<<keypoints[2].pt<<endl;
+        // And add the keypoints to the output
+        _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
+    }
+
+    //将特征点与线建立映射关系
+    if (!linefeature.empty()) {
+        //记录特征点的标签
+        pointAndLineLable.clear();
+        lineIncluePoints.clear();
+        lineIncluePoints.resize(linefeature.size());
+        //计算特征点所在的线
+        lineDetection linenum;
+        double lenth;
+        int i = 0;
+        for (vector<KeyPoint>::iterator keyp = _keypoints.begin(), keype = _keypoints.end();
+             keyp != keype; ++keyp) {
+            int lineLable = linenum.pointInwhichLine(keyp->pt.x, keyp->pt.y, lenth, linefeature);
+            lineIncluePoints[lineLable].push_back(i);
+            //点线映射关系
+            // cout<<lineLable<<endl;
+            pointLineLable pl;
+            pl.pointLable = i;
+            //距离大于3的不考虑
+            if (lenth < 5)
+                pl.lineLable = lineLable;
+            else
+                pl.lineLable = -1;
+            pl.lent = lenth;
+            pointAndLineLable.push_back(pl);
+            i++;
+        }
+    }
+}
+
+
 /*
 void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)
 {

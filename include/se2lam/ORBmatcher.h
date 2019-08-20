@@ -39,6 +39,18 @@
 namespace se2lam
 {
 
+struct line_s_e{
+    cv::Point2f star_p;
+    cv::Point2f end_p;
+    cv::Point2f match_star;
+    cv::Point2f match_end;
+};
+
+void getMatcheLines_Star_Eend(const Frame frame1, const Frame frame2,
+                              std::vector<line_s_e> &matchesLine1_S_E, int linelable1,
+                              int linelable2, int pl1, int pl2);
+
+
 class ORBmatcher
 {
 public:
@@ -77,7 +89,11 @@ public:
 
     float RadiusByViewingCos(const float &viewCos);
 
-
+    int MatchByPointAndLine(const Frame &frame1, Frame &frame2,
+                            std::vector<cv::Point2f> &vbPrevMatched, const int winSize,
+                            std::vector<int> &vnMatches12, vector<int> &vMatchesDistance,
+                            double angle, const int levelOffset = 1, const int minLevel = 0,
+                            const int maxLevel = 8);  // 7.18修改maxlevel=8
 };
 
 }// namespace se2lam
