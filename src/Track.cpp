@@ -93,9 +93,17 @@ void Track::run()
 
             Point3f odo_3f;
             mpSensors->readData(odo_3f, img);
-            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
-            //            Mat imgShap = cvu::sharpping(img, 12);
-            //            Mat imgGamma = cvu::gamma(imgShap, 1.2);
+            if (mbUseOdometry)
+                odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+            else
+                odo = Se2();    //! TODO 不用odom也要能计算出位姿
+
+            //!  限制对比度自适应直方图均衡
+            Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+            clahe->apply(img, img);
+
+//            Mat imgShap = cvu::sharpping(img, 12);
+//            Mat imgGamma = cvu::gamma(imgShap, 1.2);
             {
                 locker lock(mMutexForPub);
                 //                bool noFrame = !(Frame::nextId);
@@ -131,8 +139,8 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
 {
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    mFrame.Twb = Se2(0, 0, 0);  //!@Vance: 当前帧World->Body，即Body的世界坐标，首帧为原点
-    mFrame.Tcw = Config::cTb.clone();  //!@Vance: 当前帧Camera->World
+    mFrame.Twb = Se2(0, 0, 0);          // 当前帧World->Body，即Body的世界坐标，首帧为原点
+    mFrame.Tcw = Config::cTb.clone();   // 当前帧Camera->World
 
     if (mFrame.keyPoints.size() > 100) {
         cout << "========================================================" << endl;
@@ -165,32 +173,26 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    // 由于trackWithRefKF,间隔有些帧数，nnratio不应过小
-    ORBmatcher matcher(0.75);
+    updateFramePose();
+
+    ORBmatcher matcher(0.75);   // 由于trackWithRefKF,间隔有些帧数，nnratio不应过小
+
+    // TODO 用运动先验进行跟踪
+//    int nMatchRef = matcher.SearchByProjection(mFrame, *mpKF, 7);
+//    if (nMatchRef < 20) {
+//        fill(mFrame.mvpMapPoints.begin(), mFrame.mvpMapPoints.end(), static_cast<PtrMapPoint>(NULL));
+//        nMatchRef = matcher.SearchByProjection(mFrame, *mpKF, 14);
+//    }
+//    cout << "[Track] #" << mFrame.id << " TrackWithMotionModel get tatal matches "
+//         << nMatchRef << endl;
+
     // 上一帧的KF附近40*40方形cell内进行搜索获取匹配索引
-    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);
+    //! TODO 用运动先验设置Cell 的位置
+    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx); // 20
     // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
     int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
     cout << "[Track] #" << mFrame.id << " ORBmatcher get valid/tatal matches " << nMatched << "/"
          << nMatchedSum << endl;
-
-    //点线匹配
-    double th = mRefFrame.odom.theta - mFrame.odom.theta;
-    vector<int> vMatchesDistance(mFrame.N, INT_MAX);
-    int nMatchedTmp = matcher.MatchByPointAndLine(mRefFrame, mFrame, mPrevMatched, 30, mMatchIdx,
-                                                  vMatchesDistance, th);  //通过窗口内一对多匹配
-
-    updateFramePose();
-
-    // 内点数小于10时图像匹配失败，则用运动先验进行跟踪
-    //    if (nMatched == 0) {
-    //        TrackWithMotionModel();
-    //        nMatched = matcher.MatchByProjection();
-    //        if (nMatched < 10) {
-    //            mState = cvu::LOST;
-    //            return
-    //        }
-    //    }
 
     // 跟踪成功后则三角化计算MP，获取 匹配上参考帧的MP数量 和 未匹配上MP但有良好视差的点对数
     // Check parallax and do triangulation
@@ -221,32 +223,23 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
     timer.stop();
 }
 
-//! 根据Last KF和当前帧的里程计更新先验位姿和变换关系, odom是绝对值而非增量
-//! NOTE 注意相机的平移量不等于里程的平移量!!! 由于相机和里程计的坐标系不一致，
-//! 在没有旋转时这两个平移量会相等，但是一旦有旋转，这两个量就不一致了!!!
+//! mpKF是Last KF，根据Last KF和当前帧的里程计更新先验位姿和变换关系, odom是se2绝对位姿而非增量
+//! 注意相机的平移量不等于里程的平移量!!!
+//! 由于相机和里程计的坐标系不一致，在没有旋转时这两个平移量会相等，但是一旦有旋转，这两个量就不一致了!
+//! 如果当前帧不是KF，则当前帧位姿由Last KF叠加上里程计数据计算得到
+//! 这里默认场景是工业级里程计，精度比较准，KF之间里程误差可以忽略
 void Track::updateFramePose()
 {
-    //! 参考帧Body->当前帧Body，向量，这里就是delta_odom
-    //! mpKF是Last KF，如果当前帧不是KF，则当前帧位姿由Last KF叠加上里程计数据计算得到
-    //! 这里默认场景是工业级里程计，精度比较准，KF之间里程误差可以忽略
+    // Tb1b2, 参考帧Body->当前帧Body, se2形式
     mFrame.Trb = mFrame.odom - mpKF->odom;
-
-    //! 当前帧Body->参考帧Body？ Trb和Tbr不能直接取负，而是差了一个旋转
-    Se2 dOdo = mpKF->odom - mFrame.odom;  //!@Vance: delta_odom,即t_cr?
-    //@Vance: 当前帧Camera->参考帧Camera，矩阵
-    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;  //!@Vance: 为何是右乘？
-    //! NOTE 当前帧Camera->World，矩阵，为何右乘？
+    // Tb2b1, 当前帧Body->参考帧Body, se2形式
+    Se2 dOdo = mpKF->odom - mFrame.odom;
+    // Tc2c1, 当前帧Camera->参考帧Camera, Tc2c1 = Tcb * Tb2b1 * Tbc
+    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;
+    // Tc2w, 当前帧Camera->World, Tc2w = Tc2c1 * Tc1w
     mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
-    //@Vance: 当前帧World->Body，向量，故相加
-    mFrame.Twb = mpKF->Twb + mFrame.Trb;  //!@Vance: 用上变量mFrame.Trb
-    //        mFrame.Twb = mpKF->Twb + (mFrame.odom - mpKF->odom);  //!@Vance:
-    //        即 mpKF.Twb + mFrame.Trb
-
-    //!@Vance: 换个版本？
-    //    mFrame.Trb = mFrame.odom - mpKF->odom;
-    //    mFrame.Tcr = Config::bTc * dOdo.toCvSE3() * Config::cTb;
-    //    mFrame.Tcw = mpKF->Tcw * mFrame.Tcr;
-    //    mFrame.Twb = mpKF->Twb + mFrame.Trb;
+    // Twb2, 当前帧World->Body，se2形式，故相加， Twb2 = Twb1 * Tb1b2
+    mFrame.Twb = mpKF->Twb + mFrame.Trb;
 
     // preintegration 预积分
     //! NOTE 这里并没有使用上预积分？都是局部变量，且实际一帧图像仅对应一帧Odom数据
@@ -451,8 +444,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
         bool c5 = abs(dOdo.theta) >= 0.0349f;  // NOTE 相机的旋转量超过2°，这里原来少了绝对值符号
-        cv::Mat cTc =
-            Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
+        cv::Mat cTc = Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= (0.0523f * Config::UPPER_DEPTH * 0.1f);  // 相机的平移量足够大
 
@@ -558,7 +550,7 @@ void Track::DrawMachesPoints(const cv::Mat fmg, const cv::Mat img,
     Mat grayImgCurrent = img.clone();
     cv::Mat MatchesImage;
     vector<DMatch> GoodmatchePoints;
-    for (int i = 0; i < mMatchIdx.size(); i++) {
+    for (size_t i = 0; i < mMatchIdx.size(); i++) {
         if (mMatchIdx[i] > 0) {
             DMatch dmatches(i, mMatchIdx[i], vMatchesDistance[i]);
             GoodmatchePoints.push_back(dmatches);

@@ -80,7 +80,7 @@ public:
     static cv::Mat bTc;   // camera extrinsic
     static cv::Mat cTb;   // inv of bTc
     static cv::Mat Kcam;  // camera intrinsic
-    static float fxCam, fyCam;
+    static float fxCam, fyCam, cxCam, cyCam;
     static cv::Mat Dcam;  // camera distortion
 
     static float UPPER_DEPTH;

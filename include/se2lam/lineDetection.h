@@ -22,6 +22,7 @@ struct img_line {
     Matrix<double, 4, Dynamic> linesTh1;
     Matrix<double, 4, Dynamic> linesTh2;
 };
+
 struct lineSort_S {
     cv::Point star;
     cv::Point end;
@@ -29,6 +30,7 @@ struct lineSort_S {
     double k;
     double b;
 };
+
 cv::Mat getLineMask(const cv::Mat image, std::vector<lineSort_S> &linefeatures, bool extentionLine);
 
 #define UNUSE_LINE_FILTER

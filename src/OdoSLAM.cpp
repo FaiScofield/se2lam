@@ -188,7 +188,7 @@ void OdoSLAM::saveMap()
     if (se2lam::Config::SAVE_NEW_MAP) {
         mpMapStorage->setFilePath(se2lam::Config::WRITE_MAP_FILE_PATH,
                                   se2lam::Config::WRITE_MAP_FILE_NAME);
-        printf("[System] Begin save map.\n");
+        printf("[System] Begin saving the map.\n");
         mpMapStorage->saveMap();
     }
 

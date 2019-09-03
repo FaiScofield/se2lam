@@ -49,7 +49,7 @@ MapPublish::MapPublish(Map *pMap)
 
 
     // Configure KF not in local map
-    mCameraSize = 0.4;
+    mCameraSize = 0.3;
     mKFsNeg.header.frame_id = MAP_FRAME_ID;
     mKFsNeg.ns = KEYFRAMESNEGATIVE_NAMESPACE;
     mKFsNeg.id = 0;
@@ -260,6 +260,7 @@ void MapPublish::PublishKeyFrames()
         if (vKFsAll[i]->isNull())
             continue;
 
+        // 按比例缩放地图, mScaleRatio = 1000 时比例为 1:1，数据单位是[mm]
         cv::Mat Twc = vKFsAll[i]->getPose().inv();
         cv::Mat Twb = Twc * Config::cTb;
 
@@ -267,15 +268,14 @@ void MapPublish::PublishKeyFrames()
         Twc.at<float>(1, 3) = Twc.at<float>(1, 3) / mScaleRatio;
         Twc.at<float>(2, 3) = Twc.at<float>(2, 3) / mScaleRatio;
 
-        // 取最后一列，即弟i帧KF的相机中心位姿
-        cv::Mat ow = Twc * o;
+
+        cv::Mat ow = Twc * o;   // 第i帧KF的相机中心位姿
         cv::Mat p1w = Twc * p1;
         cv::Mat p2w = Twc * p2;
         cv::Mat p3w = Twc * p3;
         cv::Mat p4w = Twc * p4;
 
-        // 第i帧KF的Body中心位姿
-        cv::Mat ob = Twb * o;
+        cv::Mat ob = Twb * o;   // 第i帧KF的Body中心位姿
         geometry_msgs::Point msgs_b;
         msgs_b.x = ob.at<float>(0) / mScaleRatio;
         msgs_b.y = ob.at<float>(1) / mScaleRatio;
@@ -299,7 +299,7 @@ void MapPublish::PublishKeyFrames()
         msgs_p4.y = p4w.at<float>(1);
         msgs_p4.z = p4w.at<float>(2);
 
-
+        // 可视化 Negtive/Active 相机位姿
         PtrKeyFrame pKFtmp = vKFsAll[i];
         int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFtmp);
         if (count == 0) {
@@ -344,7 +344,7 @@ void MapPublish::PublishKeyFrames()
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++) {
                 if ((*it)->mIdKF > vKFsAll[i]->mIdKF)
                     continue;
-                Mat Twb = (*it)->getPose().inv() * Config::cTb;
+                Mat Twb = (*it)->getPose().inv() /** Config::cTb*/;
                 geometry_msgs::Point msgs_o2;
                 msgs_o2.x = Twb.at<float>(0, 3) / mScaleRatio;
                 msgs_o2.y = Twb.at<float>(1, 3) / mScaleRatio;
@@ -358,7 +358,7 @@ void MapPublish::PublishKeyFrames()
         PtrKeyFrame pKF = vKFsAll[i];
         for (auto iter = pKF->mFtrMeasureFrom.begin(); iter != pKF->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
-            Mat Twb = pKF2->getPose().inv() * Config::cTb;
+            Mat Twb = pKF2->getPose().inv() /** Config::cTb*/;
             geometry_msgs::Point msgs_o2;
             msgs_o2.x = Twb.at<float>(0, 3) / mScaleRatio;
             msgs_o2.y = Twb.at<float>(1, 3) / mScaleRatio;
@@ -370,11 +370,11 @@ void MapPublish::PublishKeyFrames()
         // Odometry Graph (estimate)
         PtrKeyFrame pKFOdoChild = pKF->mOdoMeasureFrom.first;
         if (pKFOdoChild != NULL && !mbIsLocalize) {
-            Mat Twb = pKFOdoChild->getPose().inv() * Config::cTb;
+            Mat Twb1 = pKFOdoChild->getPose().inv() * Config::cTb;
             geometry_msgs::Point msgs_b2;
-            msgs_b2.x = Twb.at<float>(0, 3) / mScaleRatio;
-            msgs_b2.y = Twb.at<float>(1, 3) / mScaleRatio;
-            msgs_b2.z = Twb.at<float>(2, 3) / mScaleRatio;
+            msgs_b2.x = Twb1.at<float>(0, 3) / mScaleRatio;
+            msgs_b2.y = Twb1.at<float>(1, 3) / mScaleRatio;
+            msgs_b2.z = Twb1.at<float>(2, 3) / mScaleRatio;
             mOdoGraph.points.push_back(msgs_b2);  // 上一帧的位姿
             mOdoGraph.points.push_back(msgs_b);   // 当前帧的位姿
         }
@@ -382,8 +382,8 @@ void MapPublish::PublishKeyFrames()
 
     // Odometry Graph for Localize only case
     //! BUG 这里有时候数值会变成[0.0000, 0.0000],怀疑是频率问题
-    static geometry_msgs::Point msgsLast;
     if (mbIsLocalize) {
+        static geometry_msgs::Point msgsLast;
         if (mpLocalize->mState == cvu::OK || mpLocalize->mState == cvu::LOST) {
             static bool firstLocatied = true;
             geometry_msgs::Point msgs;
@@ -712,13 +712,13 @@ void MapPublish::PublishOdomInformation()
     //! NOTE 这里要扣除掉首帧Odom不为0值的影响
     if (!mbIsLocalize) {
         static Se2 firstOdom = mpMap->getCurrentKF()->odom;
-        Se2 currOdom = mpMap->getCurrentKF()->odom;
+        static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
 
-        Mat T1w = cvu::inv(firstOdom.toCvSE3());
-        Mat Tw2 = currOdom.toCvSE3();
-        Mat P12 = (T1w * Tw2).col(3);
-        msgsCurr.x = P12.at<float>(0, 0) / mScaleRatio;
-        msgsCurr.y = P12.at<float>(1, 0) / mScaleRatio;
+        Se2 currOdom = mpMap->getCurrentKF()->odom;
+        Mat Twbi = currOdom.toCvSE3();
+        Mat Tb0bi = (Tb0w * Twbi).col(3);
+        msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
+        msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
         //        fprintf(stderr, "KF#%d(#%d) odom mark orig = [%f, %f]\n",
         //                mpMap->getCurrentKF()->mIdKF, mpMap->getCurrentKF()->id,
         //                currOdom.x/1000, currOdom.y/1000);
@@ -729,15 +729,14 @@ void MapPublish::PublishOdomInformation()
         //! NOTE 这里扣除first pose不为0值的影响
         if (mpLocalize->mState == cvu::OK || mpLocalize->mLastState == cvu::LOST) {
             static Se2 firstPose = mpMap->getAllKF()[0]->odom;
-            Se2 currOdom = mpLocalize->getKFCurr()->odom;
-
+            static Mat Tb0w = cvu::inv(firstPose.toCvSE3());
             static bool isFirstFrame = true;
 
-            Mat T1w = cvu::inv(firstPose.toCvSE3());
-            Mat Tw2 = currOdom.toCvSE3();
-            Mat P12 = (T1w * Tw2).col(3);
-            msgsCurr.x = P12.at<float>(0, 0) / mScaleRatio;
-            msgsCurr.y = P12.at<float>(1, 0) / mScaleRatio;
+            Se2 currOdom = mpLocalize->getKFCurr()->odom;
+            Mat Twbi = currOdom.toCvSE3();
+            Mat Tb0bi = (Tb0w * Twbi).col(3);
+            msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
+            msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
             if (isFirstFrame) {
                 msgsLast = msgsCurr;
                 isFirstFrame = false;

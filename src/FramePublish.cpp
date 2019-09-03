@@ -116,8 +116,6 @@ cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, cons
     for (unsigned i = 0; i < matches.size(); i++) {
         if (matches[i] < 0) {
             continue;
-//            Point2f ptRef = queryKeys[i].pt;
-//            circle(out, ptRef, 5, Scalar(255, 0, 0), 1);
         } else {
             Point2f ptRef = queryKeys[i].pt;
             Point2f ptCurr = trainKeys[matches[i]].pt;
@@ -214,7 +212,7 @@ cv::Mat FramePublish::drawMatch() {
     cv::Mat res(imgCurr.rows, imgCurr.cols+imgRef.cols, CV_8UC3);
     imgCurr.copyTo(res.colRange(0, imgCurr.cols));
     imgRef.copyTo(res.colRange(imgCurr.cols, imgCurr.cols+imgRef.cols));
-    for (int i = 0; i < matches.size(); ++i) {
+    for (size_t i = 0; i < matches.size(); ++i) {
         if (matches[i] < 0) {
             continue;
         } else {

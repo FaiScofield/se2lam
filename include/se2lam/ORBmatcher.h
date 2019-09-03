@@ -28,18 +28,18 @@
 #ifndef ORBMATCHER_H
 #define ORBMATCHER_H
 
-#include<vector>
-#include<opencv2/core/core.hpp>
-#include<opencv2/features2d/features2d.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <vector>
 
-#include"MapPoint.h"
-#include"KeyFrame.h"
-#include"Frame.h"
+#include "Frame.h"
+#include "KeyFrame.h"
+#include "MapPoint.h"
 
 namespace se2lam
 {
 
-struct line_s_e{
+struct line_s_e {
     cv::Point2f star_p;
     cv::Point2f end_p;
     cv::Point2f match_star;
@@ -47,27 +47,29 @@ struct line_s_e{
 };
 
 void getMatcheLines_Star_Eend(const Frame frame1, const Frame frame2,
-                              std::vector<line_s_e> &matchesLine1_S_E, int linelable1,
+                              std::vector<line_s_e>& matchesLine1_S_E, int linelable1,
                               int linelable2, int pl1, int pl2);
 
 
 class ORBmatcher
 {
 public:
-
-    ORBmatcher(float nnratio=0.6, bool checkOri=true);
+    ORBmatcher(float nnratio = 0.6, bool checkOri = true, bool withline = false);
 
     // Computes the Hamming distance between two ORB descriptors
-    static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
+    static int DescriptorDistance(const cv::Mat& a, const cv::Mat& b);
 
 
     // Search matches between MapPoints in a KeyFrame and ORB in a Frame.
     // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
     // Used in Relocalisation and Loop Detection
-    int SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
-                    std::map<int, int> &mapIdxMatches12, bool bIfMPOnly = true);
+    int SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, std::map<int, int>& mapIdxMatches12,
+                    bool bIfMPOnly = true);
+
+    int SearchByProjection(Frame& CurrentFrame, KeyFrame& LastFrame, const float th = 7);
+
     //    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
-    void ComputeThreeMaxima(std::vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3);
+    void ComputeThreeMaxima(std::vector<int>* histo, const int L, int& ind1, int& ind2, int& ind3);
 
 
     static const int TH_LOW;
@@ -77,9 +79,8 @@ public:
     float mfNNratio;
     bool mbCheckOrientation;
 
-    int MatchByWindow(const Frame& frame1, Frame& frame2,
-                      std::vector<cv::Point2f>& vbPrevMatched, const int winSize,
-                      std::vector<int>& vnMatches12, const int levelOffset = 1,
+    int MatchByWindow(const Frame& frame1, Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
+                      const int winSize, std::vector<int>& vnMatches12, const int levelOffset = 1,
                       const int minLevel = 0, const int maxLevel = 8);
 
     int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
@@ -87,16 +88,19 @@ public:
                           std::vector<int>& vMatchesIdxMP);
 
 
-    float RadiusByViewingCos(const float &viewCos);
+    float RadiusByViewingCos(const float& viewCos);
 
-    int MatchByPointAndLine(const Frame &frame1, Frame &frame2,
-                            std::vector<cv::Point2f> &vbPrevMatched, const int winSize,
-                            std::vector<int> &vnMatches12, vector<int> &vMatchesDistance,
+    int MatchByPointAndLine(const Frame& frame1, Frame& frame2,
+                            std::vector<cv::Point2f>& vbPrevMatched, const int winSize,
+                            std::vector<int>& vnMatches12, vector<int>& vMatchesDistance,
                             double angle, const int levelOffset = 1, const int minLevel = 0,
                             const int maxLevel = 8);  // 7.18修改maxlevel=8
+
+private:
+    bool mbWithLineFeature;
 };
 
-}// namespace se2lam
+}  // namespace se2lam
 
 
-#endif // ORBMATCHER_H
+#endif  // ORBMATCHER_H

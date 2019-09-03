@@ -990,7 +990,6 @@ void GlobalMapper::OptKFPairMatch(
         if (!pMPin2)
             continue;
 
-
         g2o::Vector3D Pt3MP = toVector3d(pMPin1->getPos());
         addVertexXYZ(optimizer, Pt3MP, vertexId, true);
 

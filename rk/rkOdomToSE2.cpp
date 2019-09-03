@@ -118,12 +118,32 @@ double normalizeAngle(double angle) {
     return angle + 2*M_PI*floor((M_PI - angle)/(2*M_PI));
 }
 
+vector<string> readImageFromFile(const string& imageFile)
+{
+    vector<string> files;
+
+    ifstream ifs(imageFile);
+    if (!ifs.is_open())
+        return files;
+
+    string line;
+    while (getline(ifs, line) && !line.empty())
+        files.emplace_back(line);
+
+    ifs.close();
+    return files;
+}
+
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        cerr << "[Error] Usage: " << argv[0] << " <rk_dataset_folder>" << endl;
+        cerr << "[Error] Usage: " << argv[0] << " <rk_dataset_folder> [image_filename]" << endl;
         return -1;
     }
+    string imageFile;
+    if (argc == 3)
+        imageFile = argv[2];
 
     string datasetFolder = string(argv[1]);
     if (!bf::exists(bf::path(datasetFolder))) {
@@ -145,7 +165,12 @@ int main(int argc, char *argv[])
     }
 
     vector<OdomRaw> vOdomRaws = readOdomeRaw(odomRawFile);
-    vector<string> vImageNames = readFolderFiles(imageFolder);
+    vector<string> vImageNames;
+    if (argc == 3)
+        vImageNames = readImageFromFile(imageFile);
+    else
+        vImageNames = readFolderFiles(imageFolder);
+
     if (vImageNames.size() < 1) {
         cerr << "[Error] No images in this folder: " << datasetFolder << endl;
         return -1;
@@ -156,7 +181,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // upper_bound
+    // sync data with upper_bound
     vector<long long int> timeOdomRaw, timeOdomFrame;
     for (auto & r : vOdomRaws)
         timeOdomRaw.push_back(r.timestamp);
@@ -174,6 +199,7 @@ int main(int argc, char *argv[])
         return -1;
     }
     int skipFrames = 0;
+    ofs2 << "# ImageTimeStamp OdomTimeStampLower OdomTimeStampUpper x y theta";
     for (auto & t : timeOdomFrame) {
         size_t r = static_cast<size_t>(
                     upper_bound(timeOdomRaw.begin(), timeOdomRaw.end(), t) - timeOdomRaw.begin());
@@ -188,6 +214,7 @@ int main(int argc, char *argv[])
                  << vOdomRaws[r].x << " " << vOdomRaws[r].y << " " << normalizeAngle(vOdomRaws[r].theta) << "\n";
             continue;
         }
+        //! FIXME 插值方式需要改进，目前是直接线性插值，可能要改成Eular法
         auto l = r - 1;
         double alpha = (t - vOdomRaws[l].timestamp)/(vOdomRaws[r].timestamp - vOdomRaws[l].timestamp);
         double x = vOdomRaws[l].x + alpha * (vOdomRaws[r].x - vOdomRaws[l].x);

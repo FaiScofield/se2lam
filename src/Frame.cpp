@@ -30,35 +30,18 @@ Frame::Frame()
 Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
 {
     mpORBExtractor = extractor;
+    undistort(im, img, Config::Kcam, Config::Dcam); //! 输入图像去畸变
 
-    Preprocess pre;
-    Mat sharpImage = pre.sharpping(im,8);
-    Mat gammaImage = pre.GaMma(sharpImage,1.8);
-
-    Mat sharpImage1 = pre.sharpping(im,10);
-    Mat gammaImage1 = pre.GaMma(sharpImage1,1.2);
-
-
-    //! 输入图像去畸变
-    undistort(gammaImage1, img, Config::Kcam, Config::Dcam);
-//    undistort(im, img, Config::Kcam, Config::Dcam);
-    //    im.copyTo(img);
-
-    //7.27日添加计算掩模
-    Mat mask = getLineMask(gammaImage, lineFeature, false);
-    (*mpORBExtractor)(img, mask, keyPoints, lineFeature, descriptors);
-//    (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
-
-    //点和线的对应关系
-    pointAndLineLable = mpORBExtractor->pointAndLineLable;
-    lineIncludePoints = mpORBExtractor->lineIncluePoints;
+    (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
 
     N = keyPoints.size();
     if (keyPoints.empty())
         return;
 
-    //    undistortKeyPoints(K, distCoef);
+//    undistortKeyPoints(K, distCoef);
     keyPointsUn = keyPoints;
+    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(NULL));
+    mvbOutlier = vector<bool>(N, false);
 
     if (mbInitialComputations) {
         //! 计算去畸变后的图像边界
@@ -91,8 +74,7 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
     for (int i = 0; i < mnScaleLevels; i++)
         mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
 
-    //! Assign Features to Grid Cells
-    //! 将特征点按照cell存放
+    //! Assign Features to Grid Cells. 将特征点按照cell存放
     int nReserve = 0.5 * N / (FRAME_GRID_COLS * FRAME_GRID_ROWS);
     for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)
         for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
@@ -107,8 +89,8 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
     }
 
     odom = odo;
-    // Tcw = cv::Mat::eye(4,4,CV_32FC1);
-    // Tcr = cv::Mat::eye(4,4,CV_32FC1);
+// Tcw = cv::Mat::eye(4,4,CV_32FC1);
+// Tcr = cv::Mat::eye(4,4,CV_32FC1);
 }
 
 Frame::Frame(const Frame &f)
@@ -118,6 +100,8 @@ Frame::Frame(const Frame &f)
     keyPointsUn = f.keyPointsUn;
     f.descriptors.copyTo(descriptors);
     N = f.N;
+    mvpMapPoints = f.mvpMapPoints;
+    mvbOutlier = f.mvbOutlier;
 
     minXUn = f.minXUn;
     minYUn = f.minYUn;
@@ -155,6 +139,8 @@ Frame &Frame::operator=(const Frame &f)
     keyPointsUn = f.keyPointsUn;
     f.descriptors.copyTo(descriptors);
     N = f.N;
+    mvpMapPoints = f.mvpMapPoints;
+    mvbOutlier = f.mvbOutlier;
 
     minXUn = f.minXUn;
     minYUn = f.minYUn;
@@ -255,7 +241,15 @@ bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
     return true;
 }
 
-// From ORB_SLAM. 找到在以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
+/**
+ * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
+ * @param x        图像坐标u
+ * @param y        图像坐标v
+ * @param r        边长
+ * @param minLevel 最小尺度
+ * @param maxLevel 最大尺度
+ * @return         满足条件的特征点的序号
+ */
 vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const float &r,
                                         int minLevel, int maxLevel) const
 {
@@ -284,12 +278,8 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
     if (nMaxCellY < 0)
         return vIndices;
 
-    bool bCheckLevels = true;
-    bool bSameLevel = false;
-    if (minLevel == -1 && maxLevel == -1)
-        bCheckLevels = false;
-    else if (minLevel == maxLevel)
-        bSameLevel = true;
+    const bool bCheckLevels = (minLevel > 0) || (maxLevel >= 0);
+    const bool bSameLevel = (minLevel == maxLevel);
 
     for (int ix = nMinCellX; ix <= nMaxCellX; ix++) {
         for (int iy = nMinCellY; iy <= nMaxCellY; iy++) {

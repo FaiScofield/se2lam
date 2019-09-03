@@ -18,8 +18,6 @@ using namespace cv;
 using namespace line_descriptor;
 namespace bf =  boost::filesystem;
 
-const char *g_vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
-
 struct RK_IMAGE
 {
     RK_IMAGE(const string& s, const long long int t)
@@ -65,13 +63,11 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
     } else
         cout << "[Main] Read " << allImages.size() << " files in the folder." << endl;
 
-    //! 这里sort string不对
-//    sort(files.begin(), files.end());
     //! 应该根据后面的时间戳数值来排序
     sort(allImages.begin(), allImages.end(), lessThen);
 
     files.clear();
-    for (int i = 0; i < allImages.size(); ++i)
+    for (size_t i = 0; i < allImages.size(); ++i)
         files.push_back(allImages[i].fileName);
 }
 
@@ -83,68 +79,51 @@ int main(int argc, char **argv)
         return -1;
     }
 
-//    ros::init(argc, argv, "lineDetection");
-//    ros::NodeHandle nh;
-//    ros::Publisher chatter_pub = nh.advertise<std_msgs::String>("chatter", 1000);
+    Mat K = (Mat_<double>(3, 3) << 219.9359613169054, 0., 161.5827136112504, 0., 219.4159055585876,
+         117.7128673795551, 0., 0., 1.);
+    Mat D = (Mat_<double>(5, 1) << 0.064610443232716, -0.086814339668420, -0.0009238134627751219,
+         0.0005452823230733891, 0.000000000000000);
 
     string dataFolder = string(argv[1]) + "slamimg";
     vector<string> imgFiles;
     readImagesRK(dataFolder, imgFiles);
 
-    cv::Mat imgCur, imgRef;
+    cv::Mat imgGray, imgCur, imgRef, imgColor, imgJoint;
+    Mat outImageLSD, outImageLsdMatch, outImageLsdMatchGood;
     Mat desCur, desRef;
     vector<KeyLine> keyLinesCur, keyLinesRef;
-    Mat outImageCanny, outImageLSD, outImageLsdMatch, outImageLsdMatchGood;
-    cvtColor(outImageLSD, outImageLSD, COLOR_GRAY2BGR);
-    cvtColor(outImageLsdMatch, outImageLsdMatch, COLOR_GRAY2BGR);
-    cvtColor(outImageLsdMatchGood, outImageLsdMatchGood, COLOR_GRAY2BGR);
     bool firstFrame = true;
-    for (int i = 0; i < imgFiles.size(); ++i) {
+    for (size_t i = 0; i < imgFiles.size(); ++i) {
         printf("Reading image: %s\n", imgFiles[i].c_str());
-        imgCur = imread(imgFiles[i], 1);
-        if (imgCur.data == nullptr)
+        imgColor = imread(imgFiles[i], CV_LOAD_IMAGE_COLOR);
+        if (imgColor.data == nullptr)
             continue;
+        cv::undistort(imgColor, imgCur, K, D);
+        Mat imgTmp;
+        cvtColor(imgColor, imgTmp, CV_BGR2GRAY);
 
-        Mat imgShap, imgGamma;
-        imgShap = cvu::sharpping(imgCur, 12);
-        imgGamma = cvu::gamma(imgShap, 1.2);
-        imshow("imgShap", imgShap);
-        imshow("imgGamma", imgGamma);
+        //! 限制对比度自适应直方图均衡
+        cvtColor(imgCur, imgGray, CV_BGR2GRAY);
+        Ptr<CLAHE> clahe = createCLAHE(10.0, cv::Size(8, 8));
+        clahe->apply(imgGray, imgGray);
+        vconcat(imgTmp, imgGray, imgJoint);   // 垂直拼接
+        imshow("Image clahe", imgJoint);
 
-        //! Canny
-        Canny(imgCur, outImageCanny, 50, 200, 3); // 输出图像会变黑白
-//        imshow("Canny", outImageCanny);
-
-        //! Hough
-//        HoughLinesP();
-
-        //! LineSegmentDetector 这个效果不如LSDDetector
-//        Ptr<LineSegmentDetector> pLSD  = createLineSegmentDetector();
-
-        //! LSDDetector
+        //! LSDDetector 提取的直线很多，比较杂
         // LSD: A fast line segment detector with a false detection control, 2010
         vector<KeyLine> keyLines;
         Ptr<LSDDetector> lsd = LSDDetector::createLSDDetector();
-        lsd->detect(imgCur, keyLines, 2, 2);
+        lsd->detect(imgGray, keyLines, 1, 1);
+//        cvtColor(imgCur, outImageLSD, CV_GRAY2BGR);
         drawKeylines(imgCur, keyLines, outImageLSD, Scalar(0,255,0));
         imshow("LSD lines", outImageLSD);
 
-        Mat outOneImg(2*outImageLSD.rows, outImageLSD.cols, CV_8UC3);
-        cvtColor(outImageCanny, outImageCanny, COLOR_GRAY2BGR);
-        assert(outImageLSD.rows == outImageCanny.rows);
-        assert(outImageLSD.cols == outImageCanny.cols);
-        outImageCanny.copyTo(outOneImg(Rect(0,0,outImageLSD.cols,outImageLSD.rows)));
-        outImageLSD.copyTo(outOneImg(Rect(0,outImageLSD.rows,outImageLSD.cols,outImageLSD.rows)));
-        imshow("Canny & LSD lines", outOneImg);
 
-
-        //! BinaryDescriptor
-        BinaryDescriptor::Params param; // 参数设置
-
+        //! BinaryDescriptor 提取的直线相对少一些，但杂线更少
         keyLinesCur.clear();
         Ptr<BinaryDescriptor> bd = BinaryDescriptor::createBinaryDescriptor();
-        bd->detect(imgCur, keyLinesCur);
-        bd->compute(imgCur, keyLinesCur, desCur);
+        bd->detect(imgGray, keyLinesCur);
+        bd->compute(imgGray, keyLinesCur, desCur);
 
         if (firstFrame) {
             imgCur.copyTo(imgRef);
@@ -167,16 +146,18 @@ int main(int argc, char **argv)
 
         //! Show Matches
         vector<char> mask(matches.size(), 1);
+//        cvtColor(imgCur, outImageLsdMatch, CV_GRAY2BGR);
         drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef, matches,
                         outImageLsdMatch, Scalar(0,0,255), Scalar(0,255,0), mask);
         imshow("LSD Matches", outImageLsdMatch);
 
         vector<char> mask2(matchesKnn.size(), 1);
+//        cvtColor(imgCur, outImageLsdMatchGood, CV_GRAY2BGR);
         drawLineMatches(imgCur, keyLinesCur, imgRef, keyLinesRef, matchesKnn,
                         outImageLsdMatchGood, Scalar(0,0,255), Scalar(0,255,0), mask2);
         imshow("LSD Matches Knn", outImageLsdMatchGood);
 
-        waitKey(200);
+        waitKey(100);
 
         imgCur.copyTo(imgRef);
         desCur.copyTo(desRef);

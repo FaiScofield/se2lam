@@ -84,7 +84,7 @@ private:
     Frame mFrame;
     Frame mRefFrame;
     PtrKeyFrame mpKF;
-    std::vector<cv::Point2f> mPrevMatched;
+    std::vector<cv::Point2f> mPrevMatched;  // 上一参考帧的特征点
 
     void mCreateFrame(const cv::Mat &img, const Se2 &odo);
     void mTrack(const cv::Mat &img, const Se2 &odo);

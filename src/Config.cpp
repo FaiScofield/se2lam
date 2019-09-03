@@ -5,12 +5,13 @@
 */
 
 #include "Config.h"
+#include <cmath>
 #include <iostream>
 #include <opencv2/calib3d/calib3d.hpp>
-#include <cmath>
 
 
-namespace se2lam{
+namespace se2lam
+{
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -22,12 +23,14 @@ std::string Config::DataPath;
 int Config::ImgIndex;
 int Config::ImgIndexLocalSt;
 cv::Size Config::ImgSize;
-cv::Mat Config::bTc; // camera extrinsic
-cv::Mat Config::cTb; // inv of bTc
-cv::Mat Config::Kcam; // camera intrinsic
+cv::Mat Config::bTc;   // camera extrinsic
+cv::Mat Config::cTb;   // inv of bTc
+cv::Mat Config::Kcam;  // camera intrinsic
 float Config::fxCam;
 float Config::fyCam;
-cv::Mat Config::Dcam; // camera distortion
+float Config::cxCam;
+float Config::cyCam;
+cv::Mat Config::Dcam;  // camera distortion
 
 float Config::UPPER_DEPTH;
 float Config::LOWER_DEPTH;
@@ -36,9 +39,9 @@ int Config::NUM_FILTER_LAST_SEVERAL_MU;
 int Config::FILTER_CONVERGE_CONTINUE_COUNT;
 float Config::DEPTH_FILTER_THRESHOLD;
 
-float Config::ScaleFactor; // scalefactor in detecting features
-int Config::MaxLevel; // level number of pyramid in detecting features
-int Config::MaxFtrNumber; // max feature number to detect
+float Config::ScaleFactor;  // scalefactor in detecting features
+int Config::MaxLevel;       // level number of pyramid in detecting features
+int Config::MaxFtrNumber;   // max feature number to detect
 float Config::FEATURE_SIGMA;
 
 float Config::ODO_X_UNCERTAIN, Config::ODO_Y_UNCERTAIN, Config::ODO_T_UNCERTAIN;
@@ -87,11 +90,10 @@ int Config::ImgStartIndex = 0;
 bool Config::SAVE_MATCH_IMAGE = false;
 std::string Config::SAVE_MATCH_IMAGE_PATH = "/home/vance/output/se2/";
 
-
-void Config::readConfig(const std::string &path){
+void Config::readConfig(const std::string& path)
+{
     DataPath = path;
-//    std::string camParaPath = path + "/config/CamConfig.yml";
-    std::string camParaPath = path + "../se2_config/CamConfig.yml";   //!@Vance: for rk dataset
+    std::string camParaPath = path + "../se2_config/CamConfig.yml";
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
     cv::Mat _mK, _mD, _rvec, rvec, _T, T, R;
@@ -102,39 +104,43 @@ void Config::readConfig(const std::string &path){
     camPara["distortion_coefficients"] >> _mD;
     camPara["rvec_b_c"] >> _rvec;
     camPara["tvec_b_c"] >> _T;  //!@Vance: 单位mm
-    _mK.convertTo(Kcam,CV_32FC1);
-    _mD.convertTo(Dcam,CV_32FC2);
-    _rvec.convertTo(rvec,CV_32FC1);
-    _T.convertTo(T,CV_32FC1);
-    fxCam = Kcam.at<float>(0,0);
-    fyCam = Kcam.at<float>(1,1);
+    _mK.convertTo(Kcam, CV_32FC1);
+    _mD.convertTo(Dcam, CV_32FC2);
+    _rvec.convertTo(rvec, CV_32FC1);
+    _T.convertTo(T, CV_32FC1);
+    fxCam = Kcam.at<float>(0, 0);
+    fyCam = Kcam.at<float>(1, 1);
+    cxCam = Kcam.at<float>(0, 2);
+    cyCam = Kcam.at<float>(1, 2);
     ImgSize.height = height;
     ImgSize.width = width;
-    std::cout << "# Load camera config ..." << std::endl;
-    std::cout << "- Camera matrix: " << std::endl << " " <<
-            Kcam << std::endl <<
-            "- Camera distortion: " << std::endl << " " <<
-            Dcam << std::endl <<
-            "- Img size: " << std::endl << " " <<
-            ImgSize << std::endl;
+    std::cout << "[Config] Load camera config ..." << std::endl;
+    std::cout << "\t- Camera matrix: " << std::endl
+              << " " << Kcam << std::endl
+              << "\t- Camera distortion: " << std::endl
+              << " " << Dcam << std::endl
+              << "\t- Img size: " << std::endl
+              << " " << ImgSize << std::endl;
     // bTc: camera extrinsic
-    cv::Rodrigues(rvec,R);
-    bTc = cv::Mat::eye(4,4,CV_32FC1);
-    R.copyTo(bTc.rowRange(0,3).colRange(0,3));
-    T.copyTo(bTc.rowRange(0,3).col(3));
+    cv::Rodrigues(rvec, R);
+    bTc = cv::Mat::eye(4, 4, CV_32FC1);
+    R.copyTo(bTc.rowRange(0, 3).colRange(0, 3));
+    T.copyTo(bTc.rowRange(0, 3).col(3));
+
+    cTb = cv::Mat::eye(4, 4, CV_32FC1);
     cv::Mat RT = R.t();
     cv::Mat t = -RT * T;
-    cTb = cv::Mat::eye(4,4,CV_32FC1);
-    RT.copyTo(cTb.rowRange(0,3).colRange(0,3));
-    t.copyTo(cTb.rowRange(0,3).col(3));
-    std::cout << "- Camera extrinsic (Body to Camera): " << std::endl << " " <<
-              bTc << std::endl << std::endl ;
+    RT.copyTo(cTb.rowRange(0, 3).colRange(0, 3));
+    t.copyTo(cTb.rowRange(0, 3).col(3));
 
-    PrjMtrxEye = Kcam * cv::Mat::eye(3,4,CV_32FC1);
+    std::cout << "\t- Camera extrinsic Tbc (Body to Camera): " << std::endl
+              << " " << bTc << std::endl
+              << std::endl;
+
+    PrjMtrxEye = Kcam * cv::Mat::eye(3, 4, CV_32FC1);
     camPara.release();
 
-//    std::string settingsPath = path + "/config/Settings.yml";
-    std::string settingsPath = path + "../se2_config/Settings.yml";   //!@Vance: for rk dataset
+    std::string settingsPath = path + "../se2_config/Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 
@@ -156,18 +162,18 @@ void Config::readConfig(const std::string &path){
     ODO_X_NOISE = (float)settings["odo_x_steady_noise"];
     ODO_Y_NOISE = (float)settings["odo_y_steady_noise"];
     ODO_T_NOISE = (float)settings["odo_theta_steady_noise"];
-    if(!settings["plane_motion_xrot_info"].empty())
+    if (!settings["plane_motion_xrot_info"].empty())
         PLANEMOTION_XROT_INFO = (float)settings["plane_motion_xrot_info"];
-    if(!settings["plane_motion_yrot_info"].empty())
+    if (!settings["plane_motion_yrot_info"].empty())
         PLANEMOTION_YROT_INFO = (float)settings["plane_motion_yrot_info"];
-    if(!settings["plane_motion_z_info"].empty())
+    if (!settings["plane_motion_z_info"].empty())
         PLANEMOTION_Z_INFO = (float)settings["plane_motion_z_info"];
     LOCAL_FRAMES_NUM = (int)settings["frame_num"];
     TH_HUBER = sqrt((float)settings["th_huber2"]);
     LOCAL_ITER = (int)settings["local_iter"];
     LOCAL_VERBOSE = (bool)(int)(settings["local_verbose"]);
     LOCAL_PRINT = (bool)(int)(settings["local_print"]);
-    if((int)settings["global_iter"]){
+    if ((int)settings["global_iter"]) {
         GLOBAL_ITER = (int)settings["global_iter"];
     }
     GLOBAL_VERBOSE = (bool)(int)(settings["global_verbose"]);
@@ -201,41 +207,49 @@ void Config::readConfig(const std::string &path){
     settings.release();
 }
 
-bool Config::acceptDepth(float depth){
+bool Config::acceptDepth(float depth)
+{
     return (depth >= LOWER_DEPTH && depth <= UPPER_DEPTH);
 }
 
 
-Se2::Se2(){}
-Se2::Se2(float _x, float _y ,float _theta):
-    x(_x), y(_y), theta(normalize_angle(_theta)){}
-Se2::~Se2(){}
+Se2::Se2()
+{
+}
+Se2::Se2(float _x, float _y, float _theta) : x(_x), y(_y), theta(normalize_angle(_theta))
+{
+}
+Se2::~Se2()
+{
+}
 
 Se2 Se2::inv() const
 {
     float c = std::cos(theta);
     float s = std::sin(theta);
-    return Se2(-c*x-s*y, s*x-c*y, -theta);
+    return Se2(-c * x - s * y, s * x - c * y, -theta);
 }
 
-Se2 Se2::operator +(const Se2& that) const{
+Se2 Se2::operator+(const Se2& that) const
+{
     float c = std::cos(theta);
     float s = std::sin(theta);
-    float _x = x + that.x*c - that.y*s;
-    float _y = y + that.x*s + that.y*c;
+    float _x = x + that.x * c - that.y * s;
+    float _y = y + that.x * s + that.y * c;
     float _theta = normalize_angle(theta + that.theta);
     return Se2(_x, _y, _theta);
 }
 
 // Same as: that.inv() + *this
-Se2 Se2::operator -(const Se2& that) const {
+Se2 Se2::operator-(const Se2& that) const
+{
     float dx = x - that.x;
     float dy = y - that.y;
     float dth = normalize_angle(theta - that.theta);
 
     float c = std::cos(that.theta);
     float s = std::sin(that.theta);
-    return Se2(c*dx+s*dy, -s*dx+c*dy, dth);
+    return Se2(c * dx + s * dy, -s * dx + c * dy, dth);
 }
 
 cv::Mat Se2::toCvSE3() const
@@ -243,21 +257,16 @@ cv::Mat Se2::toCvSE3() const
     float c = cos(theta);
     float s = sin(theta);
 
-    return (cv::Mat_<float>(4,4) <<
-            c,-s, 0, x,
-            s, c, 0, y,
-            0, 0, 1, 0,
-            0, 0, 0, 1);
+    return (cv::Mat_<float>(4, 4) << c, -s, 0, x, s, c, 0, y, 0, 0, 1, 0, 0, 0, 0, 1);
 }
 
 
-Se2& Se2::fromCvSE3(const cv::Mat &mat)
+Se2& Se2::fromCvSE3(const cv::Mat& mat)
 {
-    float yaw = std::atan2(mat.at<float>(1,0), mat.at<float>(0,0));
+    float yaw = std::atan2(mat.at<float>(1, 0), mat.at<float>(0, 0));
     theta = normalize_angle(yaw);
-    x = mat.at<float>(0,3);
-    y = mat.at<float>(1,3);
+    x = mat.at<float>(0, 3);
+    y = mat.at<float>(1, 3);
     return *this;
 }
-
 }

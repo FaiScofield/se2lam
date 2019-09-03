@@ -625,7 +625,7 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>> &allKeypoints)
                 if (cellKeyPoints[i][j].size() <= 10) {     // 3
                     cellKeyPoints[i][j].clear();
 //                    FAST(cellImage, cellKeyPoints[i][j], 7, true);
-                    FAST(cellImageandMask, cellKeyPoints[i][j], 3, true);  // 7
+                    FAST(cellImageandMask, cellKeyPoints[i][j], 5, true);  // 7
                     KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
                 }
 
@@ -729,7 +729,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
 
     vector<vector<KeyPoint>> allKeypoints;
     ComputeKeyPoints(allKeypoints);  //!@Vance:这里没有用八叉树存储
-                                     //    ComputeKeyPointsOctTree(allKeypoints);
+//    ComputeKeyPointsOctTree(allKeypoints);
 
     Mat descriptors;
 

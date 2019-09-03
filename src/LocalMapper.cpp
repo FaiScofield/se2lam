@@ -23,12 +23,6 @@ using namespace std;
 using namespace cv;
 using namespace g2o;
 
-
-#ifdef TIME_TO_LOG_LOCAL_BA
-ofstream local_ba_time_log;
-#endif
-
-
 LocalMapper::LocalMapper()
 {
     mbAcceptNewKF = true;
@@ -95,7 +89,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
 
         // 将KF插入地图
         mpMap->insertKF(pKF);
-        mbUpdated = true;
+        mbUpdated = true;   // 这里LocalMapper的主线程会开始工作,优化位姿
     }
 
     mbAbortBA = false;
@@ -145,7 +139,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
         ORBmatcher matcher;
-        matcher.MatchByProjection(mpNewKF, vLocalMPs, 15, 2, vMatchedIdxMPs);
+        matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);   // 15
         for (int i = 0; i < mpNewKF->N; i++) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
@@ -282,38 +276,17 @@ void LocalMapper::localBA()
     SlamAlgorithm *solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(Config::LOCAL_VERBOSE);
-#ifndef TIME_TO_LOG_LOCAL_BA
+
     optimizer.setForceStopFlag(&mbAbortBA);
-#endif
+
     mpMap->loadLocalGraph(optimizer);
 
     WorkTimer timer;
-#ifdef TIME_TO_LOG_LOCAL_BA
-    int numKf = mpMap->countLocalKFs();
-    int numMp = mpMap->countLocalMPs();
 
-    timer.start();
-#endif
     // assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
     optimizer.optimize(Config::LOCAL_ITER);
-
-#ifdef TIME_TO_LOG_LOCAL_BA
-    timer.stop();
-
-    local_ba_time_log << numKf << " " << numMp << " " << timer.time;
-
-    optimizer.clear();
-    optimizer.clearParameters();
-
-    mpMap->loadLocalGraphOnlyBa(optimizer, vpEdgesAll, vnAllIdx);
-    timer.start();
-    optimizer.initializeOptimization(0);
-    optimizer.optimize(Config::LOCAL_ITER);
-    timer.stop();
-    local_ba_time_log << " " << timer.time << endl;
-#endif
 
 //    if (mbPrintDebugInfo) {
 //        cerr << "[Local] LocalBA cost time " << timer.time << ", number of KFs: "
@@ -322,21 +295,18 @@ void LocalMapper::localBA()
 //             << endl;
 //    }
 
-#ifdef REJECT_IF_LARGE_LAMBDA
-    if (solver->currentLambda() > 100.0) {
-        cerr << "-- DEBUG LM: current lambda too large " << solver->currentLambda()
-             << " , reject optimized result" << endl;
-        return;
-    }
-#endif
+//    if (solver->currentLambda() > 100.0) {
+//        cerr << "-- DEBUG LM: current lambda too large " << solver->currentLambda()
+//             << " , reject optimized result" << endl;
+//        return;
+//    }
 
     if (mbGlobalBABegin) {
         return;
     }
 
-#ifndef TIME_TO_LOG_LOCAL_BA
     mpMap->optimizeLocalGraph(optimizer);   // 用优化后的结果更新KFs和MPs
-#endif
+
 }
 
 void LocalMapper::run()
@@ -345,11 +315,6 @@ void LocalMapper::run()
         return;
 
     mbPrintDebugInfo = Config::LOCAL_PRINT;
-
-
-#ifdef TIME_TO_LOG_LOCAL_BA
-    local_ba_time_log.open("/home/vance/output/se2lam_lobal_time.log");
-#endif
 
     ros::Rate rate(Config::FPS * 10);
     while (ros::ok()) {
@@ -385,7 +350,7 @@ void LocalMapper::run()
             //! 看全局地图有没有在执行Global BA，如果在执行会等它先执行完毕
             mpGlobalMapper->waitIfBusy();
 
-            //! 第三次更新LocalMap！
+            //! 位姿优化后, 第三次更新LocalMap！
             updateLocalGraphInMap();
         }
 
@@ -396,13 +361,7 @@ void LocalMapper::run()
 
         rate.sleep();
     }
-
-#ifdef TIME_TO_LOG_LOCAL_BA
-    local_ba_time_log.close();
-#endif
-
     cout << "[Local] Exiting localmapper .." << endl;
-
     setFinish();
 }
 

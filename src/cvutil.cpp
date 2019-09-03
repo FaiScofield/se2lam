@@ -120,13 +120,13 @@ Point3f se3map(const Mat &_Tcw, const Point3f &_pt)
     return (R * _pt + t);
 }
 
-void normalizeYawAngle(se2lam::Se2 &odom)
-{
-    if (odom.theta < -M_PI)
-        odom.theta += M_PI;
-    else if (odom.theta > M_PI)
-        odom.theta -= M_PI;
-}
+//void normalizeYawAngle(se2lam::Se2 &odom)
+//{
+//    if (odom.theta < -M_PI)
+//        odom.theta += M_PI;
+//    else if (odom.theta > M_PI)
+//        odom.theta -= M_PI;
+//}
 
 // Gamma变换 gamma = 1.2 越小越亮
 cv::Mat gamma(const cv::Mat &grayImg, float gamma)

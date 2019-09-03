@@ -13,6 +13,7 @@
 #include <memory>
 #include "Config.h"
 #include "ORBextractor.h"
+#include "MapPoint.h"
 
 namespace se2lam {
 
@@ -23,8 +24,8 @@ public:
     double cov[9]; // 3*3, RowMajor
 };
 
-const int FRAME_GRID_ROWS = 24; // default 48
-const int FRAME_GRID_COLS = 32; // default 64
+const int FRAME_GRID_ROWS = 36; // default 48 for 480
+const int FRAME_GRID_COLS = 48; // default 64 for 640
 
 class KeyFrame;
 class Frame
@@ -82,7 +83,7 @@ public:
     cv::Mat Tcr;    //!@Vance: Current Camera frame to Reference Camera frame
     cv::Mat Tcw;    //!@Vance: Current Camera frame to World frame
 
-    Se2 Trb;     // ref KF to body
+    Se2 Trb;     // reference KF body to current frame body
     Se2 Twb;     // world to body
     Se2 odom;    // odometry raw
 
@@ -95,6 +96,11 @@ public:
 
     std::mutex mMutexDes;
     void copyDesTo(cv::Mat & desRet);
+
+    // 每个特征点对应的MapPoint
+    std::vector<PtrMapPoint> mvpMapPoints;
+    // 观测不到Map中的3D点
+    std::vector<bool> mvbOutlier;
 
     std::vector<lineSort_S> lineFeature;                // 线特征信息
     std::vector<pointLineLable> pointAndLineLable;      // 每个点对应的线特征
