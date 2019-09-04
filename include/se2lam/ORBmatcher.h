@@ -79,9 +79,11 @@ public:
     float mfNNratio;
     bool mbCheckOrientation;
 
-    int MatchByWindow(const Frame& frame1, Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
+    int MatchByWindow(const Frame& frame1, const Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
                       const int winSize, std::vector<int>& vnMatches12, const int levelOffset = 1,
                       const int minLevel = 0, const int maxLevel = 8);
+    int MatchByWindow(const Frame& frame1, const Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
+                      cv::Point2f& offset, std::vector<int>& vnMatches12, const int winSize);
 
     int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
                           const int winSize, const int levelOffset,

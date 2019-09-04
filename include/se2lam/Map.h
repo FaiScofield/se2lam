@@ -14,6 +14,7 @@
 #include "optimizer.h"
 #include <unordered_map>
 #include <set>
+#include <opencv2/flann.hpp>
 
 namespace se2lam {
 
@@ -70,6 +71,7 @@ public:
     void setLocalMapper(LocalMapper* pLocalMapper);
 
     void updateLocalGraph();
+    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs);
 
     //! 修剪冗余的KF
     bool pruneRedundantKF();
@@ -102,7 +104,6 @@ public:
 
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
     bool UpdateFeatGraph(const PtrKeyFrame &_pKF);
-
 
 protected:
 

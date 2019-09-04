@@ -80,7 +80,7 @@ public:
 
 
     // pose info: pose to ref KF, pose to World, odometry raw.
-    cv::Mat Tcr;    //!@Vance: Current Camera frame to Reference Camera frame
+    cv::Mat Tcr;    //!@Vance: Current Camera frame to Reference Camera frame, 三角化和此有关
     cv::Mat Tcw;    //!@Vance: Current Camera frame to World frame
 
     Se2 Trb;     // reference KF body to current frame body

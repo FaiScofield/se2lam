@@ -1,8 +1,8 @@
 //
 // Created by lmp on 19-7-27.
 //
-#include "line_descriptor/include/line_descriptor.hpp"
-#include "lsd_161/lsd.h"
+#include "Thirdparty/line_descriptor/include/line_descriptor.hpp"
+#include "Thirdparty/lsd_161/lsd.h"
 #include <Eigen/Eigen>
 #include <Eigen/StdList>
 #include <Eigen/StdVector>

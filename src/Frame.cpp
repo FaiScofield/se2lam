@@ -30,7 +30,12 @@ Frame::Frame()
 Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
 {
     mpORBExtractor = extractor;
+
     undistort(im, img, Config::Kcam, Config::Dcam); //! 输入图像去畸变
+
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(img, img);
 
     (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
 
@@ -38,7 +43,6 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
     if (keyPoints.empty())
         return;
 
-//    undistortKeyPoints(K, distCoef);
     keyPointsUn = keyPoints;
     mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(NULL));
     mvbOutlier = vector<bool>(N, false);

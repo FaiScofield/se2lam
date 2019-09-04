@@ -253,9 +253,9 @@ void LocalMapper::removeOutlierChi2()
     vpEdgesAll.clear();
     vnAllIdx.clear();
 
-    fprintf(stderr, "[Local] #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
+    printf("[Local] #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
             mpNewKF->id, mpNewKF->mIdKF, timer.time);
-    fprintf(stderr, "[Local] #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
+    printf("[Local] #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
             mpNewKF->id, mpNewKF->mIdKF, nBadMP, nAllMP);
 }
 

@@ -41,7 +41,7 @@ public:
                                  Eigen::Matrix3d &info1, Eigen::Matrix3d &info2);
 
     // for frame publisher
-    std::vector<int> mMatchIdx;
+    std::vector<int> mMatchIdx; // Matches12, 参考帧到当前帧的KP匹配索引
     int copyForPub(std::vector<cv::KeyPoint> &kp1, std::vector<cv::KeyPoint> &kp2, cv::Mat &img1,
                    cv::Mat &img2, std::vector<int> &vMatches12);
 
@@ -53,10 +53,13 @@ public:
     void relocalization(const cv::Mat &img, const Se2 &odo);
     void DrawMachesPoints(const cv::Mat fmg, const cv::Mat img, std::vector<int> vMatchesDistance);
 
+    cv::Point2f mMatchAveOffset;    // 匹配点对的平均像素偏移, 即图像上的运动先验.
 
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;
+
+    int N1 = 0, N2 = 0, N3 = 0;
 
 private:
     static bool mbUseOdometry;

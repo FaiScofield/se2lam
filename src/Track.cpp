@@ -31,8 +31,7 @@ Track::Track()
     mState = cvu::NO_READY_YET;
     mLastState = cvu::NO_READY_YET;
 
-    // NOTE 这里只是当前帧观测到的MP?
-    mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
+    mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1)); // 这里是参考帧观测到的MP
     nMinFrames = min(5, static_cast<int>(0.6 * Config::FPS));
     nMaxFrames = static_cast<int>(1.2 * Config::FPS);
     mnGoodPrl = 0;
@@ -45,6 +44,7 @@ Track::Track()
     mbFinishRequested = false;
 
     nLostFrames = 0;
+    mMatchAveOffset = Point2f(0.f, 0.f);
 }
 
 Track::~Track()
@@ -98,15 +98,9 @@ void Track::run()
             else
                 odo = Se2();    //! TODO 不用odom也要能计算出位姿
 
-            //!  限制对比度自适应直方图均衡
-            Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-            clahe->apply(img, img);
-
-//            Mat imgShap = cvu::sharpping(img, 12);
-//            Mat imgGamma = cvu::gamma(imgShap, 1.2);
             {
                 locker lock(mMutexForPub);
-                //                bool noFrame = !(Frame::nextId);
+//                bool noFrame = !(Frame::nextId);
                 if (mState == cvu::FIRST_FRAME) {
                     mCreateFrame(img, odo);
                 } else if (mState == cvu::OK) {
@@ -120,7 +114,7 @@ void Track::run()
 
             timer.stop();
             cout << "[Track] #" << mFrame.id << " Tracking consuming time: " << timer.time
-                 << "ms. Odom Input: " << odo << endl;
+                 << "ms." << endl;
         }
 
         if (checkFinish())
@@ -177,26 +171,26 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
     ORBmatcher matcher(0.75);   // 由于trackWithRefKF,间隔有些帧数，nnratio不应过小
 
-    // TODO 用运动先验进行跟踪
-//    int nMatchRef = matcher.SearchByProjection(mFrame, *mpKF, 7);
-//    if (nMatchRef < 20) {
-//        fill(mFrame.mvpMapPoints.begin(), mFrame.mvpMapPoints.end(), static_cast<PtrMapPoint>(NULL));
-//        nMatchRef = matcher.SearchByProjection(mFrame, *mpKF, 14);
-//    }
-//    cout << "[Track] #" << mFrame.id << " TrackWithMotionModel get tatal matches "
-//         << nMatchRef << endl;
-
     // 上一帧的KF附近40*40方形cell内进行搜索获取匹配索引
-    //! TODO 用运动先验设置Cell 的位置
-    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx); // 20
+    //! mPrevMatched为参考帧KP的位置, 这里和当前帧匹配上的KP会更新成当前帧对应KP的位置
+    //! mPrevMatched这个变量没啥用, 直接用mRefFrame.keyPointsUn其实就可以了
+//    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx); // 20
+
+    //! 用运动先验设置Cell的位置
+    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, mMatchAveOffset, mMatchIdx, 20);
+    printf("[Track] Offset: %.2f, %.2f\n", mMatchAveOffset.x, mMatchAveOffset.y);
+
     // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
     int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
-    cout << "[Track] #" << mFrame.id << " ORBmatcher get valid/tatal matches " << nMatched << "/"
-         << nMatchedSum << endl;
 
     // 跟踪成功后则三角化计算MP，获取 匹配上参考帧的MP数量 和 未匹配上MP但有良好视差的点对数
     // Check parallax and do triangulation
     int nTrackedOld = doTriangulate();
+    printf("[Track] #%d ORBmatcher get tracked/matched/matchedSum points %d/%d/%d.\n",
+           mFrame.id, nTrackedOld, nMatched, nMatchedSum);
+    N1 += nTrackedOld; N2 += nMatched; N3 += nMatchedSum;
+    printf("[Track] #%d tracked/matched/matchedSum points average: %.2f/%.2f/%.2f .\n",
+           mFrame.id, N1/(mFrame.id+1.), N2/(mFrame.id+1.), N3/(mFrame.id+1.));
 
     // Need new KeyFrame decision
     if (needNewKF(nTrackedOld, nMatched)) {
@@ -217,7 +211,8 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
         mpKF = pKF;
 
-        printf("[Track] Add new KF at #%d(KF#%d)\n", mFrame.id, mpKF->mIdKF);
+        fprintf(stderr, "[Track] Add new KF at #%d(KF#%d)\n", mFrame.id, mpKF->mIdKF);
+        mMatchAveOffset = Point2f(0.f, 0.f);
     }
 
     timer.stop();
@@ -431,12 +426,10 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 {
     int nOldKP = mpKF->getSizeObsMP();
     bool c0 = mFrame.id - mpKF->id > nMinFrames;  // 1.间隔首先要足够大
-    bool c1 = (float)nTrackedOldMP <=
-              (float)nOldKP * 0.5f;  // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
+    bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;  // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
     bool c2 = mnGoodPrl > 40;        // 且没匹配上的KP中拥有良好视差的点数大于40
     bool c3 = mFrame.id - mpKF->id > nMaxFrames;  // 2.2 或间隔达到上限了
-    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber ||
-              nMatched < 20;  // 2.3 或匹配对小于1/10最大特征点数
+    bool c4 = nMatched < 0.15f * Config::MaxFtrNumber || nMatched < 20;  // 2.3 或匹配对小于1/10最大特征点数
     // 满足条件1，和条件2中的一个(共2个条件)，则可能需要加入关键帧，实际还得看odom那边的条件
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
@@ -448,7 +441,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= (0.0523f * Config::UPPER_DEPTH * 0.1f);  // 相机的平移量足够大
 
-        bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限)
+        bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限,考虑了不同深度下视野的不同)
     }
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件
 
@@ -456,7 +449,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-        mpLocalMapper->setAbortBA();
+        mpLocalMapper->setAbortBA(); // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
     }
 
     return false;
@@ -465,6 +458,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 
 /**
  * @brief Track::doTriangulate 初步跟踪成功后对点进行三角化获取深度
+ *  mLocalMPs, mvbGoodPrl, mnGoodPrl 在此更新
  * @return  返回匹配上参考帧的MP的数量
  */
 int Track::doTriangulate()
@@ -474,11 +468,16 @@ int Track::doTriangulate()
         return 0;
     }
 
-    Mat TfromRefKF = cvu::inv(mFrame.Tcr);
-    Point3f Ocam = Point3f(TfromRefKF.rowRange(0, 3).col(3));
+    Mat Trc = cvu::inv(mFrame.Tcr);
+    Point3f Ocam1 = Point3f(0, 0, 0);
+    Point3f Ocam2 = Point3f(Trc.rowRange(0, 3).col(3));
     int nTrackedOld = 0;
     mvbGoodPrl = vector<bool>(mRefFrame.N, false);
     mnGoodPrl = 0;
+
+    // 相机1和2的投影矩阵
+    cv::Mat P_KF = Config::PrjMtrxEye;  // P1 = K * cv::Mat::eye(3, 4, CV_32FC1)
+    cv::Mat P = Config::Kcam * mFrame.Tcr.rowRange(0, 3); // P2 = K * T21
 
     // 1.遍历参考帧的KP
     for (int i = 0; i < mRefFrame.N; i++) {
@@ -496,26 +495,23 @@ int Track::doTriangulate()
         // 3.如果参考帧KP没有对应的MP，则为此匹配对KP三角化计算深度
         Point2f pt_KF = mpKF->keyPointsUn[i].pt;
         Point2f pt = mFrame.keyPointsUn[mMatchIdx[i]].pt;
-        cv::Mat P_KF = Config::PrjMtrxEye;
-        cv::Mat P = Config::Kcam * mFrame.Tcr.rowRange(0, 3);
         Point3f pos = cvu::triangulate(pt_KF, pt, P_KF, P);
 
         // 3.如果深度计算符合预期，就将有深度的KP更新到LocalMPs里
         if (Config::acceptDepth(pos.z)) {
             mLocalMPs[i] = pos;
             // 检查视差
-            if (cvu::checkParallax(Point3f(0, 0, 0), Ocam, pos, 2)) {
+            if (cvu::checkParallax(Ocam1, Ocam2, pos, 2)) {
                 mnGoodPrl++;
                 mvbGoodPrl[i] = true;
             }
-        }
-        // 3.如果深度计算不符合预期，就剔除此匹配点对
-        else {
+        } else {  // 3.如果深度计算不符合预期，就剔除此匹配点对
             mMatchIdx[i] = -1;
         }
     }
+    printf("[Track] #%d Generate %d points through triangulation.\n", mFrame.id, mnGoodPrl);
 
-    return nTrackedOld;
+    return nTrackedOld; // 匹配点对中参考帧KP有对应MP的数量
 }
 
 void Track::requestFinish()

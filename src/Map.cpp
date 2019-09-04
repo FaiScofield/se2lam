@@ -332,7 +332,6 @@ bool Map::pruneRedundantKF()
  */
 void Map::updateLocalGraph()
 {
-
     locker lock(mMutexLocalGraph);
 
     mLocalGraphKFs.clear();
@@ -345,8 +344,12 @@ void Map::updateLocalGraph()
 
     setLocalKFs.insert(mCurrentKF);
 
-    //!@Vance: 获得当前KF附近的所有KF，组成localKFs
-    int searchLevel = 3;    // 3
+    //! kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中, 否则经过同一个地方不会考虑到之前添加的KF
+    addLocalGraphThroughKdtree(setLocalKFs);
+    printf("[ Map ] Get %ld KFs using kdtree!\n", setLocalKFs.size());
+
+    //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
+    int searchLevel = 2;    // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; i++) {
@@ -356,7 +359,7 @@ void Map::updateLocalGraph()
         }
         searchLevel--;
     }
-    printf("[ Map ] LocalMap get a new job! #%d(KF#%d) %ld KFs were set to local KFs.\n",
+    printf("[ Map ] #%d(KF#%d) %ld KFs were set to local KFs. LocalMap get a new job to do! \n",
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
 
     //!@Vance: 获得localKFs的所有MPs
@@ -1165,5 +1168,31 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
         }
     }
 }
+
+void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs)
+{
+    vector<PtrKeyFrame> vKFsAll = getAllKF();
+    vector<Point3f> vKFPoses;
+    for (size_t i = 0; i < vKFsAll.size(); ++i) {
+        Mat Twc = cvu::inv(vKFsAll[i]->getPose());
+        Point3f pose(Twc.at<float>(0, 3)/1000.f, Twc.at<float>(1, 3)/1000.f, Twc.at<float>(2, 3)/1000.f);
+        vKFPoses.push_back(pose);
+    }
+
+    cv::flann::KDTreeIndexParams kdtreeParams;
+    cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
+
+    Mat pose = cvu::inv(getCurrentKF()->getPose());
+    std::vector<float> query = {pose.at<float>(0, 3)/1000.f, pose.at<float>(1, 3)/1000.f, pose.at<float>(2, 3)/1000.f};
+    int size = std::min(vKFsAll.size(), static_cast<size_t>(5));    // 最近的10个KF
+    std::vector<int> indices;
+    std::vector<float> dists;
+    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
+    for (size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > 0 && dists[i] < 0.5 && vKFsAll[indices[i]]) // 距离在5m以内
+            setLocalKFs.insert(vKFsAll[indices[i]]);
+    }
+}
+
 
 }  // namespace se2lam

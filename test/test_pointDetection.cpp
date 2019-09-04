@@ -174,7 +174,7 @@ int main(int argc, char** argv)
         KeyPoint::convert(frameRef.keyPointsUn, prevMatched);
         int nMatched = kpMatcher->MatchByWindow(frameRef, frameCur, prevMatched, 25, matchIdx);
         int nInlines = removeOutliers(frameRef.keyPointsUn, frameCur.keyPointsUn, matchIdx);
-        printf("提取了%ld个点, 匹配上了%d个点, 内点数为:%d\n", frameCur.N, nMatched, nInlines);
+        printf("提取了%d个点, 匹配上了%d个点, 内点数为:%d\n", frameCur.N, nMatched, nInlines);
 
         //! Show Matche
         vconcat(imgRef, imgCur, outImgORBMatch);

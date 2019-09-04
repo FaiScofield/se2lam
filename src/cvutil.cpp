@@ -50,11 +50,13 @@ Mat sk_sym(const Point3f _v)
 
 /**
  * @brief triangulate 特征点三角化
- * @param pt1 - 参考帧KP
- * @param pt2 - 当前帧KP
- * @param P1 -
- * @param P2
- * @return
+ * @param pt1   参考帧KP1
+ * @param pt2   当前帧KP2
+ * @param P1    投影矩阵P1 = Kcam * I_3x4
+ * @param P2    投影矩阵P2 = Kcam * mFrame.tcr
+ * @return      三维点坐标
+ *
+ * @see         Multiple View Geometry in Computer Vision - 12.2 Linear triangulation methods p312
  */
 Point3f triangulate(const Point2f &pt1, const Point2f &pt2, const Mat &P1, const Mat &P2)
 {
@@ -68,33 +70,9 @@ Point3f triangulate(const Point2f &pt1, const Point2f &pt2, const Mat &P1, const
     Mat u, w, vt, x3D;
     SVD::compute(A, w, u, vt, cv::SVD::MODIFY_A | SVD::FULL_UV);
     x3D = vt.row(3).t();
-    x3D = x3D.rowRange(0, 3) / x3D.at<float>(3);
+    x3D = x3D.rowRange(0, 3) / x3D.at<float>(3);    // 第四行置1, 归一化
 
     return Point3f(x3D);
-
-#ifdef USE_EIGEN_FOR_SVD
-    Eigen::Matrix4d A;
-    Mtrx34d _P1, _P2;
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 4; j++) {
-            _P1(i, j) = P1.at<float>(i, j);
-            _P2(i, j) = P2.at<float>(i, j);
-        }
-
-
-    A.row(0).noalias() = pt1.x * _P1.row(2) - _P1.row(0);
-    A.row(1).noalias() = pt1.y * _P1.row(2) - _P1.row(1);
-    A.row(2).noalias() = pt2.x * _P2.row(2) - _P2.row(0);
-    A.row(3).noalias() = pt2.y * _P2.row(2) - _P2.row(1);
-
-    Eigen::JacobiSVD<Eigen::Matrix4d> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix4d V = svd.matrixV();
-    Vtr3d x3d = (1.0 / V(3, 3)) * V.block<3, 1>(0, 3);
-
-    x3D = Mat(3, 1, CV_32FC1);
-    for (int i = 0; i < 3; i++)
-        x3D.at<float>(i) = x3d(i);
-#endif
 }
 
 Point2f camprjc(const Mat &_K, const Point3f &_pt)
@@ -104,6 +82,7 @@ Point2f camprjc(const Mat &_K, const Point3f &_pt)
 }
 
 
+// 计算视差角余弦值
 bool checkParallax(const Point3f &o1, const Point3f &o2, const Point3f &pt3, int minDegree)
 {
     float minCos[4] = {0.9998, 0.9994, 0.9986, 0.9976};
