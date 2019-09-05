@@ -6,7 +6,7 @@ import sys
 from matplotlib import pyplot as plt
 import numpy as np
 
-
+# R21 and t21
 def solvICP(odomVI, odomRaw):
     center_e = np.array([[0.], [0.]])
     center_g = np.array([[0.], [0.]])
@@ -77,8 +77,12 @@ if __name__ == '__main__':
     print len(odomVI), "/", len(odomRawKF), ' size of poses.'
 
     R, t = solvICP(odomVI, odomRawKF)
-    print('R:', R)
-    print('t:', t)
+    print('R21:', R)
+    print('t21:', t)
+    print('yaw:', np.arccos(R[0][0]))
+    R12 = np.linalg.inv(R)
+    print('R12:', R12)
+    print('yaw12:', np.arccos(R12[0][0]))
 
     x = []
     y = []

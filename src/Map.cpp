@@ -349,7 +349,7 @@ void Map::updateLocalGraph()
     printf("[ Map ] Get %ld KFs using kdtree!\n", setLocalKFs.size());
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
-    int searchLevel = 2;    // 3
+    int searchLevel = 3;    // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; i++) {
@@ -538,7 +538,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer, vector<vector<EdgeProjectXYZ2
 
         int vertexIdKF = i;
 
-        bool fixed = (pKF->mIdKF == minKFid) || pKF->mIdKF == 1;
+        bool fixed = (pKF->mIdKF == minKFid) || (pKF->mIdKF == 0);
         // 添加位姿节点
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
         // 添加平面运动约束边
@@ -1047,7 +1047,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
 
         int vertexIdKF = i;
 
-        bool fixed = (pKF->id == minKFid) || pKF->id == 1;
+        bool fixed = (pKF->id == minKFid) || (pKF->id == 0);
 
         g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
@@ -1184,12 +1184,12 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>
 
     Mat pose = cvu::inv(getCurrentKF()->getPose());
     std::vector<float> query = {pose.at<float>(0, 3)/1000.f, pose.at<float>(1, 3)/1000.f, pose.at<float>(2, 3)/1000.f};
-    int size = std::min(vKFsAll.size(), static_cast<size_t>(5));    // 最近的10个KF
+    int size = std::min(vKFsAll.size(), static_cast<size_t>(4));    // 最近的4个KF
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
     for (size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i] > 0 && dists[i] < 0.5 && vKFsAll[indices[i]]) // 距离在5m以内
+        if (indices[i] > 0 && dists[i] < 0.3 && vKFsAll[indices[i]]) // 距离在0.3m以内
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }

@@ -35,8 +35,8 @@ MapPoint::MapPoint(Point3f pos, bool goodPrl) {
     mPos = pos;
     mbGoodParallax = goodPrl;
 
-    mNextId++;
     mId = mNextId;
+    mNextId++;
 }
 
 MapPoint::~MapPoint(){

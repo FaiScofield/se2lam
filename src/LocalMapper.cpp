@@ -100,7 +100,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
  * @brief LocalMapper::findCorrespd 根据和参考帧和局部地图的匹配关系关联MP，或生成新的MP并插入到Map里
  * 能关联上的MP都关联上，存在当前帧的mViewMPs变量里。不能关联上MP但和参考帧有匹配的KP，则三角化生成新的MP
  * @param vMatched12    参考帧到当前帧的KP匹配情况
- * @param localMPs      当前帧的MP粗观测
+ * @param localMPs      当前帧的MP粗观测, 和参考帧匹配点三角化生成
  * @param vbGoodPrl     参考帧与当前帧KP匹配中没有MP但视差好的标志，生成新MP时要对它的视差好坏进行标记
  */
 void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point3f> &localMPs,

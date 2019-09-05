@@ -42,7 +42,8 @@ Point3f se3map(const Mat& _Tcw, const Point3f& _pt);
 
 void pts2Ftrs(const vector<cv::KeyPoint>& _orgnFtrs, const vector<Point2f>& _points, vector<cv::KeyPoint>& _features);
 
-void normalizeYawAngle(se2lam::Se2& odom);
+double deg2rad(double deg) { return M_PI * deg / 180; }
+double rad2deg(double rad) { return 180 * rad / M_PI; }
 
 cv::Mat gamma(const cv::Mat& grayImg, float gamma = 1.2);
 

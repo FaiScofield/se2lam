@@ -75,6 +75,8 @@ private:
     bool mbFinished;
     std::mutex mMutexFinish;
 
+    double mErrorSum = 0.;
+
 public:
     bool mbIsLocalize;
 

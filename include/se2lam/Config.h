@@ -132,7 +132,7 @@ public:
     static int GM_VCL_NUM_MIN_MATCH_KP;     // 回环验证中KP最少匹配数
     static double GM_VCL_RATIO_MIN_MATCH_MP;// 回环验证中MP匹配比率
 
-    static int GM_DCL_MIN_KFID_OFFSET;
+    static int GM_DCL_MIN_KFID_OFFSET;      // 回环间隔
     static double GM_DCL_MIN_SCORE_BEST;
 
     static void readConfig(const std::string &path);

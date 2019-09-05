@@ -81,7 +81,7 @@ int Config::GM_VCL_NUM_MIN_MATCH_MP = 15;
 int Config::GM_VCL_NUM_MIN_MATCH_KP = 30;
 double Config::GM_VCL_RATIO_MIN_MATCH_MP = 0.05;
 
-int Config::GM_DCL_MIN_KFID_OFFSET = 20;
+int Config::GM_DCL_MIN_KFID_OFFSET = 30;    // 回环间隔
 double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
 
@@ -115,11 +115,11 @@ void Config::readConfig(const std::string& path)
     ImgSize.height = height;
     ImgSize.width = width;
     std::cout << "[Config] Load camera config ..." << std::endl;
-    std::cout << "\t- Camera matrix: " << std::endl
+    std::cout << "   - Camera matrix: " << std::endl
               << " " << Kcam << std::endl
-              << "\t- Camera distortion: " << std::endl
+              << "   - Camera distortion: " << std::endl
               << " " << Dcam << std::endl
-              << "\t- Img size: " << std::endl
+              << "   - Img size: " << std::endl
               << " " << ImgSize << std::endl;
     // bTc: camera extrinsic
     cv::Rodrigues(rvec, R);
@@ -133,7 +133,7 @@ void Config::readConfig(const std::string& path)
     RT.copyTo(cTb.rowRange(0, 3).colRange(0, 3));
     t.copyTo(cTb.rowRange(0, 3).col(3));
 
-    std::cout << "\t- Camera extrinsic Tbc (Body to Camera): " << std::endl
+    std::cout << "   - Camera extrinsic Tbc (Body to Camera): " << std::endl
               << " " << bTc << std::endl
               << std::endl;
 
@@ -179,6 +179,7 @@ void Config::readConfig(const std::string& path)
     GLOBAL_VERBOSE = (bool)(int)(settings["global_verbose"]);
     GLOBAL_PRINT = (bool)(int)(settings["global_print"]);
     FPS = (int)settings["fps"];
+    assert(FPS > 0);
 
     USE_PREV_MAP = (bool)(int)(settings["use_prev_map"]);
     SAVE_NEW_MAP = (bool)(int)(settings["save_new_map"]);

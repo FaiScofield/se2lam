@@ -226,6 +226,8 @@ MapPublish::~MapPublish()
 
 void MapPublish::PublishKeyFrames()
 {
+    mErrorSum = 0.;
+
     mKFsNeg.points.clear();
     mKFsAct.points.clear();
 
@@ -367,7 +369,7 @@ void MapPublish::PublishKeyFrames()
             mFeatGraph.points.push_back(msgs_o2);
         }
 
-        // Odometry Graph (estimate)
+        // Visual Odometry Graph (estimate)
         PtrKeyFrame pKFOdoChild = pKF->mOdoMeasureFrom.first;
         if (pKFOdoChild != NULL && !mbIsLocalize) {
             Mat Twb1 = pKFOdoChild->getPose().inv() * Config::cTb;
@@ -378,9 +380,13 @@ void MapPublish::PublishKeyFrames()
             mOdoGraph.points.push_back(msgs_b2);  // 上一帧的位姿
             mOdoGraph.points.push_back(msgs_b);   // 当前帧的位姿
         }
-    }
 
-    // Odometry Graph for Localize only case
+        Point2f d(msgs_b.x * mScaleRatio - pKF->odom.x, msgs_b.y * mScaleRatio - pKF->odom.y);
+        mErrorSum += norm(d);
+    }
+    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
+
+    // Visual Odometry Graph for Localize only case
     //! BUG 这里有时候数值会变成[0.0000, 0.0000],怀疑是频率问题
     if (mbIsLocalize) {
         static geometry_msgs::Point msgsLast;
@@ -399,11 +405,6 @@ void MapPublish::PublishKeyFrames()
                   abs(msgsLast.x - msgs.x) > abs(0.5 * msgsLast.x))) {
                 mOdoGraph.points.push_back(msgsLast);
                 mOdoGraph.points.push_back(msgs);
-                //                printf("[MapPublish] #%d mOdoGraph msgsLast = [%f, %f]\n",
-                //                       mpLocalize->getKFCurr()->mIdKF, msgsLast.x, msgsLast.y);
-                //                printf("[MapPublish] #%d mOdoGraph     msgs = [%f, %f]\n",
-                //                       mpLocalize->getKFCurr()->mIdKF, msgs.x, msgs.y);
-
                 msgsLast = msgs;
             } else {
                 fprintf(stderr,
@@ -719,12 +720,6 @@ void MapPublish::PublishOdomInformation()
         Mat Tb0bi = (Tb0w * Twbi).col(3);
         msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
         msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
-        //        fprintf(stderr, "KF#%d(#%d) odom mark orig = [%f, %f]\n",
-        //                mpMap->getCurrentKF()->mIdKF, mpMap->getCurrentKF()->id,
-        //                currOdom.x/1000, currOdom.y/1000);
-        //        fprintf(stderr, "KF#%d(#%d) odom mark trans = [%f, %f]\n",
-        //                mpMap->getCurrentKF()->mIdKF,  mpMap->getCurrentKF()->id,
-        //                msgsCurr.x, msgsCurr.y);
     } else {
         //! NOTE 这里扣除first pose不为0值的影响
         if (mpLocalize->mState == cvu::OK || mpLocalize->mLastState == cvu::LOST) {
@@ -741,11 +736,6 @@ void MapPublish::PublishOdomInformation()
                 msgsLast = msgsCurr;
                 isFirstFrame = false;
             }
-            //            fprintf(stderr, "#%d odom mark orig = [%f, %f]\n",
-            //                    mpLocalize->getKFCurr()->mIdKF,
-            //                    currOdom.x/mScaleRatio, currOdom.y/mScaleRatio);
-            //            fprintf(stderr, "#%d odom mark trans = [%f, %f]\n",
-            //                    mpLocalize->getKFCurr()->mIdKF, msgsCurr.x, msgsCurr.y);
         }
     }
     mOdomRawGraph.points.push_back(msgsLast);

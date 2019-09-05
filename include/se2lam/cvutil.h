@@ -46,4 +46,7 @@ cv::Mat sharpping(const cv::Mat &img, float scale = 12);
 
 }  // namespace cvu
 
+
+#include "utility.h"
+
 #endif

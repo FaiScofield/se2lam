@@ -12,6 +12,7 @@
 #include "ORBmatcher.h"
 #include "converter.h"
 #include "cvutil.h"
+#include "utility.h"
 #include "optimizer.h"
 #include <ros/ros.h>
 
@@ -32,8 +33,8 @@ Track::Track()
     mLastState = cvu::NO_READY_YET;
 
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1)); // 这里是参考帧观测到的MP
-    nMinFrames = min(5, static_cast<int>(0.6 * Config::FPS));
-    nMaxFrames = static_cast<int>(1.2 * Config::FPS);
+    nMinFrames = min(2, cvCeil(0.5 * Config::FPS));
+    nMaxFrames = cvFloor(2 * Config::FPS);
     mnGoodPrl = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
@@ -178,7 +179,6 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
     //! 用运动先验设置Cell的位置
     int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, mMatchAveOffset, mMatchIdx, 20);
-    printf("[Track] Offset: %.2f, %.2f\n", mMatchAveOffset.x, mMatchAveOffset.y);
 
     // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
     int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
@@ -425,25 +425,25 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
 bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 {
     int nOldKP = mpKF->getSizeObsMP();
-    bool c0 = mFrame.id - mpKF->id > nMinFrames;  // 1.间隔首先要足够大
+    bool c0 = mFrame.id - mpKF->id >= nMinFrames;  // 1.间隔首先要足够大
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;  // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
-    bool c2 = mnGoodPrl > 40;        // 且没匹配上的KP中拥有良好视差的点数大于40
+    bool c2 = mnGoodPrl > 20;        // 且没匹配上的KP中拥有良好视差的点数大于40
     bool c3 = mFrame.id - mpKF->id > nMaxFrames;  // 2.2 或间隔达到上限了
-    bool c4 = nMatched < 0.15f * Config::MaxFtrNumber || nMatched < 20;  // 2.3 或匹配对小于1/10最大特征点数
+    bool c4 = nMatched < std::min(0.1f * Config::MaxFtrNumber, 20.f);  // 2.3 或匹配对小于1/10最大特征点数
     // 满足条件1，和条件2中的一个(共2个条件)，则可能需要加入关键帧，实际还得看odom那边的条件
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
     bool bNeedKFByOdo = true;
     if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
-        bool c5 = abs(dOdo.theta) >= 0.0349f;  // NOTE 相机的旋转量超过2°，这里原来少了绝对值符号
+        bool c5 = abs(dOdo.theta) >= g2o::deg2rad(10.);  // 旋转量超过30°，这里原来少了绝对值符号
         cv::Mat cTc = Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
-        bool c6 = cv::norm(xy) >= (0.0523f * Config::UPPER_DEPTH * 0.1f);  // 相机的平移量足够大
+        bool c6 = cv::norm(xy) >= (0.5 * Config::UPPER_DEPTH * 0.1);  // 相机的平移量足够大 0.5*
 
         bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限,考虑了不同深度下视野的不同)
     }
-    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件
+    bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
     if (mpLocalMapper->acceptNewKF()) {
