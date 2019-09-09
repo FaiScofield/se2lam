@@ -393,25 +393,27 @@ void MapPublish::PublishKeyFrames()
         static geometry_msgs::Point msgsLast;
         if (mpLocalize->mState == cvu::OK || mpLocalize->mState == cvu::LOST) {
             static bool firstLocatied = true;
-            geometry_msgs::Point msgs;
-            msgs.x = mpLocalize->getKFCurr()->Twb.x / mScaleRatio;
-            msgs.y = mpLocalize->getKFCurr()->Twb.y / mScaleRatio;
+            geometry_msgs::Point msgsCurr;
+            msgsCurr.x = mpLocalize->getKFCurr()->Twb.x / mScaleRatio;
+            msgsCurr.y = mpLocalize->getKFCurr()->Twb.y / mScaleRatio;
 
+            if (mpLocalize->mLastState == cvu::LOST && mpLocalize->mState == cvu::OK)
+                firstLocatied = true;
             if (firstLocatied) {
                 firstLocatied = false;
-                msgsLast = msgs;
+                msgsLast = msgsCurr;
             }
 
-            if (!(abs(msgs.x) < 1e-5 && abs(msgs.y) < 1e-5 &&
-                  abs(msgsLast.x - msgs.x) > abs(0.5 * msgsLast.x))) {
+//            if (!(abs(msgsCurr.x) < 1e-5 && abs(msgsCurr.y) < 1e-5 &&
+//                  abs(msgsLast.x - msgsCurr.x) > abs(0.5 * msgsLast.x))) {
                 mOdoGraph.points.push_back(msgsLast);
-                mOdoGraph.points.push_back(msgs);
-                msgsLast = msgs;
-            } else {
-                fprintf(stderr,
-                        "[MapPublish] #%d Skip for msgs might be zero: [%f, %f]. last:[%f, %f]\n",
-                        mpLocalize->getKFCurr()->mIdKF, msgs.x, msgs.y, msgsLast.x, msgsLast.y);
-            }
+                mOdoGraph.points.push_back(msgsCurr);
+                msgsLast = msgsCurr;
+//            } else {
+//                fprintf(stderr,
+//                        "[MapPublis] #%d Skip for Twb might be zero: [%.4f, %.4f]. last:[%.4f, %.4f]\n",
+//                        mpLocalize->getKFCurr()->mIdKF, msgsCurr.x, msgsCurr.y, msgsLast.x, msgsLast.y);
+//            }
         }
     }
 
@@ -618,11 +620,7 @@ void MapPublish::run()
             cv::Mat imgMatch = mpFramePub->drawMatch();
             float lastThetaKF = pKP->odom.theta;
             float currTheta = mpLocalize->getCurrentFrameOdom().z;
-            float dt = (currTheta - lastThetaKF) * 180 / M_PI;
-            if (dt > 180.)
-                dt -= 360;
-            else if (dt < -180.)
-                dt += 360;
+            float dt = normalize_angle(currTheta - lastThetaKF) * 180 / M_PI;
 
             // 显示保留两位小数
             char dt_char[10];
@@ -649,16 +647,13 @@ void MapPublish::run()
         if (mbIsLocalize) {
             if (mpLocalize->getKFCurr() == nullptr || mpLocalize->getKFCurr()->isNull())
                 continue;
-            if (mpLocalize->mState != cvu::OK || mpLocalize->mLastState == cvu::FIRST_FRAME)
-                continue;
+//            if (mpLocalize->mState != cvu::OK || mpLocalize->mLastState == cvu::FIRST_FRAME)
+//                continue;
 
             cTw = mpLocalize->getKFCurr()->getPose();
         } else {
             cTw = mpMap->getCurrentFramePose();
         }
-
-        //                cv::Mat cTw;
-        //                cTw = mpMap->getCurrentFramePose();
 
         PublishCameraCurr(cTw.inv());
         PublishKeyFrames();
@@ -668,7 +663,7 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cout << "[MapPublish] Exiting mappublish .." << endl;
+    cout << "[MapPublis] Exiting Mappublish .." << endl;
 
     nh.shutdown();
 
@@ -708,11 +703,10 @@ bool MapPublish::isFinished()
 void MapPublish::PublishOdomInformation()
 {
     static geometry_msgs::Point msgsLast;
+    geometry_msgs::Point msgsCurr;
 
-    geometry_msgs::Point msgs, msgsCurr;
-
-    //! NOTE 这里要扣除掉首帧Odom不为0值的影响
     if (!mbIsLocalize) {
+        //! 这里要对齐到首帧的Odom
         static Se2 firstOdom = mpMap->getCurrentKF()->odom;
         static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
 
@@ -722,33 +716,39 @@ void MapPublish::PublishOdomInformation()
         msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
         msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
     } else {
-        //! NOTE 这里扣除first pose不为0值的影响
+        //! 这里要对齐到首帧的Pose
         if (mpLocalize->mState == cvu::OK || mpLocalize->mLastState == cvu::LOST) {
-            static Se2 firstPose =  mpLocalize->getKFCurr()->odom; // mpMap->getAllKF()[0]->odom
-            static Mat Tb0w = cvu::inv(firstPose.toCvSE3());
-            static bool isFirstFrame = true;
+            PtrKeyFrame pKF = mpLocalize->getKFCurr();
 
-            Se2 currOdom = mpLocalize->getKFCurr()->odom;
-            Mat Twbi = currOdom.toCvSE3();
-            Mat Tb0bi = (Tb0w * Twbi).col(3);
-            msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
-            msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
+            static bool isFirstFrame = true;
+            static Mat Twc_b = cvu::inv(pKF->getPose()) * Config::cTb;
+            static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
+
+            Mat Twbi = (pKF->odom).toCvSE3();
+            Mat Tb0bi = Tb0w * Twbi;                // 先变换到首帧的odom坐标系原点下
+            Mat Twc_bi = (Twc_b * Tb0bi).col(3);    // 再变换到首帧的pose坐标系原点下
+            msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
+            msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
             if (isFirstFrame) {
                 msgsLast = msgsCurr;
                 isFirstFrame = false;
+                Mat Twb0 = cvu::inv(pKF->getPose() * Config::cTb).col(3);
+                Se2 odo = pKF->odom;
+                fprintf(stderr, "[MapPublis] #%d First pose: [%.4f, %.4f], first odom: [%.4f, %.4f]\n",
+                        mpLocalize->getKFCurr()->mIdKF, Twb0.at<float>(0), Twb0.at<float>(1), odo.x, odo.y);
             }
 
-            if (!(abs(msgs.x) < 1e-5 && abs(msgs.y) < 1e-5 &&
-                  abs(msgsLast.x - msgs.x) > abs(0.5 * msgsLast.x))) {
-                mOdoGraph.points.push_back(msgsLast);
-                mOdoGraph.points.push_back(msgs);
-                msgsLast = msgs;
-            } else {
-                fprintf(stderr,
-                        "[MapPublish] #%d Skip for msgs might be zero: [%f, %f]. last:[%f, %f]\n",
-                        mpLocalize->getKFCurr()->mIdKF, msgs.x, msgs.y, msgsLast.x, msgsLast.y);
-            }
-
+//            if (!(abs(msgsCurr.x) < 1e-5 && abs(msgsCurr.y) < 1e-5 &&
+//                  abs(msgsLast.x - msgsCurr.x) > abs(0.5 * msgsLast.x))) {
+//                mOdomRawGraph.points.push_back(msgsLast);
+//                mOdomRawGraph.points.push_back(msgsCurr);
+//            } else {
+//                fprintf(stdout,
+//                        "[MapPublis] #%d Curr odom: [%.4f, %.4f], Last:[%.4f, %.4f]\n",
+//                        mpLocalize->getKFCurr()->mIdKF, msgsCurr.x*mScaleRatio, msgsCurr.y*mScaleRatio, msgsLast.x*mScaleRatio, msgsLast.y*mScaleRatio);
+//            }
+        } else {
+            return;
         }
     }
 

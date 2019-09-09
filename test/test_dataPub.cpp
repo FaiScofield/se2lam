@@ -65,7 +65,7 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
     sort(allImages.begin(), allImages.end(), lessThen);
 
     files.clear();
-    for (int i = 0; i < allImages.size(); ++i)
+    for (size_t i = 0; i < allImages.size(); ++i)
         files.push_back(allImages[i].fileName);
 }
 

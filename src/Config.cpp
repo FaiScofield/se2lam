@@ -99,6 +99,7 @@ void Config::readConfig(const std::string& path)
     std::string camParaPath = path + "../se2_config/CamConfig.yml";
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
+
     cv::Mat _mK, _mD, _rvec, rvec, _T, T, R;
     float height, width;
     camPara["image_height"] >> height;
@@ -182,7 +183,6 @@ void Config::readConfig(const std::string& path)
     GLOBAL_VERBOSE = (bool)(int)(settings["global_verbose"]);
     GLOBAL_PRINT = (bool)(int)(settings["global_print"]);
     FPS = (int)settings["fps"];
-    assert(FPS > 0);
 
     USE_PREV_MAP = (bool)(int)(settings["use_prev_map"]);
     SAVE_NEW_MAP = (bool)(int)(settings["save_new_map"]);
@@ -212,6 +212,15 @@ void Config::readConfig(const std::string& path)
     settings["max_angular_speed"] >> maxAngularSpeed;
 
     settings.release();
+
+    std::cout << "[Config] Some paramter below:" << std::endl
+              << "   - FPS: " << FPS << std::endl
+              << "   - img_start_idx: " << ImgStartIndex << std::endl
+              << "   - img_num: " << ImgIndex << std::endl
+              << "   - upper_depth: " << UPPER_DEPTH << std::endl
+              << "   - lower_depth: " << LOWER_DEPTH << std::endl << std::endl;
+    assert(FPS > 0);
+    assert(LOWER_DEPTH < UPPER_DEPTH);
 }
 
 bool Config::acceptDepth(float depth)

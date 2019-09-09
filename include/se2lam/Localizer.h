@@ -80,8 +80,6 @@ public:
 
 public:
     //! Variables
-    bool mbIsTracked;   // 定位成功标志
-
     Map* mpMap;
     ORBextractor* mpORBextractor;
     ORBVocabulary* mpORBVoc;
@@ -108,6 +106,7 @@ public:
 
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
+    std::vector<double> mvScores;
 
 protected:
     bool checkFinish();

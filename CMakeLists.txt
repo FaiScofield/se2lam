@@ -42,10 +42,8 @@ find_package(catkin REQUIRED COMPONENTS
     tf
     roslib
     cv_bridge
-#    cmake_modules
     image_transport
-#    message_generation
-#    rosbag
+    rosbag
 )
 
 catkin_package(

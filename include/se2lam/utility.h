@@ -13,7 +13,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include "Config.h"
 
-namespace cvu{
+namespace cvu {
 
 
 using std::vector;

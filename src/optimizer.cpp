@@ -231,6 +231,8 @@ g2o::ParameterSE3Offset *addParaSE3Offset(SlamOptimizer &opt, const g2o::Isometr
     return para;
 }
 
+//! FIXME 定位模式添加节点时有如下提示, 需要解决. (未必是在这个函数里)
+//! addVertex: FATAL, a vertex with ID 0 has already been registered with this graph
 void addVertexSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int id, bool fixed)
 {
     g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();

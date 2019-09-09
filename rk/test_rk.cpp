@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 
         rate.sleep();
     }
-    cout << "[main ] Finish test..." << endl;
+    cout << "[main ] Finish test_rk..." << endl;
 
     system.requestFinish();
     system.waitForFinish();

@@ -145,8 +145,7 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat &img, vect
 cv::Mat FramePublish::drawFrame() {
 
     if (!mbIsLocalize) {
-        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
-
+        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)) {
             Mat imgCurr = drawMatchesInOneImg(kpRef, mImg, kp, matches);
             Mat imgRef = drawKeys(kpRef, mImgRef, matches);
             Mat imgMatch;
@@ -165,7 +164,7 @@ cv::Mat FramePublish::drawFrame() {
             imgOut.copyTo(mImgOut);
         }
     }
-    else if (mpLocalizer != nullptr && mpLocalizer->mpKFCurr != nullptr && mpLocalizer->mImgCurr.cols != 0){
+    else if (mpLocalizer != nullptr && mpLocalizer->mpKFCurr != nullptr && mpLocalizer->mImgCurr.cols != 0) {
 
         locker lockImg(mpLocalizer->mMutexImg);
 
