@@ -141,6 +141,9 @@ public:
     static bool SAVE_MATCH_IMAGE;
     static std::string SAVE_MATCH_IMAGE_PATH;
     static int ImgStartIndex;
+
+    static float maxLinearSpeed;
+    static float maxAngularSpeed;
 };
 
 }  // namespace se2lam

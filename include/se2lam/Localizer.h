@@ -25,6 +25,7 @@ public:
 
     // Main
     void run();
+    bool relocalization();
 
     // Initialization
     void setMap(Map *pMap);
@@ -119,6 +120,9 @@ protected:
 
     int nLostFrames;
     std::condition_variable cndvFirstKFUpdate;
+
+    float thMaxDistance;
+    float thMaxAngular;
 };
 
 

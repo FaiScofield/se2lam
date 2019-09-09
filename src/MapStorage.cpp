@@ -45,7 +45,7 @@ void MapStorage::loadMap() {
 
     loadToMap();
 
-    printf("[MapStorage] Map loaded from __%s__.\n\n", (mMapPath+mMapFile).c_str());
+    printf("[MapStorage] Map loaded from: %s\n\n", (mMapPath+mMapFile).c_str());
 }
 
 void MapStorage::saveMap() {

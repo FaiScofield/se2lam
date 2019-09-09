@@ -152,9 +152,9 @@ void GlobalMapper::run()
         //! Do Global Correction if Needed
         if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed)) {
             std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
-#ifndef TIME_TO_LOG_LOCAL_BA
-            GlobalBA();
-#endif
+
+//            GlobalBA();
+
             mbGlobalBALastLoop = true;
             cout << "[Globa] Loop closed!"
                  << " numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs() << endl;
@@ -361,7 +361,6 @@ void GlobalMapper::GlobalBA()
     std::vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
 
     SlamOptimizer optimizer;
-    // initOptimizer(optimizer);
     SlamLinearSolver *linearSolver = new SlamLinearSolver();
     SlamBlockSolver *blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm *solver = new SlamAlgorithm(blockSolver);
@@ -385,11 +384,11 @@ void GlobalMapper::GlobalBA()
         Mat T_w_c = cvu::inv(pKF->Tcw);
         bool bIfFix = (pKF->mIdKF == 0);
 
-        //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
+//        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior *pEdge = addVertexSE3PlaneMotion(
             optimizer, toIsometry3D(T_w_c), pKF->mIdKF, Config::bTc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
-        //        pEdge->setLevel(1);
+//        pEdge->setLevel(1);
 
         mapId2pKF[pKF->mIdKF] = pKF;
 

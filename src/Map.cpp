@@ -1051,6 +1051,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
 
         g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
+//        addVertexSE2(optimizer, pose, vertexIdKF, true);    //! 用odom做位姿,不更新KF,只更新MP. 20190906
     }
 
     // Add odometry based constraints

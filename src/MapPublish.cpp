@@ -263,7 +263,8 @@ void MapPublish::PublishKeyFrames()
             continue;
 
         // 按比例缩放地图, mScaleRatio = 1000 时比例为 1:1，数据单位是[mm]
-        cv::Mat Twc = vKFsAll[i]->getPose().inv();
+        cv::Mat p = vKFsAll[i]->getPose();
+        cv::Mat Twc = cvu::inv(p);
         cv::Mat Twb = Twc * Config::cTb;
 
         Twc.at<float>(0, 3) = Twc.at<float>(0, 3) / mScaleRatio;
@@ -384,7 +385,7 @@ void MapPublish::PublishKeyFrames()
         Point2f d(msgs_b.x * mScaleRatio - pKF->odom.x, msgs_b.y * mScaleRatio - pKF->odom.y);
         mErrorSum += norm(d);
     }
-    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
+//    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
 
     // Visual Odometry Graph for Localize only case
     //! BUG 这里有时候数值会变成[0.0000, 0.0000],怀疑是频率问题
@@ -723,7 +724,7 @@ void MapPublish::PublishOdomInformation()
     } else {
         //! NOTE 这里扣除first pose不为0值的影响
         if (mpLocalize->mState == cvu::OK || mpLocalize->mLastState == cvu::LOST) {
-            static Se2 firstPose = mpMap->getAllKF()[0]->odom;
+            static Se2 firstPose =  mpLocalize->getKFCurr()->odom; // mpMap->getAllKF()[0]->odom
             static Mat Tb0w = cvu::inv(firstPose.toCvSE3());
             static bool isFirstFrame = true;
 
@@ -736,8 +737,21 @@ void MapPublish::PublishOdomInformation()
                 msgsLast = msgsCurr;
                 isFirstFrame = false;
             }
+
+            if (!(abs(msgs.x) < 1e-5 && abs(msgs.y) < 1e-5 &&
+                  abs(msgsLast.x - msgs.x) > abs(0.5 * msgsLast.x))) {
+                mOdoGraph.points.push_back(msgsLast);
+                mOdoGraph.points.push_back(msgs);
+                msgsLast = msgs;
+            } else {
+                fprintf(stderr,
+                        "[MapPublish] #%d Skip for msgs might be zero: [%f, %f]. last:[%f, %f]\n",
+                        mpLocalize->getKFCurr()->mIdKF, msgs.x, msgs.y, msgsLast.x, msgsLast.y);
+            }
+
         }
     }
+
     mOdomRawGraph.points.push_back(msgsLast);
     mOdomRawGraph.points.push_back(msgsCurr);
     msgsLast = msgsCurr;

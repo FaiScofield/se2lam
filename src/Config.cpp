@@ -85,6 +85,9 @@ int Config::GM_DCL_MIN_KFID_OFFSET = 30;    // 回环间隔
 double Config::GM_DCL_MIN_SCORE_BEST = 0.005;
 
 
+float Config::maxLinearSpeed = 2000;    // [mm]
+float Config::maxAngularSpeed = 200;    // [degree/s]
+
 //! for debug
 int Config::ImgStartIndex = 0;
 bool Config::SAVE_MATCH_IMAGE = false;
@@ -204,6 +207,9 @@ void Config::readConfig(const std::string& path)
     settings["save_match_image"] >> SAVE_MATCH_IMAGE;
     settings["save_match_image_path"] >> SAVE_MATCH_IMAGE_PATH;
     settings["img_start_idx"] >> ImgStartIndex;
+
+    settings["max_linear_speed"] >> maxLinearSpeed;
+    settings["max_angular_speed"] >> maxAngularSpeed;
 
     settings.release();
 }
