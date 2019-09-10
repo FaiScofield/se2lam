@@ -382,38 +382,41 @@ void MapPublish::PublishKeyFrames()
             mOdoGraph.points.push_back(msgs_b);   // 当前帧的位姿
         }
 
-        Point2f d(msgs_b.x * mScaleRatio - pKF->odom.x, msgs_b.y * mScaleRatio - pKF->odom.y);
-        mErrorSum += norm(d);
+//        Point2f d(msgs_b.x * mScaleRatio - pKF->odom.x, msgs_b.y * mScaleRatio - pKF->odom.y);
+//        mErrorSum += norm(d);
     }
 //    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
 
-    // Visual Odometry Graph for Localize only case
-    //! BUG 这里有时候数值会变成[0.0000, 0.0000],怀疑是频率问题
+    //! Visual Odometry Graph for Localize only case
+    //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
     if (mbIsLocalize) {
-        static geometry_msgs::Point msgsLast;
-        if (mpLocalize->mState == cvu::OK || mpLocalize->mState == cvu::LOST) {
-            static bool firstLocatied = true;
-            geometry_msgs::Point msgsCurr;
-            msgsCurr.x = mpLocalize->getKFCurr()->Twb.x / mScaleRatio;
-            msgsCurr.y = mpLocalize->getKFCurr()->Twb.y / mScaleRatio;
+        auto state = mpLocalize->getTrackingState();
+        auto lastState = mpLocalize->getLastTrackingState();
 
-            if (mpLocalize->mLastState == cvu::LOST && mpLocalize->mState == cvu::OK)
+        geometry_msgs::Point msgsCurr, msgsLast;
+        if (state == cvu::OK || state == cvu::LOST) {
+            static bool firstLocatied = true;
+            Se2 Twb = mpLocalize->getCurrKFPose();  // 带锁访问
+            msgsCurr.x = Twb.x / mScaleRatio;
+            msgsCurr.y = Twb.y / mScaleRatio;
+
+            if (lastState == cvu::LOST && state == cvu::OK) {
                 firstLocatied = true;
+                printf("[MapPublis] #%d lastState = LOST and currentState = OK\n", mpLocalize->getKFCurr()->mIdKF);
+            }
             if (firstLocatied) {
                 firstLocatied = false;
                 msgsLast = msgsCurr;
             }
 
-//            if (!(abs(msgsCurr.x) < 1e-5 && abs(msgsCurr.y) < 1e-5 &&
-//                  abs(msgsLast.x - msgsCurr.x) > abs(0.5 * msgsLast.x))) {
-                mOdoGraph.points.push_back(msgsLast);
-                mOdoGraph.points.push_back(msgsCurr);
-                msgsLast = msgsCurr;
-//            } else {
-//                fprintf(stderr,
-//                        "[MapPublis] #%d Skip for Twb might be zero: [%.4f, %.4f]. last:[%.4f, %.4f]\n",
-//                        mpLocalize->getKFCurr()->mIdKF, msgsCurr.x, msgsCurr.y, msgsLast.x, msgsLast.y);
-//            }
+            mOdoGraph.points.push_back(msgsLast);
+            mOdoGraph.points.push_back(msgsCurr);
+            printf("[MapPublis] #%d msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f], Twb: [%.4f, %.4f]\n",
+                   mpLocalize->getKFCurr()->mIdKF, msgsLast.x*mScaleRatio/1000.,
+                   msgsLast.y*mScaleRatio/1000., msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
+                   Twb.x/1000., Twb.y/1000.);
+
+            msgsLast = msgsCurr;
         }
     }
 
@@ -592,7 +595,6 @@ void MapPublish::PublishCameraCurr(const cv::Mat &Twc)
 
 void MapPublish::run()
 {
-
     mbIsLocalize = Config::LOCALIZATION_ONLY;
 
     image_transport::ImageTransport it(nh);
@@ -699,14 +701,12 @@ bool MapPublish::isFinished()
     return mbFinished;
 }
 
-
 void MapPublish::PublishOdomInformation()
 {
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    if (!mbIsLocalize) {
-        //! 这里要对齐到首帧的Odom
+    if (!mbIsLocalize) {    // 这里要对齐到首帧的Odom
         static Se2 firstOdom = mpMap->getCurrentKF()->odom;
         static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
 
@@ -715,13 +715,13 @@ void MapPublish::PublishOdomInformation()
         Mat Tb0bi = (Tb0w * Twbi).col(3);
         msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
         msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
-    } else {
-        //! 这里要对齐到首帧的Pose
-        if (mpLocalize->mState == cvu::OK || mpLocalize->mLastState == cvu::LOST) {
+    } else {    // 这里要对齐到首帧的Pose
+        if (mpLocalize->getTrackingState() == cvu::OK || mpLocalize->getTrackingState() == cvu::LOST) {
             PtrKeyFrame pKF = mpLocalize->getKFCurr();
 
             static bool isFirstFrame = true;
-            static Mat Twc_b = cvu::inv(pKF->getPose()) * Config::cTb;
+//            static Mat Twc_b = cvu::inv(pKF->getPose()) * Config::cTb;
+            static Mat Twc_b = mpLocalize->getCurrKFPose().toCvSE3();
             static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
 
             Mat Twbi = (pKF->odom).toCvSE3();
@@ -729,24 +729,16 @@ void MapPublish::PublishOdomInformation()
             Mat Twc_bi = (Twc_b * Tb0bi).col(3);    // 再变换到首帧的pose坐标系原点下
             msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
             msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
+            if (mpLocalize->getTrackingState() == cvu::OK && mpLocalize->getLastTrackingState() == cvu::LOST)
+                isFirstFrame = true;
             if (isFirstFrame) {
                 msgsLast = msgsCurr;
                 isFirstFrame = false;
-                Mat Twb0 = cvu::inv(pKF->getPose() * Config::cTb).col(3);
+                Mat Twb0 = mpLocalize->getCurrKFPose().toCvSE3().col(3);
                 Se2 odo = pKF->odom;
                 fprintf(stderr, "[MapPublis] #%d First pose: [%.4f, %.4f], first odom: [%.4f, %.4f]\n",
                         mpLocalize->getKFCurr()->mIdKF, Twb0.at<float>(0), Twb0.at<float>(1), odo.x, odo.y);
             }
-
-//            if (!(abs(msgsCurr.x) < 1e-5 && abs(msgsCurr.y) < 1e-5 &&
-//                  abs(msgsLast.x - msgsCurr.x) > abs(0.5 * msgsLast.x))) {
-//                mOdomRawGraph.points.push_back(msgsLast);
-//                mOdomRawGraph.points.push_back(msgsCurr);
-//            } else {
-//                fprintf(stdout,
-//                        "[MapPublis] #%d Curr odom: [%.4f, %.4f], Last:[%.4f, %.4f]\n",
-//                        mpLocalize->getKFCurr()->mIdKF, msgsCurr.x*mScaleRatio, msgsCurr.y*mScaleRatio, msgsLast.x*mScaleRatio, msgsLast.y*mScaleRatio);
-//            }
         } else {
             return;
         }

@@ -49,11 +49,11 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
     LIBRARIES ${PROJECT_NAME}
     CATKIN_DEPENDS
-     geometry_msgs
-     nav_msgs
-     tf
-     roscpp
-     image_transport
+        geometry_msgs
+        nav_msgs
+        tf
+        roscpp
+        image_transport
     )
 include_directories(${catkin_INCLUDE_DIRS})
 # 去除ROS中opencv库的影响
@@ -102,7 +102,10 @@ set(catkin_LIBRARIES
     /usr/lib/x86_64-linux-gnu/libboost_date_time.so
     /usr/lib/x86_64-linux-gnu/libboost_atomic.so
 )
-list(APPEND LINK_LIBS ${catkin_LIBRARIES} )
+list(APPEND LINK_LIBS
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBS}
+    )
 MESSAGE("    ===>:   ${catkin_LIBRARIES}" )
 
 include_directories(
@@ -115,11 +118,6 @@ include_directories(
     ${Cholmod_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
-)
-
-#SET(OpenCV_LIBS )
-list(APPEND LINK_LIBS
-  ${OpenCV_LIBS}
 )
 
 file(GLOB G2O_LIBS /home/vance/opt/g2o-20160424/install/lib/*.so)
@@ -148,18 +146,6 @@ target_link_libraries(se2lam
     ${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so
 )
 
-#add_library(lineDetector
-#    include/se2lam/Preprocess.h
-#    include/se2lam/lineDetection.h
-#    src/lineDetection.cpp
-#    src/Preprocess.cpp
-
-##    line_descriptor/
-#)
-
 
 add_subdirectory(rk)
 add_subdirectory(test)
-
-
-message("           ====== : " ${LINK_LIBS})

@@ -229,7 +229,7 @@ bool Config::acceptDepth(float depth)
 }
 
 
-Se2::Se2()
+Se2::Se2() : x(0.f), y(0.f), theta(0.f)
 {
 }
 Se2::Se2(float _x, float _y, float _theta) : x(_x), y(_y), theta(normalize_angle(_theta))

@@ -78,6 +78,11 @@ public:
     PtrKeyFrame getKFCurr();
     void trackFirstFrame();
 
+    void setTrackingState(const cvu::eTrackingState& s);
+    void setLastTrackingState(const cvu::eTrackingState& s);
+    cvu::eTrackingState getTrackingState();
+    cvu::eTrackingState getLastTrackingState();
+
 public:
     //! Variables
     Map* mpMap;
@@ -99,13 +104,11 @@ public:
     cv::Mat mImgLoop;
     cv::Mat mImgMatch;
 
-    mutex mMutexImg;
-    mutex mMutexMPLocal;
-    mutex mMutexKFLocal;
-    mutex mMutexLocalMap;
+    std::mutex mMutexImg;
+    std::mutex mMutexMPLocal;
+    std::mutex mMutexKFLocal;
+    std::mutex mMutexLocalMap;
 
-    cvu::eTrackingState mState;
-    cvu::eTrackingState mLastState;
     std::vector<double> mvScores;
 
 protected:
@@ -122,6 +125,10 @@ protected:
 
     float thMaxDistance;
     float thMaxAngular;
+
+    std::mutex mMutexState;
+    cvu::eTrackingState mState;
+    cvu::eTrackingState mLastState;
 };
 
 
