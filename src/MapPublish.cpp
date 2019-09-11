@@ -385,24 +385,28 @@ void MapPublish::PublishKeyFrames()
 //        Point2f d(msgs_b.x * mScaleRatio - pKF->odom.x, msgs_b.y * mScaleRatio - pKF->odom.y);
 //        mErrorSum += norm(d);
     }
+
 //    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
 
     //! Visual Odometry Graph for Localize only case
     //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
     if (mbIsLocalize) {
-        auto state = mpLocalize->getTrackingState();
-        auto lastState = mpLocalize->getLastTrackingState();
+        static geometry_msgs::Point msgsLast;   // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
+        geometry_msgs::Point msgsCurr;
 
-        geometry_msgs::Point msgsCurr, msgsLast;
-        if (state == cvu::OK || state == cvu::LOST) {
+        auto currState = mpLocalize->getTrackingState();
+        auto lastState = mpLocalize->getLastTrackingState();
+        auto id = mpLocalize->getKFCurr()->mIdKF;
+
+        if (currState == cvu::OK || currState == cvu::LOST) {
             static bool firstLocatied = true;
             Se2 Twb = mpLocalize->getCurrKFPose();  // 带锁访问
             msgsCurr.x = Twb.x / mScaleRatio;
             msgsCurr.y = Twb.y / mScaleRatio;
 
-            if (lastState == cvu::LOST && state == cvu::OK) {
+            if (currState == cvu::OK && lastState == cvu::LOST) {
                 firstLocatied = true;
-                printf("[MapPublis] #%d lastState = LOST and currentState = OK\n", mpLocalize->getKFCurr()->mIdKF);
+                fprintf(stderr, "[MapPublis] #%d lastState = LOST and currentState = OK\n", id);
             }
             if (firstLocatied) {
                 firstLocatied = false;
@@ -411,10 +415,10 @@ void MapPublish::PublishKeyFrames()
 
             mOdoGraph.points.push_back(msgsLast);
             mOdoGraph.points.push_back(msgsCurr);
-            printf("[MapPublis] #%d msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f], Twb: [%.4f, %.4f]\n",
-                   mpLocalize->getKFCurr()->mIdKF, msgsLast.x*mScaleRatio/1000.,
-                   msgsLast.y*mScaleRatio/1000., msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
-                   Twb.x/1000., Twb.y/1000.);
+//            printf("[MapPublis] #%d msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f], Twb: [%.4f, %.4f]\n",
+//                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
+//                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
+//                   Twb.x/1000., Twb.y/1000.);
 
             msgsLast = msgsCurr;
         }
@@ -706,7 +710,8 @@ void MapPublish::PublishOdomInformation()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    if (!mbIsLocalize) {    // 这里要对齐到首帧的Odom
+    if (!mbIsLocalize) {
+        //! 这里要对齐到首帧的Odom, 位姿从原点开始
         static Se2 firstOdom = mpMap->getCurrentKF()->odom;
         static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
 
@@ -715,12 +720,15 @@ void MapPublish::PublishOdomInformation()
         Mat Tb0bi = (Tb0w * Twbi).col(3);
         msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
         msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
-    } else {    // 这里要对齐到首帧的Pose
-        if (mpLocalize->getTrackingState() == cvu::OK || mpLocalize->getTrackingState() == cvu::LOST) {
+    } else {
+        //! 这里要对齐到首帧的Pose, 位姿不一定从原点开始
+        auto currState = mpLocalize->getTrackingState();
+        auto lastState = mpLocalize->getLastTrackingState();
+
+        if (currState == cvu::OK || currState == cvu::LOST) {
             PtrKeyFrame pKF = mpLocalize->getKFCurr();
 
             static bool isFirstFrame = true;
-//            static Mat Twc_b = cvu::inv(pKF->getPose()) * Config::cTb;
             static Mat Twc_b = mpLocalize->getCurrKFPose().toCvSE3();
             static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
 
@@ -729,15 +737,11 @@ void MapPublish::PublishOdomInformation()
             Mat Twc_bi = (Twc_b * Tb0bi).col(3);    // 再变换到首帧的pose坐标系原点下
             msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
             msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
-            if (mpLocalize->getTrackingState() == cvu::OK && mpLocalize->getLastTrackingState() == cvu::LOST)
+            if (currState == cvu::OK && lastState == cvu::LOST)
                 isFirstFrame = true;
             if (isFirstFrame) {
                 msgsLast = msgsCurr;
-                isFirstFrame = false;
-                Mat Twb0 = mpLocalize->getCurrKFPose().toCvSE3().col(3);
-                Se2 odo = pKF->odom;
-                fprintf(stderr, "[MapPublis] #%d First pose: [%.4f, %.4f], first odom: [%.4f, %.4f]\n",
-                        mpLocalize->getKFCurr()->mIdKF, Twb0.at<float>(0), Twb0.at<float>(1), odo.x, odo.y);
+                isFirstFrame = false;;
             }
         } else {
             return;

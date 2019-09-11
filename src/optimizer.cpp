@@ -231,8 +231,13 @@ g2o::ParameterSE3Offset *addParaSE3Offset(SlamOptimizer &opt, const g2o::Isometr
     return para;
 }
 
-//! FIXME 定位模式添加节点时有如下提示, 需要解决. (未必是在这个函数里)
-//! addVertex: FATAL, a vertex with ID 0 has already been registered with this graph
+/**
+ * @brief addVertexSE3Expmap 添加相机位姿节点, 6DOF
+ * @param opt   优化器
+ * @param pose  相机位姿Tcw
+ * @param id    KF id
+ * @param fixed 要优化相机位姿, 这里是false
+ */
 void addVertexSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int id, bool fixed)
 {
     g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
@@ -284,7 +289,7 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
 #else
 
     g2o::SE3Quat Tbc = toSE3Quat(extPara);
-    g2o::SE3Quat Tbw = Tbc * pose;
+    g2o::SE3Quat Tbw = Tbc * pose;  // Tbc * Tcw
 
     // 令旋转只在Z轴上
     Eigen::AngleAxisd AngleAxis_bw(Tbw.rotation());
@@ -331,6 +336,14 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
 }
 
 // MP节点默认不会固定
+/**
+ * @brief addVertexSBAXYZ  添加MP观测节点
+ * @param opt       优化器
+ * @param xyz       MP的三维坐标
+ * @param id        节点对应的id
+ * @param marginal  节点是否边缘化
+ * @param fixed     节点是否固定
+ */
 void addVertexSBAXYZ(SlamOptimizer &opt, const Eigen::Vector3d &xyz, int id, bool marginal,
                      bool fixed)
 {

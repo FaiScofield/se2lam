@@ -242,10 +242,8 @@ bool GlobalMapper::DetectLoopClose()
         PtrKeyFrame pKF = vpKFsAll[i];
         DBoW2::BowVector BowVec = pKF->mBowVec;
 
-        int idKF = pKF->mIdKF;
-        //        int id = pKF->id;
-
         // Omit neigbor KFs
+        int idKF = pKF->mIdKF;
         if (abs(idKF - idKFCurr) < minKFIdOffset) {
             continue;
         }
@@ -271,13 +269,15 @@ bool GlobalMapper::DetectLoopClose()
 /**
  * @brief GlobalMapper::VerifyLoopClose 回环验证
  * @param _mapMatchMP
- * @param _mapMatchGood
- * @param _mapMatchRaw
+ * @param _mapMatchGood 良好匹配点对
+ * @param _mapMatchRaw  原始匹配点对
  * @return
  */
 bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_mapMatchGood,
                                    map<int, int> &_mapMatchRaw)
 {
+    assert (mpKFCurr != NULL && mpKFLoop != NULL);
+
     _mapMatchMP.clear();
     _mapMatchGood.clear();
     _mapMatchRaw.clear();
@@ -287,11 +287,6 @@ bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_m
     int numMinMatchMP = Config::GM_VCL_NUM_MIN_MATCH_MP;        // 15, MP最少匹配数
     int numMinMatchKP = Config::GM_VCL_NUM_MIN_MATCH_KP;        // 30, KP最少匹配数
     double ratioMinMatchMP = Config::GM_VCL_RATIO_MIN_MATCH_MP; // 0.05
-
-    if (mpKFCurr == NULL || mpKFLoop == NULL) {
-        cerr << "## DEBUG GM: " << "No good match candidate found!!! 这种情况不应该出现!" << endl;
-        return false;
-    }
 
     //! Match ORB KPs
     ORBmatcher matcher;

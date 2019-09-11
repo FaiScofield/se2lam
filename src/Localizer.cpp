@@ -75,7 +75,7 @@ void Localizer::run()
     //! Main loop
     ros::Rate rate(Config::FPS);
     while (ros::ok()) {
-        mLastState = mState;
+        setLastTrackingState(mState);
 
         WorkTimer timer;
         timer.start();
@@ -96,7 +96,6 @@ void Localizer::run()
         if (getTrackingState() == cvu::FIRST_FRAME) {
             bool bIfRelocalized = relocalization();
             if (bIfRelocalized) {
-//                mState = cvu::OK;
                 setTrackingState(cvu::OK);
                 fprintf(stderr, "[Localizer] #%d relocalization successed! Set pose to: [%.4f, %.4f]\n",
                        mpKFCurr->mIdKF, mpKFCurr->Twb.x / 1000, mpKFCurr->Twb.y / 1000);
@@ -104,18 +103,29 @@ void Localizer::run()
             continue;
         }
 
+        //! TODO 丢失后,先通过LocalMap计算位姿, 如果位姿不对, 再用回环
+        //! TODO 回环验证需要更严格的条件
         if (getTrackingState() == cvu::LOST) {
-            fprintf(stderr, "[Localizer] #%d Tracking Lost! nLostFrame = %d\n", mpKFCurr->mIdKF, nLostFrames);
-            bool bIfRelocalized = relocalization();
+            bool bIfRelocalized = false;
+            bool bIfLocalMatched = false;
+
+//            bIfLocalMatched = TrackLocalMap();
+//            if (bIfLocalMatched) {
+//                setTrackingState(cvu::OK);
+//                fprintf(stderr, "[Localizer] #%d Track LocalMap successed! Set pose to: [%.4f, %.4f]\n",
+//                       mpKFCurr->mIdKF, mpKFCurr->Twb.x / 1000, mpKFCurr->Twb.y / 1000);
+//                continue;
+//            }
+
+            bIfRelocalized = relocalization();
             if (bIfRelocalized) {
-//                mState = cvu::OK;
                 setTrackingState(cvu::OK);
                 nLostFrames = 0;
                 fprintf(stderr, "[Localizer] #%d Relocalization successed! Set pose to: [%.4f, %.4f]\n",
                        mpKFCurr->mIdKF, mpKFCurr->Twb.x / 1000, mpKFCurr->Twb.y / 1000);
             } else {
                 nLostFrames++;
-                UpdatePoseCurr();
+                UpdatePoseCurr(); // 重定位失败,暂时用odom信息更新位姿
                 fprintf(stderr, "[Localizer] #%d Relocalization failed! Set pose to: [%.4f, %.4f]\n",
                        mpKFCurr->mIdKF, mpKFCurr->Twb.x / 1000, mpKFCurr->Twb.y / 1000);
             }
@@ -191,10 +201,6 @@ void Localizer::ReadFrameInfo(const Mat& img, const Se2& odo)
     mpKFCurr->ComputeBoW(mpORBVoc);
 }
 
-void Localizer::MatchLastFrame()
-{
-}
-
 void Localizer::MatchLocalMap()
 {
     //! Match in local map
@@ -217,6 +223,8 @@ void Localizer::MatchLocalMap()
 
 void Localizer::DoLocalBA()
 {
+    locker lock(mutex mMutexKFLocal);  //!@Vance: 20190729新增,解决MapPub闪烁问题
+
     SlamOptimizer optimizer;
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
@@ -227,15 +235,11 @@ void Localizer::DoLocalBA()
     int camParaId = 0;
     addCamPara(optimizer, Config::Kcam, camParaId);
 
-    int maxKFid = -1;
-
-    locker lock(mutex mMutexKFLocal);  //!@Vance: 20190729新增,解决MapPub问题
-
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, false);
     addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF,
                             Config::bTc);
-    maxKFid = mpKFCurr->mIdKF + 1;
+    int maxKFid = mpKFCurr->mIdKF + 1;
 
     // Add MPs in local map as fixed
     const float delta = Config::TH_HUBER;
@@ -278,7 +282,7 @@ void Localizer::DoLocalBA()
     timer.start();
 
     optimizer.initializeOptimization(0);
-    optimizer.optimize(30);
+    optimizer.optimize(20);
 
     timer.stop();
 
@@ -287,6 +291,77 @@ void Localizer::DoLocalBA()
 
     printf("[Localizer] #%d localBA Time = %.2fms, set pose to [%.4f, %.4f]\n", mpKFCurr->mIdKF,
            timer.time, mpKFCurr->Twb.x / 1000, mpKFCurr->Twb.y / 1000);
+}
+
+
+cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
+{
+    locker lock(mutex mMutexKFLocal);  // 加锁, 解决MapPub闪烁问题
+
+    SlamOptimizer optimizer;
+    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    optimizer.setAlgorithm(solver);
+    optimizer.setVerbose(false);
+
+    int camParaId = 0;
+    addCamPara(optimizer, Config::Kcam, camParaId);
+
+    // Add KFCurr
+    addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, false); // mpKFCurr->mIdKF
+    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, Config::bTc);
+
+    // Add MPs in local map as fixed
+    const float delta = Config::TH_HUBER;
+    set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
+    map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
+
+    // Add MP Vertex and Edges
+    for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
+        PtrMapPoint pMP = *iter;
+        if (pMP->isNull() || !pMP->isGoodPrl())
+            continue;
+
+        bool marginal = false;
+        bool fixed = true;
+        addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), 1 + pMP->mId, marginal, fixed);
+
+        int ftrIdx = Observations[pMP]; // 对应的KP索引
+        int octave = pMP->getOctave(mpKFCurr);
+        const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
+        Eigen::Vector2d uv = toVector2d(mpKFCurr->keyPointsUn[ftrIdx].pt);
+        Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
+
+        EdgeProjectXYZ2UV* ei = new EdgeProjectXYZ2UV();
+        ei->setVertex(0, dynamic_cast<OptimizableGraph::Vertex*>(optimizer.vertex(1 + pMP->mId)));
+        ei->setVertex(1, dynamic_cast<OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+        ei->setMeasurement(uv);
+        ei->setParameterId(0, camParaId);
+        ei->setInformation(info);
+        RobustKernelHuber* rk = new RobustKernelHuber;
+        ei->setRobustKernel(rk);
+        rk->setDelta(delta);
+        ei->setLevel(0);
+        optimizer.addEdge(ei);
+    }
+
+    WorkTimer timer;
+    timer.start();
+
+    optimizer.initializeOptimization(0);
+    optimizer.optimize(iterNum);
+
+    timer.stop();
+
+    Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, mpKFCurr->mIdKF));
+
+    Se2 Twb;
+    Twb.fromCvSE3(cvu::inv(Tcw) * Config::cTb);
+    printf("[Localizer] #%d localBA Time = %.2fms, pose after optimization is: [%.4f, %.4f]\n",
+           mpKFCurr->mIdKF, timer.time, Twb.x / 1000, Twb.y / 1000);
+
+    return Tcw;
 }
 
 void Localizer::DetectIfLost()
@@ -346,6 +421,7 @@ void Localizer::ComputeBowVecAll()
 bool Localizer::DetectLoopClose()
 {
     mvScores.clear();
+    mvLocalScores.clear();
 
     // Loop closure detection with ORB-BOW method
     bool bDetected = false;
@@ -362,6 +438,7 @@ bool Localizer::DetectLoopClose()
     int numKFs = vpKFsAll.size();
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
+    int bestIndex = -1;
 
     for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame pKF = vpKFsAll[i];
@@ -371,9 +448,15 @@ bool Localizer::DetectLoopClose()
         if (score > scoreBest) {
             scoreBest = score;
             pKFBest = pKF;
+            bestIndex = i;
         }
         mvScores.push_back(score);
     }
+    // 记录最佳得分KF前后各5帧的KF匹配得分
+    int leftIndex = max(0, bestIndex - 5);
+    int rightIndex = min(numKFs - 1, bestIndex + 5);
+    for (int j = leftIndex; j <= rightIndex; ++j)
+        mvLocalScores.push_back(mvScores[j]);
 
     //! TODO 提升判定条件
     // Loop CLosing Threshold ...
@@ -388,9 +471,9 @@ bool Localizer::DetectLoopClose()
     if (bDetected && Config::LOCAL_PRINT) {
         fprintf(stderr, "[Localizer] #%d Detect a loop close to #%d, bestScore = %f\n",
                pKFCurr->mIdKF, mpKFLoop->mIdKF, scoreBest);
-    } else {
+    } /*else {
         printf("[Localizer] #%d NO good loop close detected!\n", pKFCurr->mIdKF);
-    }
+    }*/
 
     return bDetected;
 }
@@ -560,7 +643,7 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
 
     //! text frame id
     string idCurr = to_string(mpKFCurr->mIdKF), idLoop = to_string(mpKFLoop->mIdKF);
-    string score = to_string(mvScores[0]), nMatches = to_string(mapMatch.size());
+    string score = to_string(mvScores[0]*100), nMatches = to_string(mapMatch.size());
     putText(mImgMatch, idCurr, Point(20, 15), 1, 1.1, Scalar(0, 255, 0), 2);
     putText(mImgMatch, idLoop, Point(20, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
     putText(mImgMatch, nMatches, Point(mImgMatch.cols - 60, 15), 1, 1.1, Scalar(0, 255, 0), 2);
@@ -643,11 +726,18 @@ void Localizer::UpdateLocalMapTrack()
 void Localizer::UpdateLocalMap(int searchLevel)
 {
     locker lock(mMutexLocalMap);
-
     mspKFLocal.clear();
     mspMPLocal.clear();
 
+    addLocalGraphThroughKdtree(mspKFLocal); // 注意死锁问题
+    size_t m = mspKFLocal.size();
+    std::cout << "addLocalGraphThroughKdtree() size: " << m << std::endl;
+
     mspKFLocal = mpKFCurr->getAllCovisibleKFs();
+    auto covisibleKFs = mpKFCurr->getAllCovisibleKFs();
+    mspKFLocal.insert(covisibleKFs.begin(), covisibleKFs.end());
+    size_t n = mspKFLocal.size();
+    std::cout << "getAllCovisibleKFs() size: " << n - m << std::endl;
 
     while (searchLevel > 0) {
         std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
@@ -658,12 +748,15 @@ void Localizer::UpdateLocalMap(int searchLevel)
         }
         searchLevel--;
     }
+    std::cout << "searchLevel size: " << mspKFLocal.size() - n << std::endl;
+    std::cout << "Tatal local KF size: " << mspKFLocal.size() << std::endl;
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
         set<PtrMapPoint> spMP = pKF->getAllObsMPs();
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
+    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;
 }
 
 
@@ -673,7 +766,6 @@ void Localizer::MatchLoopClose(map<int, int> mapMatchGood)
 
     //! Set MP observation in KFCurr
     for (auto iter = mapMatchGood.begin(); iter != mapMatchGood.end(); iter++) {
-
         int idxCurr = iter->first;
         int idxLoop = iter->second;
         bool isMPLoop = mpKFLoop->hasObservation(idxLoop);
@@ -777,32 +869,40 @@ bool Localizer::relocalization()
             mpKFCurr->setPose(mpKFLoop->getPose());
             mpKFCurr->addCovisibleKF(mpKFLoop);
 
-            // Update local map from KFLoop
-            UpdateLocalMap();
+            // Update local map from KFLoop. 更新LocalMap里的KF和MP
+            lock.unlock();
+            UpdateLocalMap(2);
+            lock.lock();
 
-            // Set MP observation of KFCurr from KFLoop
+            // Set MP observation of KFCurr from KFLoop. KFLoop里的MP关联到当前KF观测中
             MatchLoopClose(mapMatchGood);
 
-            // Do Local BA and Do outlier rejection
+            // Do Local BA and Do outlier rejection. 根据观测的MP做位姿图优化
             DoLocalBA();
 
-            // Set MP observation of KFCurr from local map
+            // Set MP observation of KFCurr from local map. LocalMap里的MP添加到当前KF观测中
             MatchLocalMap();
 
             // Do local BA again and do outlier rejection
             DoLocalBA();
 
-            DrawImgMatch(mapMatchGood);
-
             // output scores
+            string file = Config::SAVE_MATCH_IMAGE_PATH + "../loop/scores.txt";
+            ofstream ofs(file, ios::app | ios::out);
             if (Config::GLOBAL_PRINT) {
-                sort(mvScores.begin(), mvScores.end(), [](double a, double b){ return a > b; });
-                int m = std::min(15, (int)mvScores.size());
-                std::cerr << "[Localizer] #" << mpKFCurr->mIdKF << " LoopClose Scores: ";
-                for (int i = 0; i < m; ++i)
-                    std::cerr << mvScores[i] << ", ";
-                std::cerr << std::endl;
+//                sort(mvScores.begin(), mvScores.end(), [](double a, double b){ return a > b; });
+//                int m = std::min(15, (int)mvScores.size());
+                ofs << mpKFCurr->mIdKF << " LoopClose Scores: ";
+//                for (int i = 0; i < m; ++i)
+//                    ofs << mvScores[i] << " ";
+                for (int i = 0; i < mvLocalScores.size(); ++i)
+                    ofs << mvLocalScores[i] << " ";
+                ofs << std::endl;
             }
+            ofs.close();
+
+            // draw after sorted
+            DrawImgMatch(mapMatchGood);
         } else {
             ResetLocalMap();
         }
@@ -820,7 +920,7 @@ void Localizer::setTrackingState(const cvu::eTrackingState &s)
 
 void Localizer::setLastTrackingState(const cvu::eTrackingState &s)
 {
-//    locker lock(mMutexState);
+    locker lock(mMutexState);
     mLastState = s;
 }
 
@@ -832,8 +932,62 @@ cvu::eTrackingState Localizer::getTrackingState()
 
 cvu::eTrackingState Localizer::getLastTrackingState()
 {
-//    locker lock(mMutexState);
+    locker lock(mMutexState);
     return mLastState;
+}
+
+void Localizer::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
+{
+    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    vector<Point3f> vKFPoses;
+    for (size_t i = 0; i < vKFsAll.size(); ++i) {
+        Mat Twb = cvu::inv(vKFsAll[i]->getPose()) * Config::cTb;
+        Point3f pose(Twb.at<float>(0, 3)/1000.f, Twb.at<float>(1, 3)/1000.f, Twb.at<float>(2, 3)/1000.f);
+        vKFPoses.push_back(pose);
+    }
+
+    cv::flann::KDTreeIndexParams kdtreeParams;
+    cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
+
+    Se2 pose = getCurrKFPose();
+    std::vector<float> query = {pose.x/1000.f, pose.y/1000.f, 0.f};
+    int size = std::min(vKFsAll.size(), static_cast<size_t>(5));    // 最近的5个KF
+    std::vector<int> indices;
+    std::vector<float> dists;
+    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
+    for (size_t i = 0; i < indices.size(); ++i) {
+        if (indices[i] > 0 && dists[i] < 0.3 && vKFsAll[indices[i]]) // 距离在0.3m以内
+            setLocalKFs.insert(vKFsAll[indices[i]]);
+    }
+}
+
+bool Localizer::TrackLocalMap()
+{
+    UpdatePoseCurr();
+
+    MatchLocalMap();
+
+    int numMPCurr = mpKFCurr->getSizeObsMP();
+    if (numMPCurr > 30) {
+//                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+    }
+
+    UpdateCovisKFCurr();
+
+    UpdateLocalMap(1);
+
+    DrawImgCurr();
+
+    DetectIfLost();
+
+
+    UpdateLocalMap(1);
+    MatchLocalMap();    // 添加观测信息
+    Mat Tcw = DoPoseGraphOptimization(20);  // 根据观测做位姿图优化
+
+    // 验证优化结果的准确性
+
+
 }
 
 }  // namespace se2lam

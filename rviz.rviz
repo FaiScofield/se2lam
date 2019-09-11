@@ -4,6 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Marker1
         - /Marker1/Namespaces1
       Splitter Ratio: 0.5
     Tree Height: 284
@@ -25,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: ImgFramePub
 Toolbars:
   toolButtonStyle: 2
 Visualization Manager:
@@ -36,7 +37,15 @@ Visualization Manager:
       Marker Topic: /se2lam/Map
       Name: Marker
       Namespaces:
-        {}
+        Camera: true
+        CovisGraph: false
+        FeatGraph: false
+        KeyFramesActive: false
+        KeyFramesNegative: false
+        MapPointsActive: true
+        MapPointsNegative: true
+        MapPointsNow: true
+        OdoGraph: true
       Queue Size: 100
       Value: true
     - Class: rviz/Image

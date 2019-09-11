@@ -34,7 +34,6 @@ public:
 
     void ReadFrameInfo(const cv::Mat &img, const Se2& odo);
 
-    void MatchLastFrame();
     void MatchLocalMap();
 
     // Loop closing
@@ -44,6 +43,8 @@ public:
 
     void DoLocalBA();
     void DetectIfLost();
+    cv::Mat DoPoseGraphOptimization(int iterNum);
+    bool TrackLocalMap();
 
     // Local map
     void UpdateLocalMap(int searchLevel = 3);
@@ -61,12 +62,10 @@ public:
     void DrawImgMatch(const std::map<int, int> & mapMatch);
     void DrawImgCurr();
 
-
     void UpdateCovisKFCurr();
     int FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);
 
     // DEBUG
-//    void Test(int a = 1, int b = 2);
     void WriteTrajFile(std::ofstream & file);
 
     void requestFinish();
@@ -76,12 +75,12 @@ public:
     Se2 getCurrKFPose();
     Se2 getRefKFPose();
     PtrKeyFrame getKFCurr();
-    void trackFirstFrame();
 
     void setTrackingState(const cvu::eTrackingState& s);
     void setLastTrackingState(const cvu::eTrackingState& s);
     cvu::eTrackingState getTrackingState();
     cvu::eTrackingState getLastTrackingState();
+    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs);
 
 public:
     //! Variables
@@ -110,6 +109,7 @@ public:
     std::mutex mMutexLocalMap;
 
     std::vector<double> mvScores;
+    std::vector<double> mvLocalScores;
 
 protected:
     bool checkFinish();
