@@ -895,7 +895,7 @@ bool Localizer::relocalization()
                 ofs << mpKFCurr->mIdKF << " LoopClose Scores: ";
 //                for (int i = 0; i < m; ++i)
 //                    ofs << mvScores[i] << " ";
-                for (int i = 0; i < mvLocalScores.size(); ++i)
+                for (size_t i = 0; i < mvLocalScores.size(); ++i)
                     ofs << mvLocalScores[i] << " ";
                 ofs << std::endl;
             }
@@ -987,7 +987,7 @@ bool Localizer::TrackLocalMap()
 
     // 验证优化结果的准确性
 
-
+    return true;
 }
 
 }  // namespace se2lam
