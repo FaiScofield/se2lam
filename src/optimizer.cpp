@@ -15,6 +15,7 @@ using namespace g2o;
 using namespace std;
 using namespace Eigen;
 
+
 EdgeSE2XYZ *addEdgeSE2XYZ(SlamOptimizer &opt, const Vector2D &meas, int id0, int id1,
                           CamPara *campara, const SE3Quat &_Tbc, const Matrix2D &info,
                           double thHuber)
@@ -99,7 +100,8 @@ Matrix6d AdjTR(const g2o::SE3Quat &pose)
     return res;
 }
 
-
+//! 计算BCH近似表达式中的inv(J_l),
+//! @see: 视觉SLAM十四讲试(4.30)-(4.32)
 Matrix6d invJJl(const Vector6d &v6d)
 {
 
@@ -160,34 +162,30 @@ EdgeSE3ExpmapPrior::EdgeSE3ExpmapPrior() : BaseUnaryEdge<6, SE3Quat, VertexSE3Ex
     information().setIdentity();
 }
 
+/**
+ * @brief EdgeSE3ExpmapPrior::computeError KF 全局平面运动约束
+ * error: e = ln(Tm * T^(-1))^V
+ * jacobian: J = -Jr(-e)^(-1)
+ */
 void EdgeSE3ExpmapPrior::computeError()
 {
     VertexSE3Expmap *v = static_cast<VertexSE3Expmap *>(_vertices[0]);
     SE3Quat err = _measurement * v->estimate().inverse();
-    //    _error = _measurement.log() - v->estimate().log();
-    //    SE3Quat err = v->estimate().inverse() * _measurement;
-    //    SE3Quat err = _measurementInverse * v->estimate();
-    //    Eigen::AngleAxisd err_angleaxis(err.rotation());
-    //    _error.head<3>() = err_angleaxis.angle() * err_angleaxis.axis();
     _error = err.log();
-    //    _error.tail<3>() = err.translation();
 }
 
 void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat &m)
 {
     _measurement = m;
-    //    _measurementInverse = m.inverse();
-    //    _measurementInverseAdj = _measurementInverse.adj();
 }
 
 void EdgeSE3ExpmapPrior::linearizeOplus()
 {
-    //    VertexSE3Expmap *v = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    //    Vector6d err = ( _measurement * v->estimate().inverse() ).log() ;
-    //    _jacobianOplusXi = -invJJl(-err);
-    //    _jacobianOplusXi = - _measurementInverseAdj;
-    _jacobianOplusXi = -g2o::Matrix6d::Identity();
-    //    _jacobianOplusXi = _measurementInverseAdj;
+    //! NOTE 0917改成和PPT上一致
+    VertexSE3Expmap *v = static_cast<VertexSE3Expmap*>(_vertices[0]);
+    Vector6d err = (_measurement * v->estimate().inverse()).log() ;
+    _jacobianOplusXi = -invJJl(-err);
+//    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
 }
 
 bool EdgeSE3ExpmapPrior::read(istream &is)
@@ -232,7 +230,7 @@ g2o::ParameterSE3Offset *addParaSE3Offset(SlamOptimizer &opt, const g2o::Isometr
 }
 
 /**
- * @brief addVertexSE3Expmap 添加相机位姿节点, 6DOF
+ * @brief addVertexSE3Expmap 添加相机位姿节点, 6DOF, EdgeProjectXYZ2UV边连接的节点之一
  * @param opt   优化器
  * @param pose  相机位姿Tcw
  * @param id    KF id
@@ -335,14 +333,13 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
     return planeConstraint;
 }
 
-// MP节点默认不会固定
 /**
- * @brief addVertexSBAXYZ  添加MP观测节点
+ * @brief addVertexSBAXYZ  添加MP观测节点, 3DOF, EdgeProjectXYZ2UV边连接的节点之一
  * @param opt       优化器
  * @param xyz       MP的三维坐标
  * @param id        节点对应的id
  * @param marginal  节点是否边缘化
- * @param fixed     节点是否固定
+ * @param fixed     节点是否固定, default = false
  */
 void addVertexSBAXYZ(SlamOptimizer &opt, const Eigen::Vector3d &xyz, int id, bool marginal,
                      bool fixed)
@@ -497,6 +494,16 @@ void addVertexXYZ(SlamOptimizer &opt, const g2o::Vector3D &xyz, int id, bool mar
     opt.addVertex(v);
 }
 
+/**
+ * @brief addEdgeSE3Expmap 添加相机位姿间的约束边, 连接两个相机的位姿节点VertexSE3Expmap
+ * measure = Tc1c2 = Tbc.inv() * Tb1b2 * Tbc, C = SE3Quat(measure), _error = (T2.inv() * C * T1).log()
+ *
+ * @param opt       优化器
+ * @param measure   相机位姿误差
+ * @param id0       T1的id
+ * @param id1       T2的id
+ * @param info      信息矩阵
+ */
 void addEdgeSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &measure, int id0, int id1,
                       const g2o::Matrix6d &info)
 {
@@ -519,7 +526,7 @@ void addEdgeSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &measure, int id0, 
 }
 
 /**
- * @brief addEdgeXYZ2UV 添加重投影误差边
+ * @brief addEdgeXYZ2UV 添加重投影误差边, 连接路标节点VertexSBAPointXYZ和相机位姿节点VertexSE3Expmap
  * @param opt       优化器
  * @param measure   KP的像素坐标
  * @param id0       该MP的节点id

@@ -29,6 +29,8 @@ OdoSLAM::~OdoSLAM()
     delete mpMapStorage;
     delete mpFramePub;
     delete mpSensors;
+
+    delete mpVocabulary;
 }
 
 OdoSLAM::OdoSLAM()

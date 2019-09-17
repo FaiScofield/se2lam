@@ -18,10 +18,9 @@ typedef lock_guard<mutex> locker;
 
 int KeyFrame::mNextIdKF = 0;    // KF和MP的编号都是从1开始
 
-KeyFrame::KeyFrame()
+KeyFrame::KeyFrame() : mIdKF(-1), mbBowVecExist(false), mbNull(false)
 {
-    mbNull = false;
-    PtrKeyFrame pKF = nullptr;
+    PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
     mOdoMeasureTo = make_pair(pKF, SE3Constraint());
 
@@ -49,13 +48,15 @@ KeyFrame::KeyFrame()
 
 KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbNull(false)
 {
-    size_t sz = frame.keyPoints.size();
-    mViewMPs = vector<Point3f>(sz, Point3f(-1, -1, -1));
+    size_t n = frame.N;
+    mViewMPs = vector<Point3f>(n, Point3f(-1, -1, -1));
     mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>(
-        sz, Eigen::Matrix3d::Identity() * -1);
+        n, Eigen::Matrix3d::Identity() * -1);
+
     mIdKF = mNextIdKF;
     mNextIdKF++;
-    PtrKeyFrame pKF = nullptr;
+
+    PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
     mOdoMeasureTo = make_pair(pKF, SE3Constraint());
 
@@ -71,7 +72,6 @@ KeyFrame::~KeyFrame()
 // Please handle odometry based constraints after calling this function
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 {
-
     lock_guard<mutex> lckImg(mMutexImg);
     lock_guard<mutex> lckPose(mMutexPose);
     lock_guard<mutex> lckObs(mMutexObs);
@@ -111,11 +111,6 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mCovisibleKFs.clear();
 }
 
-// void KeyFrame::copyImgTo(cv::Mat & imgRet) {
-//    locker lock(mMutexImg);
-//    img.copyTo(imgRet);
-//}
-
 int KeyFrame::getSizeObsMP()
 {
     locker lock(mMutexObs);
@@ -151,6 +146,8 @@ set<PtrMapPoint> KeyFrame::getAllObsMPs(bool checkParallax)
     auto i = mObservations.begin(), iend = mObservations.end();
     for (; i != iend; i++) {
         PtrMapPoint pMP = i->first;
+        if (!pMP)
+            continue;
         if (pMP->isNull())
             continue;
         if (checkParallax && !pMP->isGoodPrl())
@@ -294,7 +291,7 @@ vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
     vector<PtrMapPoint> ret;
     int numKPs = keyPointsUn.size();
     for (int i = 0; i < numKPs; i++) {
-        PtrMapPoint pMP;
+        PtrMapPoint pMP = nullptr;
         std::map<int, PtrMapPoint>::iterator iter;
         iter = mDualObservations.find(i);
 

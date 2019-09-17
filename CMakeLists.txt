@@ -7,11 +7,11 @@ ENDIF()
 
 # 设置编译选项参数
 IF (CMAKE_COMPILER_IS_GNUCXX )
-#    SET(CMAKE_CXX_FLAGS_DEBUG  "-fsanitize=address -fno-omit-frame-pointer") #-fsanitize-recover=address -O1 -g
-#    SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+#    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fsanitize=address -fsanitize-recover=address") # -fno-omit-frame-pointer
+#    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fsanitize-recover=address") # -O1 -g
+#    set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fsanitize=address -fsanitize-recover=address")
 
-    ADD_DEFINITIONS("-Wall  -Wno-unused-variable
-                    -Wno-unused-but-set-variable -Wno-unknown-pragmas")  #-Werror
+    ADD_DEFINITIONS("-W -Wall -Wno-old-style-cast -Wno-deprecated-declarations -Wno-unused-parameter")  #-Werror
 ENDIF()
 
 add_subdirectory(Thirdparty/DBoW2)
@@ -19,7 +19,7 @@ add_subdirectory(Thirdparty/DBoW2)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
 # c++ 11 support for g2o, multi-thread and shared_ptr
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-old-style-cast -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ") #-Werror -g -O
 
 find_package(Eigen REQUIRED)
 #set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
@@ -45,7 +45,6 @@ find_package(catkin REQUIRED COMPONENTS
     image_transport
     rosbag
 )
-
 catkin_package(
     LIBRARIES ${PROJECT_NAME}
     CATKIN_DEPENDS
@@ -56,52 +55,7 @@ catkin_package(
         image_transport
     )
 include_directories(${catkin_INCLUDE_DIRS})
-# 去除ROS中opencv库的影响
-#set(catkin_LIBRARIES
-#    /opt/ros/kinetic/lib/libtf.so
-#    /opt/ros/kinetic/lib/libtf2_ros.so
-#    /opt/ros/kinetic/lib/libactionlib.so
-#    /opt/ros/kinetic/lib/libtf2.so
-#    /opt/ros/kinetic/lib/libcv_bridge.so
-#    #/opt/ros/kinetic/lib/x86_64-linux-gnu/libopencv_core3.so.3.3.1
-#    #/opt/ros/kinetic/lib/x86_64-linux-gnu/libopencv_imgproc3.so.3.3.1
-#    #/opt/ros/kinetic/lib/x86_64-linux-gnu/libopencv_imgcodecs3.so.3.3.1
-#    /opt/ros/kinetic/lib/libimage_transport.so
-#    /opt/ros/kinetic/lib/libmessage_filters.so
-#    /opt/ros/kinetic/lib/libclass_loader.so
-#    /opt/ros/kinetic/lib/libroslib.so
-#    /opt/ros/kinetic/lib/librospack.so
-#    /opt/ros/kinetic/lib/librosbag.so
-#    /opt/ros/kinetic/lib/librosbag_storage.so
-#    /opt/ros/kinetic/lib/libroslz4.so
-#    /opt/ros/kinetic/lib/libtopic_tools.so
-#    /opt/ros/kinetic/lib/libroscpp.so
-#    /opt/ros/kinetic/lib/librosconsole.so
-#    /opt/ros/kinetic/lib/librosconsole_log4cxx.so
-#    /opt/ros/kinetic/lib/librosconsole_backend_interface.so
-#    /opt/ros/kinetic/lib/libroscpp_serialization.so
-#    /opt/ros/kinetic/lib/libxmlrpcpp.so
-#    /opt/ros/kinetic/lib/librostime.so
-#    /opt/ros/kinetic/lib/libcpp_common.so
-#    /usr/lib/libPocoFoundation.so
-#    /usr/lib/x86_64-linux-gnu/libtinyxml.so
-#    /usr/lib/x86_64-linux-gnu/libtinyxml2.so
-#    /usr/lib/x86_64-linux-gnu/libdl.so
-#    /usr/lib/x86_64-linux-gnu/libpython2.7.so
-#    /usr/lib/x86_64-linux-gnu/libpthread.so
-#    /usr/lib/x86_64-linux-gnu/libconsole_bridge.so
-#    /usr/lib/x86_64-linux-gnu/liblz4.so
-#    /usr/lib/x86_64-linux-gnu/liblog4cxx.so
-#    /usr/lib/x86_64-linux-gnu/libboost_filesystem.so
-#    /usr/lib/x86_64-linux-gnu/libboost_signals.so
-#    /usr/lib/x86_64-linux-gnu/libboost_program_options.so
-#    /usr/lib/x86_64-linux-gnu/libboost_regex.so
-#    /usr/lib/x86_64-linux-gnu/libboost_system.so
-#    /usr/lib/x86_64-linux-gnu/libboost_thread.so
-#    /usr/lib/x86_64-linux-gnu/libboost_chrono.so
-#    /usr/lib/x86_64-linux-gnu/libboost_date_time.so
-#    /usr/lib/x86_64-linux-gnu/libboost_atomic.so
-#)
+
 list(APPEND LINK_LIBS
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}

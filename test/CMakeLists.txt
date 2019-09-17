@@ -6,6 +6,13 @@ target_link_libraries(test_vn
     ${G2O_LIBS}
 )
 
+add_executable(test_rk test_rk.cpp)
+target_link_libraries(test_rk
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+#    ${lineDetector}
+)
 
 add_executable(test_dataPub test_dataPub.cpp)
 target_link_libraries(test_dataPub
@@ -40,3 +47,4 @@ target_link_libraries(test_lineDetection
     se2lam
     ${LINK_LIBS}
 )
+

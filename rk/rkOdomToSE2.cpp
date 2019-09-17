@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <math.h>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 

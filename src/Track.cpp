@@ -51,6 +51,7 @@ Track::Track()
 Track::~Track()
 {
     delete mpORBextractor;
+    mpORBextractor = nullptr;
 }
 
 void Track::setMap(Map *pMap)
@@ -436,14 +437,14 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     bool bNeedKFByOdo = true;
     if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
-        bool c5 = abs(dOdo.theta) >= g2o::deg2rad(10.);  // 旋转量超过30°，这里原来少了绝对值符号
+        bool c5 = abs(dOdo.theta) >= g2o::deg2rad(20.);  // 旋转量超过30°，这里原来少了绝对值符号
         cv::Mat cTc = Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= (0.5 * Config::UPPER_DEPTH * 0.1);  // 相机的平移量足够大 0.5*
 
         bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限,考虑了不同深度下视野的不同)
     }
-    bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
+    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
     if (mpLocalMapper->acceptNewKF()) {

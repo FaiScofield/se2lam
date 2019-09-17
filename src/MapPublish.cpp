@@ -13,6 +13,7 @@
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <sensor_msgs/Image.h>
+#include <cstdio>
 
 namespace se2lam
 {
@@ -630,7 +631,7 @@ void MapPublish::run()
 
             // 显示保留两位小数
             char dt_char[10];
-            sprintf(dt_char, "%.2f", dt);
+            std::sprintf(dt_char, "%.2f", dt);
             string strTheta = "d_theta: " + string(dt_char) + "deg";
             string strKFID = "kf_id: " + to_string(pKP->mIdKF);
             cv::putText(imgMatch, strTheta, Point(20, 15), 1, 1.1, Scalar(0, 255, 0), 2);
@@ -725,7 +726,7 @@ void MapPublish::PublishOdomInformation()
         auto currState = mpLocalize->getTrackingState();
         auto lastState = mpLocalize->getLastTrackingState();
 
-        if (currState == cvu::OK || currState == cvu::LOST) {
+        if (currState == cvu::OK) {
             PtrKeyFrame pKF = mpLocalize->getKFCurr();
 
             static bool isFirstFrame = true;

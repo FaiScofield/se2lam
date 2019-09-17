@@ -345,6 +345,7 @@ void MapStorage::loadKeyFrames() {
         FileNode nodeKF = *it;
 
         pKF->mIdKF = (int)nodeKF["Id"];
+        pKF->id = pKF->mIdKF;
 
         pKF->keyPoints.clear();
         FileNode nodeKP = nodeKF["KeyPoints"];
@@ -431,13 +432,17 @@ void MapStorage::loadKeyFrames() {
     for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
         Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);
+        if (!img.data) {
+            fprintf(stderr, "[MapStore] KeyFrame image '%d.bmp' doesn't exist!!\n", i);
+            continue;
+        }
         img.copyTo(pKF->img);
     }
 
+    std::cout << "[MapStorage] Load " << mvKFs.size() << " KeyFrames." << std::endl;
 }
 
 void MapStorage::loadMapPoints() {
-
     mvMPs.clear();
 
     FileStorage file(mMapPath + mMapFile, FileStorage::READ);
@@ -462,6 +467,7 @@ void MapStorage::loadMapPoints() {
 
     file.release();
 
+    std::cout << "[MapStorage] Load " << mvMPs.size() << " MapPoints." << std::endl;
 }
 
 void MapStorage::loadObservations() {

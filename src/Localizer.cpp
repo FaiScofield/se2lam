@@ -40,6 +40,7 @@ Localizer::Localizer()
 Localizer::~Localizer()
 {
     delete mpORBextractor;
+    mpORBextractor = nullptr;
 }
 
 
@@ -168,8 +169,8 @@ void Localizer::run()
 
     cerr << "[Localizer] Exiting locaizer .." << endl;
 
-    ros::shutdown();
     setFinish();
+    ros::shutdown();
 }
 
 void Localizer::WriteTrajFile(ofstream& file)
@@ -237,8 +238,7 @@ void Localizer::DoLocalBA()
 
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, false);
-    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF,
-                            Config::bTc);
+    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::bTc);
     int maxKFid = mpKFCurr->mIdKF + 1;
 
     // Add MPs in local map as fixed
@@ -562,7 +562,8 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     if (mpKFCurr == NULL || mpKFLoop == NULL) {
         return;
     }
-
+    cv::Mat curr = mImgCurr.clone();
+    cv::Mat loop = mImgLoop.clone();
     if (mpKFLoop != NULL) {
         mpKFLoop->copyImgTo(mImgLoop);
     } else {
@@ -570,6 +571,8 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
         mImgLoop.setTo(cv::Scalar(0));
     }
 
+    if (mImgCurr.channels() == 1)
+        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
     if (mImgLoop.channels() == 1)
         cvtColor(mImgLoop, mImgLoop, CV_GRAY2BGR);
     if (mImgMatch.channels() == 1)
@@ -719,8 +722,8 @@ void Localizer::ResetLocalMap()
 
 void Localizer::UpdateLocalMapTrack()
 {
-    mspKFLocal.clear();
-    mspMPLocal.clear();
+//    mspKFLocal.clear();
+//    mspMPLocal.clear();
 }
 
 void Localizer::UpdateLocalMap(int searchLevel)
@@ -733,22 +736,22 @@ void Localizer::UpdateLocalMap(int searchLevel)
     size_t m = mspKFLocal.size();
     std::cout << "addLocalGraphThroughKdtree() size: " << m << std::endl;
 
-    mspKFLocal = mpKFCurr->getAllCovisibleKFs();
-    auto covisibleKFs = mpKFCurr->getAllCovisibleKFs();
-    mspKFLocal.insert(covisibleKFs.begin(), covisibleKFs.end());
-    size_t n = mspKFLocal.size();
-    std::cout << "getAllCovisibleKFs() size: " << n - m << std::endl;
+//    mspKFLocal = mpKFCurr->getAllCovisibleKFs();
+//    auto covisibleKFs = mpKFCurr->getAllCovisibleKFs();
+//    mspKFLocal.insert(covisibleKFs.begin(), covisibleKFs.end());
+//    size_t n = mspKFLocal.size();
+//    std::cout << "getAllCovisibleKFs() size: " << n - m << std::endl;
 
-    while (searchLevel > 0) {
-        std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
-        for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
-            PtrKeyFrame pKF = *iter;
-            std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
-            mspKFLocal.insert(spKF.begin(), spKF.end());
-        }
-        searchLevel--;
-    }
-    std::cout << "searchLevel size: " << mspKFLocal.size() - n << std::endl;
+//    while (searchLevel > 0) {
+//        std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
+//        for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
+//            PtrKeyFrame pKF = *iter;
+//            std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
+//            mspKFLocal.insert(spKF.begin(), spKF.end());
+//        }
+//        searchLevel--;
+//    }
+//    std::cout << "searchLevel size: " << mspKFLocal.size() - n << std::endl;
     std::cout << "Tatal local KF size: " << mspKFLocal.size() << std::endl;
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
@@ -890,9 +893,9 @@ bool Localizer::relocalization()
             string file = Config::SAVE_MATCH_IMAGE_PATH + "../loop/scores.txt";
             ofstream ofs(file, ios::app | ios::out);
             if (Config::GLOBAL_PRINT) {
-//                sort(mvScores.begin(), mvScores.end(), [](double a, double b){ return a > b; });
+                sort(mvScores.begin(), mvScores.end(), [](double a, double b){ return a > b; });
 //                int m = std::min(15, (int)mvScores.size());
-                ofs << mpKFCurr->mIdKF << " LoopClose Scores: ";
+//                ofs << mpKFCurr->mIdKF << " LoopClose Scores: ";
 //                for (int i = 0; i < m; ++i)
 //                    ofs << mvScores[i] << " ";
                 for (size_t i = 0; i < mvLocalScores.size(); ++i)
@@ -902,12 +905,13 @@ bool Localizer::relocalization()
             ofs.close();
 
             // draw after sorted
+            DrawImgCurr();
             DrawImgMatch(mapMatchGood);
         } else {
+            DrawImgCurr();
             ResetLocalMap();
         }
     }
-    DrawImgCurr();
 
     return bIfLoopCloseVerified;
 }
@@ -951,7 +955,7 @@ void Localizer::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
 
     Se2 pose = getCurrKFPose();
     std::vector<float> query = {pose.x/1000.f, pose.y/1000.f, 0.f};
-    int size = std::min(vKFsAll.size(), static_cast<size_t>(5));    // 最近的5个KF
+    int size = std::min(vKFsAll.size(), static_cast<size_t>(15));    // 最近的5个KF
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());

@@ -329,16 +329,16 @@ void LocalMapper::run()
             updateLocalGraphInMap();    // 加了新的KF进来，要更新一下Local Map
 
             //! 去除冗余的KF和MP，共视关系会被取消，mLocalGraphKFs和mLocalGraphMPs会更新
-//            pruneRedundantKFinMap();
+            pruneRedundantKFinMap();
 
             //! NOTE 原作者把这个步骤给注释掉了.
-//            removeOutlierChi2();        // 这里做了一次LocalBA,并对离群MPs取消联接关系,但没有更新位姿
+            removeOutlierChi2();        // 这里做了一次LocalBA,并对离群MPs取消联接关系,但没有更新位姿
 
             //! 再次更新LocalMap，由于冗余的KF和MP共视关系已经被取消，所以不必但心它们被添加回来
-//            updateLocalGraphInMap();
+            updateLocalGraphInMap();
 
             //! LocalMap优化，并更新Local KFs和MPs的位姿
-//            localBA();                  // 这里又做了一次LocalBA，有更新位姿
+            localBA();                  // 这里又做了一次LocalBA，有更新位姿
 
             timer.stop();
             fprintf(stderr, "[Local] #%d(KF#%d) Time cost for LocalMapper's process: %fms.\n",

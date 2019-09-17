@@ -815,7 +815,7 @@ void ORBextractor::ComputePyramid(cv::Mat image, cv::Mat Mask)
     }
 }
 
-
+/*
 void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint> &_keypoints,
                               std::vector<lineSort_S> &linefeature, OutputArray _descriptors)
 {
@@ -916,7 +916,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
         }
     }
 }
-
+*/
 
 /*
 void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)

@@ -52,7 +52,7 @@ const int ORBmatcher::TH_HIGH = 100;
 const int ORBmatcher::TH_LOW = 60;  // 75
 const int ORBmatcher::HISTO_LENGTH = 30;
 
-
+/*
 //获取匹配线段的起始匹配点
 void getMatcheLinesEndPoints(const Frame frame1, const Frame frame2,
                              std::vector<line_s_e>& matchesLine1_S_E, int linelable1,
@@ -99,7 +99,7 @@ void getMatcheLinesEndPoints(const Frame frame1, const Frame frame2,
         }
     }
 }
-
+*/
 void GetRotatePoints(Mat img, cv::Point2f origenPoint, cv::Point2f& rotatePoint, double angle)
 {
     float x1 = origenPoint.x;
@@ -198,6 +198,7 @@ int ORBmatcher::DescriptorDistance(const cv::Mat& a, const cv::Mat& b)
  * @param  pKF1         KeyFrame1
  * @param  pKF2         KeyFrame2
  * @param  vpMatches12  pKF2中与pKF1匹配的MapPoint，null表示没有匹配
+ * @PARAM  bIfMPOnly    是否考虑MP, 默认为true, Localizer下为false
  * @return              成功匹配的数量
  */
 int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& mapMatches12,
@@ -211,12 +212,12 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 
     vector<cv::KeyPoint> vKeysUn1 = pKF1->keyPointsUn;
     DBoW2::FeatureVector vFeatVec1 = pKF1->GetFeatureVector();
-    vector<PtrMapPoint> vpMapPoints1 = pKF1->GetMapPointMatches();
+    vector<PtrMapPoint> vpMapPoints1 = pKF1->GetMapPointMatches();  // Localizer下无MP
     cv::Mat Descriptors1 = pKF1->descriptors;
 
     vector<cv::KeyPoint> vKeysUn2 = pKF2->keyPointsUn;
     DBoW2::FeatureVector vFeatVec2 = pKF2->GetFeatureVector();
-    vector<PtrMapPoint> vpMapPoints2 = pKF2->GetMapPointMatches();
+    vector<PtrMapPoint> vpMapPoints2 = pKF2->GetMapPointMatches();  // Localizer下无MP
     cv::Mat Descriptors2 = pKF2->descriptors;
 
 
@@ -271,6 +272,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
                         if (pMP2->isNull())
                             continue;
                     }
+
 
                     if (vbMatched2[idx2])
                         continue;
@@ -845,7 +847,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
     return nmatches;
 }
 
-
+/*
 int ORBmatcher::MatchByPointAndLine(const Frame& frame1, Frame& frame2,
                                     vector<Point2f>& vbPrevMatched, const int winSize,
                                     vector<int>& vnMatches12, vector<int>& vMatchesDistance,
@@ -1051,5 +1053,5 @@ int ORBmatcher::MatchByPointAndLine(const Frame& frame1, Frame& frame2,
 
     return nmatches;
 }
-
+*/
 }  // namespace ORB_SLAM

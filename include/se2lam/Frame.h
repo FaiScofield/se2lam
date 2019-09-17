@@ -102,9 +102,9 @@ public:
     // 观测不到Map中的3D点
     std::vector<bool> mvbOutlier;
 
-    std::vector<lineSort_S> lineFeature;                // 线特征信息
-    std::vector<pointLineLable> pointAndLineLable;      // 每个点对应的线特征
-    std::vector<std::vector<int>> lineIncludePoints;    // 每条线中包含的点有哪些
+//    std::vector<lineSort_S> lineFeature;                // 线特征信息
+//    std::vector<pointLineLable> pointAndLineLable;      // 每个点对应的线特征
+//    std::vector<std::vector<int>> lineIncludePoints;    // 每条线中包含的点有哪些
 
 
 protected:

@@ -25,13 +25,17 @@ float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 
 
 Frame::Frame()
-{}
+{
+    mpORBExtractor = nullptr;
+    id = -1;
+    N = 0;
+}
 
 Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
 {
     mpORBExtractor = extractor;
 
-    undistort(im, img, Config::Kcam, Config::Dcam); //! 输入图像去畸变
+    undistort(im, img, K, distCoef); //! 输入图像去畸变
 
     //!  限制对比度自适应直方图均衡
     Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
@@ -44,7 +48,7 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
         return;
 
     keyPointsUn = keyPoints;
-    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(NULL));
+    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
     mvbOutlier = vector<bool>(N, false);
 
     if (mbInitialComputations) {
@@ -131,9 +135,9 @@ Frame::Frame(const Frame &f)
     Twb = f.Twb;
     Trb = f.Trb;
 
-    lineFeature = f.lineFeature;
-    pointAndLineLable = f.pointAndLineLable;
-    lineIncludePoints = f.lineIncludePoints;
+//    lineFeature = f.lineFeature;
+//    pointAndLineLable = f.pointAndLineLable;
+//    lineIncludePoints = f.lineIncludePoints;
 }
 
 Frame &Frame::operator=(const Frame &f)
@@ -170,9 +174,9 @@ Frame &Frame::operator=(const Frame &f)
     Twb = f.Twb;
     Trb = f.Trb;
 
-    lineFeature = f.lineFeature;
-    pointAndLineLable = f.pointAndLineLable;
-    lineIncludePoints = f.lineIncludePoints;
+//    lineFeature = f.lineFeature;
+//    pointAndLineLable = f.pointAndLineLable;
+//    lineIncludePoints = f.lineIncludePoints;
 
     return *this;
 }

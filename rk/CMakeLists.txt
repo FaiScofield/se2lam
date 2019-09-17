@@ -1,12 +1,4 @@
 
-add_executable(test_rk test_rk.cpp)
-target_link_libraries(test_rk
-    se2lam
-    ${LINK_LIBS}
-    ${G2O_LIBS}
-#    ${lineDetector}
-)
-
 add_executable(rkOdomToSE2 rkOdomToSE2.cpp)
 target_link_libraries(rkOdomToSE2
     se2lam

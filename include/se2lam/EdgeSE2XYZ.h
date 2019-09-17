@@ -11,8 +11,8 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <g2o/core/base_vertex.h>
 #include <g2o/core/base_binary_edge.h>
+#include <g2o/core/base_vertex.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
 #include <g2o/types/slam2d/vertex_se2.h>
 
@@ -32,17 +32,18 @@ g2o::SE2 SE3ToSE2(const g2o::SE3Quat& _se3);
 //! 2元边
 //! 2维测量，测量类型为Vector2d，代表像素的重投影误差
 //! 两种顶点类型分别是VertexSE2、VertexSBAPointXYZ，即此2元边连接SE2李群位姿点和三维地图点
-class EdgeSE2XYZ : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
+class EdgeSE2XYZ
+    : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
 {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     EdgeSE2XYZ();
     ~EdgeSE2XYZ();
 
     // Useless functions we don't care
-    virtual bool read(std::istream &is);
-    virtual bool write(std::ostream &os) const;
+    virtual bool read(std::istream& is);
+    virtual bool write(std::ostream& os) const;
 
 
     // Note: covariance are set here. Just set information to identity outside.
@@ -51,22 +52,29 @@ public:
 
     virtual void linearizeOplus();
 
-    inline void setCameraParameter(g2o::CameraParameters* _cam){cam = _cam;}
+    inline void setCameraParameter(g2o::CameraParameters* _cam) { cam = _cam; }
 
-    inline void setExtParameter(const g2o::SE3Quat& _Tbc) { Tbc = _Tbc; Tcb = Tbc.inverse(); }
+    inline void setExtParameter(const g2o::SE3Quat& _Tbc)
+    {
+        Tbc = _Tbc;
+        Tcb = Tbc.inverse();
+    }
 
 private:
     g2o::SE3Quat Tbc;
     g2o::SE3Quat Tcb;
 
-    g2o::CameraParameters * cam;
+    g2o::CameraParameters* cam;
 };
 
+//! 2元边
+//! 误差为3维向量, 表示... TODO
+//! 两种顶点的类型都是VertexSE2, 表示SE2位姿点
 class PreEdgeSE2 : public BaseBinaryEdge<3, Vector3D, VertexSE2, VertexSE2>
 {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-    PreEdgeSE2(){}
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    PreEdgeSE2() {}
 
     void computeError()
     {
@@ -78,9 +86,8 @@ public:
         double aj = v2->estimate().rotation().angle();
         Vector2D rj = v2->estimate().translation();
 
-        _error.head<2>() = Ri.transpose() * (rj-ri) - _measurement.head<2>();
+        _error.head<2>() = Ri.transpose() * (rj - ri) - _measurement.head<2>();
         _error[2] = aj - ai - _measurement[2];
-
     }
     virtual void linearizeOplus()
     {
@@ -89,19 +96,19 @@ public:
         Matrix2D Ri = v1->estimate().rotation().toRotationMatrix();
         Vector2D ri = v1->estimate().translation();
         Vector2D rj = v2->estimate().translation();
-        Vector2D rij = rj-ri;
+        Vector2D rij = rj - ri;
         Vector2D rij_x(-rij[1], rij[0]);
 
-        _jacobianOplusXi.block<2,2>(0,0) = -Ri.transpose();
-        _jacobianOplusXi.block<2,1>(0,2) = -Ri.transpose() * rij_x;
-        _jacobianOplusXi.block<1,2>(2,0).setZero();
-        _jacobianOplusXi(2,2) = 1;
+        _jacobianOplusXi.block<2, 2>(0, 0) = -Ri.transpose();
+        _jacobianOplusXi.block<2, 1>(0, 2) = -Ri.transpose() * rij_x;
+        _jacobianOplusXi.block<1, 2>(2, 0).setZero();
+        _jacobianOplusXi(2, 2) = 1;
 
         _jacobianOplusXj.setIdentity();
-        _jacobianOplusXj.block<2,2>(0,0) = Ri.transpose();
+        _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
     }
-    virtual bool read(std::istream& is) {return true;}
-    virtual bool write(std::ostream& os) const {return true;}
+    virtual bool read(std::istream& is) { return true; }
+    virtual bool write(std::ostream& os) const { return true; }
 };
 }
 

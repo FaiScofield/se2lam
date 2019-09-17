@@ -38,11 +38,11 @@
 namespace se2lam
 {
 
-struct pointLineLable {
-    int pointLable;
-    int lineLable;
-    double lent;
-};
+//struct pointLineLable {
+//    int pointLable;
+//    int lineLable;
+//    double lent;
+//};
 
 class ORBextractor
 {
@@ -62,10 +62,10 @@ public:
 
     float inline GetScaleFactor() { return scaleFactor; }
 
-    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
-                    std::vector<lineSort_S> &linefeature, cv::OutputArray descriptors);
-    std::vector<pointLineLable> pointAndLineLable;
-    std::vector<std::vector<int>> lineIncluePoints;
+//    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
+//                    std::vector<lineSort_S> &linefeature, cv::OutputArray descriptors);
+//    std::vector<pointLineLable> pointAndLineLable;
+//    std::vector<std::vector<int>> lineIncluePoints;
 
 protected:
     void ComputePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());

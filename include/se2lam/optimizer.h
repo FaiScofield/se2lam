@@ -50,9 +50,8 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond &q_)
 }
 
 
-//! BaseUnaryEdge 一元边
-//! SE3Quat
-//! SE3李代数，由r和t组成，r为四元素。转向量Vector7d后平移在前，旋转在后（虚部在前，实部在后）
+//! BaseUnaryEdge 一元边, KF之间的先验信息, KF的全局平面约束. 将当前KF的pose投射到平面运动空间作为measurement(z=0, alpha = beta = 0)
+//! g2o::SE3Quat 误差变量, SE3李代数, 由r和t组成, r为四元素。转向量Vector7d后平移在前, 旋转在后(虚前实后)
 //! VertexSE3Expmap 相机位姿节点，6个维度
 class G2O_TYPES_SBA_API EdgeSE3ExpmapPrior
     : public g2o::BaseUnaryEdge<6, g2o::SE3Quat, g2o::VertexSE3Expmap>

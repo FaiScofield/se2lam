@@ -1049,7 +1049,6 @@ void GlobalMapper::OptKFPairMatch(
 
 void GlobalMapper::PrintSE3(const g2o::SE3Quat se3)
 {
-
     Eigen::Vector3d _t = se3.translation();
     Eigen::Quaterniond _r = se3.rotation();
 
