@@ -69,7 +69,7 @@ void MapStorage::saveMap() {
 
     saveFtrGraph();
 
-    printf("[MapStorage] Map saved to __%s__.\n\n", (mMapPath+mMapFile).c_str());
+    printf("[MapStorage] Map saved to '%s'\n\n", (mMapPath+mMapFile).c_str());
 
 }
 
@@ -121,7 +121,7 @@ void MapStorage::saveKeyFrames() {
     // Save images to individual files
     for (int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
-        imwrite(mMapPath + to_string(i) + ".bmp", pKF->img);
+        imwrite(mMapPath + to_string(i) + ".bmp", pKF->mImage);
     }
 
     // Write data to file
@@ -136,8 +136,8 @@ void MapStorage::saveKeyFrames() {
         file << "Id" << i;
 
         file << "KeyPoints" << "[";
-        for (int j = 0, jend = pKF->keyPoints.size(); j < jend; j++) {
-            KeyPoint kp  = pKF->keyPoints[j];
+        for (int j = 0, jend = pKF->mvKeyPoints.size(); j < jend; j++) {
+            KeyPoint kp  = pKF->mvKeyPoints[j];
             file << "{";
             file << "pt" << kp.pt;
             file << "octave" << kp.octave;
@@ -147,21 +147,9 @@ void MapStorage::saveKeyFrames() {
         }
         file << "]";
 
-        file << "KeyPointsUn" << "[";
-        for (int j = 0, jend = pKF->keyPointsUn.size(); j < jend; j++) {
-            KeyPoint kp  = pKF->keyPointsUn[j];
-            file << "{";
-            file << "pt" << kp.pt;
-            file << "octave" << kp.octave;
-            file << "angle" << kp.angle;
-            file << "response" << kp.response;
-            file << "}";
-        }
-        file << "]";
+        file << "Descriptor" << pKF->mDescriptors;
 
-        file << "Descriptor" << pKF->descriptors;
-
-        if (pKF->mViewMPs.size() != pKF->keyPoints.size())
+        if (pKF->mViewMPs.size() != pKF->mvKeyPoints.size())
             cout << "Wrong size of KP in saving" << endl;
 
         file << "ViewMPs" << "[";
@@ -347,7 +335,7 @@ void MapStorage::loadKeyFrames() {
         pKF->mIdKF = (int)nodeKF["Id"];
         pKF->id = pKF->mIdKF;
 
-        pKF->keyPoints.clear();
+        pKF->mvKeyPoints.clear();
         FileNode nodeKP = nodeKF["KeyPoints"];
         {
             vector<KeyPoint> vKPs;
@@ -361,27 +349,10 @@ void MapStorage::loadKeyFrames() {
                 kp.response = (float)(*itKP)["response"];
                 vKPs.push_back(kp);
             }
-            pKF->keyPoints = vKPs;
+            pKF->mvKeyPoints = vKPs;
         }
 
-        pKF->keyPointsUn.clear();
-        FileNode nodeKPUn = nodeKF["KeyPointsUn"];
-        {
-            vector<KeyPoint> vKPs;
-
-            FileNodeIterator itKP = nodeKPUn.begin(), itKPend = nodeKPUn.end();
-            for (; itKP != itKPend; itKP++) {
-                KeyPoint kp;
-                (*itKP)["pt"] >> kp.pt;
-                kp.octave = (int)(*itKP)["octave"];
-                kp.angle = (float)(*itKP)["angle"];
-                kp.response = (float)(*itKP)["response"];
-                vKPs.push_back(kp);
-            }
-            pKF->keyPointsUn = vKPs;
-        }
-
-        nodeKF["Descriptor"] >> pKF->descriptors;
+        nodeKF["Descriptor"] >> pKF->mDescriptors;
 
         pKF->mViewMPs.clear();
         FileNode nodeViewMP = nodeKF["ViewMPs"];
@@ -398,7 +369,7 @@ void MapStorage::loadKeyFrames() {
             }
             pKF->mViewMPs = vPos;
         }
-        if (pKF->keyPoints.size() != pKF->mViewMPs.size())
+        if (pKF->mvKeyPoints.size() != pKF->mViewMPs.size())
             cout << "Wrong KP size after loading " << endl;
 
         pKF->mViewMPsInfo.clear();
@@ -436,7 +407,7 @@ void MapStorage::loadKeyFrames() {
             fprintf(stderr, "[MapStore] KeyFrame image '%d.bmp' doesn't exist!!\n", i);
             continue;
         }
-        img.copyTo(pKF->img);
+        img.copyTo(pKF->mImage);
     }
 
     std::cout << "[MapStorage] Load " << mvKFs.size() << " KeyFrames." << std::endl;

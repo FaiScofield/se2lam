@@ -147,11 +147,11 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
-            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->keyPointsUn[i].pt,
+            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
                                            Config::Kcam * pMP->mMainKF->Tcw.rowRange(0, 3),
                                            Config::Kcam * mpNewKF->Tcw.rowRange(0, 3));
             Point3f posNewKF = cvu::se3map(mpNewKF->Tcw, x3d);
-            if (!pMP->acceptNewObserve(posNewKF, mpNewKF->keyPoints[i])) {
+            if (!pMP->acceptNewObserve(posNewKF, mpNewKF->mvKeyPoints[i])) {
                 continue;
             }
             if (posNewKF.z > Config::UPPER_DEPTH || posNewKF.z < Config::LOWER_DEPTH)

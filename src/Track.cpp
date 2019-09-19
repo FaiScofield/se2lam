@@ -46,6 +46,7 @@ Track::Track()
 
     nLostFrames = 0;
     mMatchAveOffset = Point2f(0.f, 0.f);
+    H = Mat::eye(3, 3, CV_64F);
 }
 
 Track::~Track()
@@ -102,7 +103,6 @@ void Track::run()
 
             {
                 locker lock(mMutexForPub);
-//                bool noFrame = !(Frame::nextId);
                 if (mState == cvu::FIRST_FRAME) {
                     mCreateFrame(img, odo);
                 } else if (mState == cvu::OK) {
@@ -138,7 +138,7 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
     mFrame.Twb = Se2(0, 0, 0);          // 当前帧World->Body，即Body的世界坐标，首帧为原点
     mFrame.Tcw = Config::cTb.clone();   // 当前帧Camera->World
 
-    if (mFrame.keyPoints.size() > 100) {
+    if (mFrame.mvKeyPoints.size() > 100) {
         cout << "========================================================" << endl;
         cout << "[Track] Create first frame with " << mFrame.N << " features. "
              << "And the start odom is: " << odo << endl;
@@ -152,7 +152,7 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
         mState = cvu::OK;
     } else {
         cout << "[Track] Failed to create first frame for too less keyPoints: "
-             << mFrame.keyPoints.size() << endl;
+             << mFrame.mvKeyPoints.size() << endl;
         Frame::nextId = 0;
 
         mState = cvu::FIRST_FRAME;
@@ -173,16 +173,17 @@ void Track::mTrack(const Mat &img, const Se2 &odo)
 
     ORBmatcher matcher(0.75);   // 由于trackWithRefKF,间隔有些帧数，nnratio不应过小
 
-    // 上一帧的KF附近40*40方形cell内进行搜索获取匹配索引
+    //! 上一帧的KF附近40*40方形cell内进行搜索获取匹配索引
     //! mPrevMatched为参考帧KP的位置, 这里和当前帧匹配上的KP会更新成当前帧对应KP的位置
-    //! mPrevMatched这个变量没啥用, 直接用mRefFrame.keyPointsUn其实就可以了
+    //! mPrevMatched这个变量没啥用, 直接用mRefFrame.keyPoints其实就可以了
 //    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx); // 20
 
-    //! 用运动先验设置Cell的位置
-    int nMatchedSum = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, mMatchAveOffset, mMatchIdx, 20);
+    //! 基于H矩阵的透视变换先验估计投影Cell的位置
+    int nMatchedSum = matcher.MatchByWindowWarp(mRefFrame, mFrame, H, mMatchIdx, 20);
 
-    // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
-    int nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
+    //! 利用基础矩阵F计算匹配内点，内点数大于10才能继续
+    //! 已改成利用单应矩阵H计算
+    int nMatched = removeOutliers(mRefFrame.mvKeyPoints, mFrame.mvKeyPoints, mMatchIdx);
 
     // 跟踪成功后则三角化计算MP，获取 匹配上参考帧的MP数量 和 未匹配上MP但有良好视差的点对数
     // Check parallax and do triangulation
@@ -259,14 +260,15 @@ void Track::updateFramePose()
     Sigmak = Sigma_k_1;
 }
 
-//!@Vance: 当前帧设为KF时才执行，将当前KF变参考帧，mRefFrame这个变量有点多余
+//! 当前帧设为KF时才执行，将当前KF变参考帧，将当前帧的KP转到mPrevMatched中.
+//! mRefFrame这个变量有点多余
 void Track::resetLocalTrack()
 {
     // mFrame变参考帧后，这两个值没用了，归零
     mFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
     mFrame.Trb = Se2(0, 0, 0);
     mRefFrame = mFrame;
-    KeyPoint::convert(mFrame.keyPoints, mPrevMatched);  // cv::KeyPoint 转 cv::Point2f
+    KeyPoint::convert(mFrame.mvKeyPoints, mPrevMatched);  // cv::KeyPoint 转 cv::Point2f
 
     // 更新当前Local MP为参考帧观测到的MP
     mLocalMPs = mpKF->mViewMPs;
@@ -277,6 +279,8 @@ void Track::resetLocalTrack()
         preSE2.meas[i] = 0;
     for (int i = 0; i < 9; i++)
         preSE2.cov[i] = 0;
+
+    H = Mat::eye(3, 3, CV_64F);
 }
 
 // 可视化用，数据拷贝
@@ -288,8 +292,8 @@ int Track::copyForPub(vector<KeyPoint> &kp1, vector<KeyPoint> &kp2, Mat &img1, M
     mRefFrame.copyImgTo(img1);
     mFrame.copyImgTo(img2);
 
-    kp1 = mRefFrame.keyPoints;
-    kp2 = mFrame.keyPoints;
+    kp1 = mRefFrame.mvKeyPoints;
+    kp2 = mFrame.mvKeyPoints;
     vMatches12 = mMatchIdx;
 
     return !mMatchIdx.empty();
@@ -402,8 +406,10 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
     }
 
     vector<unsigned char> mask;
-    if (pt1.size() != 0)
-        findFundamentalMat(pt1, pt2, FM_RANSAC, 2, 0.99, mask);  // 默认RANSAC法计算F矩阵
+    if (pt1.size() != 0) {
+//        findFundamentalMat(pt1, pt2, FM_RANSAC, 3, 0.99, mask);  // 默认RANSAC法计算F矩阵
+        H = findHomography(pt1, pt2, RANSAC, 3, mask);
+    }
 
     int nInlier = 0;
     for (int i = 0, iend = mask.size(); i < iend; i++) {
@@ -418,6 +424,7 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
     if (nInlier < 10) {
         nInlier = 0;
         std::fill(mMatchIdx.begin(), mMatchIdx.end(), -1);
+        H = Mat::eye(3, 3, CV_64F);
     }
 
     return nInlier;
@@ -430,7 +437,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;  // 2.1 和参考帧的匹配上的MP数不能太多(小于50%)
     bool c2 = mnGoodPrl > 20;        // 且没匹配上的KP中拥有良好视差的点数大于40
     bool c3 = mFrame.id - mpKF->id > nMaxFrames;  // 2.2 或间隔达到上限了
-    bool c4 = nMatched < std::min(0.1f * Config::MaxFtrNumber, 20.f);  // 2.3 或匹配对小于1/10最大特征点数
+    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber;  // 2.3 或匹配对小于1/10最大特征点数
     // 满足条件1，和条件2中的一个(共2个条件)，则可能需要加入关键帧，实际还得看odom那边的条件
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
@@ -444,7 +451,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 
         bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限,考虑了不同深度下视野的不同)
     }
-    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
+    bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
     if (mpLocalMapper->acceptNewKF()) {
@@ -494,8 +501,8 @@ int Track::doTriangulate()
         }
 
         // 3.如果参考帧KP没有对应的MP，则为此匹配对KP三角化计算深度
-        Point2f pt_KF = mpKF->keyPointsUn[i].pt;
-        Point2f pt = mFrame.keyPointsUn[mMatchIdx[i]].pt;
+        Point2f pt_KF = mpKF->mvKeyPoints[i].pt;
+        Point2f pt = mFrame.mvKeyPoints[mMatchIdx[i]].pt;
         Point3f pos = cvu::triangulate(pt_KF, pt, P_KF, P);
 
         // 3.如果深度计算符合预期，就将有深度的KP更新到LocalMPs里
@@ -537,26 +544,6 @@ void Track::setFinish()
 {
     unique_lock<mutex> lock(mMutexFinish);
     mbFinished = true;
-}
-
-
-void Track::DrawMachesPoints(const cv::Mat fmg, const cv::Mat img,
-                             std::vector<int> vMatchesDistance)
-{
-    Mat grayImgInition = fmg.clone();
-    Mat grayImgCurrent = img.clone();
-    cv::Mat MatchesImage;
-    vector<DMatch> GoodmatchePoints;
-    for (size_t i = 0; i < mMatchIdx.size(); i++) {
-        if (mMatchIdx[i] > 0) {
-            DMatch dmatches(i, mMatchIdx[i], vMatchesDistance[i]);
-            GoodmatchePoints.push_back(dmatches);
-        }
-    }
-    drawMatches(grayImgInition, mRefFrame.keyPointsUn, grayImgCurrent, mFrame.keyPointsUn,
-                GoodmatchePoints, MatchesImage);
-    //    cv::imshow("MatchesImage",MatchesImage);
-    //    cv::waitKey(1);
 }
 
 //! TODO 完成重定位功能

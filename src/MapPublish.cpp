@@ -614,6 +614,9 @@ void MapPublish::run()
         }
 
         cv::Mat img = mpFramePub->drawFrame();
+        // 给参考帧标注KFid号
+        PtrKeyFrame pKP = mpMap->getCurrentKF();
+        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
         if (img.empty())
             continue;
 
@@ -623,14 +626,13 @@ void MapPublish::run()
 
         // draw image matches
         if (!mbIsLocalize) {
-            PtrKeyFrame pKP = mpMap->getCurrentKF();
             cv::Mat imgMatch = mpFramePub->drawMatch();
             float lastThetaKF = pKP->odom.theta;
             float currTheta = mpLocalize->getCurrentFrameOdom().z;
             float dt = normalize_angle(currTheta - lastThetaKF) * 180 / M_PI;
 
             // 显示保留两位小数
-            char dt_char[10];
+            char dt_char[16];
             std::sprintf(dt_char, "%.2f", dt);
             string strTheta = "d_theta: " + string(dt_char) + "deg";
             string strKFID = "kf_id: " + to_string(pKP->mIdKF);

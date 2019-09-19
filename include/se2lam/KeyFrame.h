@@ -32,11 +32,9 @@ public:
     }
     ~SE3Constraint() {}
 };
-
 typedef shared_ptr<SE3Constraint> PtrSE3Cstrt;
 
 class MapPoint;
-
 typedef shared_ptr<MapPoint> PtrMapPoint;
 
 class KeyFrame : public Frame
@@ -49,9 +47,6 @@ public:
     cv::Mat getPose();
     void setPose(const cv::Mat &_Tcw);
     void setPose(const Se2 &_Twb);
-
-    int mIdKF;
-    static int mNextIdKF;
 
     struct IdLessThan {
         bool operator()(const shared_ptr<KeyFrame> &lhs, const shared_ptr<KeyFrame> &rhs) const {
@@ -68,6 +63,8 @@ public:
     void eraseCovisibleKF(const shared_ptr<KeyFrame> pKF);
     void addCovisibleKF(const shared_ptr<KeyFrame> pKF);
 
+    //! NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
+    void setViewMP(cv::Point3f pt3f, int idx, Eigen::Matrix3d info);
 
     //! Functions for observation operations
     std::set<PtrMapPoint> getAllObsMPs(bool checkParallax = true);
@@ -93,13 +90,25 @@ public:
     // Set a new MP in location index (used in MP merge)
     void setObservation(const PtrMapPoint &pMP, int idx);
 
+    void ComputeBoW(ORBVocabulary *_pVoc);
+    DBoW2::FeatureVector GetFeatureVector();
+    DBoW2::BowVector GetBowVector();
 
+    vector<PtrMapPoint> GetMapPointMatches();
+
+    void addFtrMeasureFrom(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
+    void addFtrMeasureTo(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
+    void eraseFtrMeasureFrom(shared_ptr<KeyFrame> pKF);
+    void eraseFtrMeasureTo(shared_ptr<KeyFrame> pKF);
+
+    void setOdoMeasureFrom(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
+    void setOdoMeasureTo(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
+
+public:
+    int mIdKF;
+    static int mNextIdKF;
     vector<cv::Point3f> mViewMPs;
     vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mViewMPsInfo;
-
-    //! NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
-    void setViewMP(cv::Point3f pt3f, int idx, Eigen::Matrix3d info);
-
 
     // KeyFrame contraints: From this or To this
     std::map<shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureFrom;  // 特征图中后面的连接
@@ -110,25 +119,13 @@ public:
     std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomFromSelf;
     std::pair<shared_ptr<KeyFrame>, PreSE2> preOdomToSelf;
 
-    void addFtrMeasureFrom(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
-    void addFtrMeasureTo(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
-    void eraseFtrMeasureFrom(shared_ptr<KeyFrame> pKF);
-    void eraseFtrMeasureTo(shared_ptr<KeyFrame> pKF);
-
-    void setOdoMeasureFrom(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
-    void setOdoMeasureTo(shared_ptr<KeyFrame> pKF, const cv::Mat &_mea, const cv::Mat &_info);
-
-
     // ORB BoW by THB:
-    void ComputeBoW(ORBVocabulary *_pVoc);
-    DBoW2::FeatureVector GetFeatureVector();
-    DBoW2::BowVector GetBowVector();
     DBoW2::BowVector mBowVec;
     DBoW2::FeatureVector mFeatVec;
     bool mbBowVecExist;
 
 
-    vector<PtrMapPoint> GetMapPointMatches();
+
 
 protected:
     std::map<PtrMapPoint, int> mObservations;       // int为MP在此KF中对应的特征点的索引
@@ -139,6 +136,7 @@ protected:
 
     std::mutex mMutexPose;
     std::mutex mMutexObs;
+    std::mutex mMutexCovis;
 //    std::mutex mMutexImg; // 这个在Frame里已经有了
 };
 

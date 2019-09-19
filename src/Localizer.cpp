@@ -141,7 +141,7 @@ void Localizer::run()
 
             int numMPCurr = mpKFCurr->getSizeObsMP();
             if (numMPCurr > 30) {
-//                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
             }
 
             UpdateCovisKFCurr();
@@ -260,7 +260,7 @@ void Localizer::DoLocalBA()
         int ftrIdx = Observations[pMP];
         int octave = pMP->getOctave(mpKFCurr);
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
-        Eigen::Vector2d uv = toVector2d(mpKFCurr->keyPointsUn[ftrIdx].pt);
+        Eigen::Vector2d uv = toVector2d(mpKFCurr->mvKeyPoints[ftrIdx].pt);
         Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
 
         EdgeProjectXYZ2UV* ei = new EdgeProjectXYZ2UV();
@@ -330,7 +330,7 @@ cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
         int ftrIdx = Observations[pMP]; // 对应的KP索引
         int octave = pMP->getOctave(mpKFCurr);
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
-        Eigen::Vector2d uv = toVector2d(mpKFCurr->keyPointsUn[ftrIdx].pt);
+        Eigen::Vector2d uv = toVector2d(mpKFCurr->mvKeyPoints[ftrIdx].pt);
         Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
 
         EdgeProjectXYZ2UV* ei = new EdgeProjectXYZ2UV();
@@ -368,29 +368,34 @@ void Localizer::DetectIfLost()
 {
     locker lock(mMutexState);
 
-    float dx = mpKFCurr->Twb.x - mpKFRef->Twb.x;
-    float dy = mpKFCurr->Twb.y - mpKFRef->Twb.y;
-    float dt = mpKFCurr->Twb.theta - mpKFRef->Twb.theta;
-    bool distanceOK = sqrt(dx * dx + dy * dy) < thMaxDistance;
-    bool angleOK = abs(normalize_angle(dt)) < thMaxAngular;  // rad
     bool haveKFLocal = GetLocalKFs().size() > 0;
-
-    if (distanceOK && angleOK && haveKFLocal) {
-        mState = cvu::OK;
-        return;
-    }
-    if (!distanceOK) {
-        fprintf(stderr, "[Localizer] #%d Lost because too large distance: %.3f\n", mpKFCurr->mIdKF, sqrt(dx * dx + dy * dy));
-        mState = cvu::LOST;
-    }
-    if (!angleOK) {
-        fprintf(stderr, "[Localizer] #%d Lost because too large angle: %.2f degree\n", mpKFCurr->mIdKF, g2o::rad2deg(dt));
-        mState = cvu::LOST;
-    }
     if (!haveKFLocal) {
         fprintf(stderr, "[Localizer] #%d Lost because with no local KFs!", mpKFCurr->mIdKF);
         mState = cvu::LOST;
+        return;
     }
+
+    Se2 dvo = mpKFCurr->Twb - mpKFRef->Twb;
+    Se2 dodom = mpKFCurr->odom - mpKFRef->odom;
+    float distVO = cv::norm(cv::Point2f(dvo.x, dvo.y));
+    float distOdom = cv::norm(cv::Point2f(dodom.x, dodom.y));
+
+    bool distanceOK = distVO <= (1.5 * distOdom + 50);
+    bool angleOK = abs(normalize_angle(dvo.theta)) < (1.5 * abs(normalize_angle(dodom.theta)) + 0.05);  // rad
+    if (!distanceOK) {
+        fprintf(stderr, "[Localizer] #%d Lost because too large distance: %f compared to odom: %f\n",
+                mpKFCurr->mIdKF, distVO, distOdom);
+        mState = cvu::LOST;
+        return;
+    }
+    else if (!angleOK) {
+        fprintf(stderr, "[Localizer] #%d Lost because too large angle: %f degree compared to odom: %f\n",
+                mpKFCurr->mIdKF, g2o::rad2deg(abs(normalize_angle(dvo.theta))), g2o::rad2deg(abs(normalize_angle(dvo.theta))));
+        mState = cvu::LOST;
+        return;
+    }
+
+    mState = cvu::OK;
 }
 
 void Localizer::setMap(Map* pMap)
@@ -538,8 +543,8 @@ void Localizer::DrawImgCurr()
     if (mImgCurr.channels() == 1)
         cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
 
-    for (int i = 0, iend = mpKFCurr->keyPoints.size(); i < iend; i++) {
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
 
         bool ifMPCurr = mpKFCurr->hasObservation(i);
@@ -580,8 +585,8 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     vconcat(mImgCurr, mImgLoop, mImgMatch);  // 垂直拼接
 
     //! Draw Features
-    for (int i = 0, iend = mpKFCurr->keyPoints.size(); i < iend; i++) {
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
         bool ifMPCurr = mpKFCurr->hasObservation(i);
         Scalar colorCurr;
@@ -592,8 +597,8 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
         }
         circle(mImgMatch, ptCurr, 3, colorCurr, 1);
     }
-    for (int i = 0, iend = mpKFLoop->keyPoints.size(); i < iend; i++) {
-        KeyPoint kpLoop = mpKFLoop->keyPoints[i];
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += mImgCurr.rows;
@@ -611,11 +616,11 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     //! Draw Matches
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
         int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->keyPoints[idxCurr];
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
         Point2f ptCurr = kpCurr.pt;
 
         int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->keyPoints[idxLoop];
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += mImgCurr.rows;
@@ -683,8 +688,8 @@ void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
         vIdxCurr.push_back(idxCurr);
         vIdxLoop.push_back(idxLoop);
 
-        vPtCurr.push_back(_pKFCurr->keyPointsUn[idxCurr].pt);
-        vPtLoop.push_back(_pKFLoop->keyPointsUn[idxLoop].pt);
+        vPtCurr.push_back(_pKFCurr->mvKeyPoints[idxCurr].pt);
+        vPtLoop.push_back(_pKFLoop->mvKeyPoints[idxLoop].pt);
     }
 
     // RANSAC with fundemantal matrix
@@ -733,8 +738,8 @@ void Localizer::UpdateLocalMap(int searchLevel)
     mspMPLocal.clear();
 
     addLocalGraphThroughKdtree(mspKFLocal); // 注意死锁问题
-    size_t m = mspKFLocal.size();
-    std::cout << "addLocalGraphThroughKdtree() size: " << m << std::endl;
+//    size_t m = mspKFLocal.size();
+//    std::cout << "addLocalGraphThroughKdtree() size: " << m << std::endl;
 
 //    mspKFLocal = mpKFCurr->getAllCovisibleKFs();
 //    auto covisibleKFs = mpKFCurr->getAllCovisibleKFs();
@@ -742,24 +747,24 @@ void Localizer::UpdateLocalMap(int searchLevel)
 //    size_t n = mspKFLocal.size();
 //    std::cout << "getAllCovisibleKFs() size: " << n - m << std::endl;
 
-//    while (searchLevel > 0) {
-//        std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
-//        for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
-//            PtrKeyFrame pKF = *iter;
-//            std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
-//            mspKFLocal.insert(spKF.begin(), spKF.end());
-//        }
-//        searchLevel--;
-//    }
+    while (searchLevel > 0) {
+        std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
+        for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
+            PtrKeyFrame pKF = *iter;
+            std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
+            mspKFLocal.insert(spKF.begin(), spKF.end());
+        }
+        searchLevel--;
+    }
 //    std::cout << "searchLevel size: " << mspKFLocal.size() - n << std::endl;
-    std::cout << "Tatal local KF size: " << mspKFLocal.size() << std::endl;
+//    std::cout << "Tatal local KF size: " << mspKFLocal.size() << std::endl;
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
         set<PtrMapPoint> spMP = pKF->getAllObsMPs();
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
-    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;
+//    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;
 }
 
 

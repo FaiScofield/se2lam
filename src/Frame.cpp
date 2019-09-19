@@ -18,9 +18,9 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-bool Frame::mbInitialComputations = true;
+bool Frame::bIsInitialComputations = true;
 int Frame::nextId = 0;
-float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
+float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 
 
@@ -35,30 +35,31 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
 {
     mpORBExtractor = extractor;
 
-    undistort(im, img, K, distCoef); //! 输入图像去畸变
+    //! 输入图像去畸变
+    undistort(im, mImage, K, distCoef);
 
     //!  限制对比度自适应直方图均衡
     Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-    clahe->apply(img, img);
+    clahe->apply(mImage, mImage);
 
-    (*mpORBExtractor)(img, cv::Mat(), keyPoints, descriptors);
+    //! 提取特征点
+    (*mpORBExtractor)(mImage, cv::Mat(), mvKeyPoints, mDescriptors);
 
-    N = keyPoints.size();
-    if (keyPoints.empty())
+    if (mvKeyPoints.empty())
         return;
+    N = mvKeyPoints.size();
 
-    keyPointsUn = keyPoints;
     mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
     mvbOutlier = vector<bool>(N, false);
 
-    if (mbInitialComputations) {
+    if (bIsInitialComputations) {
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
-        mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
+        gridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
+        gridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
 
-        mbInitialComputations = false;
+        bIsInitialComputations = false;
     }
 
     id = nextId;
@@ -88,8 +89,8 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
         for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
             mGrid[i][j].reserve(nReserve);
 
-    for (size_t i = 0, iend = keyPointsUn.size(); i < iend; i++) {
-        cv::KeyPoint &kp = keyPointsUn[i];
+    for (size_t i = 0, iend = mvKeyPoints.size(); i < iend; i++) {
+        cv::KeyPoint &kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;
         if (PosInGrid(kp, nGridPosX, nGridPosY))
@@ -103,10 +104,10 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
 
 Frame::Frame(const Frame &f)
 {
-    f.img.copyTo(img);
-    keyPoints = f.keyPoints;
-    keyPointsUn = f.keyPointsUn;
-    f.descriptors.copyTo(descriptors);
+    f.mImage.copyTo(mImage);
+    mvKeyPoints = f.mvKeyPoints;
+    mvKeyPoints = f.mvKeyPoints;
+    f.mDescriptors.copyTo(mDescriptors);
     N = f.N;
     mvpMapPoints = f.mvpMapPoints;
     mvbOutlier = f.mvbOutlier;
@@ -142,10 +143,10 @@ Frame::Frame(const Frame &f)
 
 Frame &Frame::operator=(const Frame &f)
 {
-    f.img.copyTo(img);
-    keyPoints = f.keyPoints;
-    keyPointsUn = f.keyPointsUn;
-    f.descriptors.copyTo(descriptors);
+    f.mImage.copyTo(mImage);
+    mvKeyPoints = f.mvKeyPoints;
+    mvKeyPoints = f.mvKeyPoints;
+    f.mDescriptors.copyTo(mDescriptors);
     N = f.N;
     mvpMapPoints = f.mvpMapPoints;
     mvbOutlier = f.mvbOutlier;
@@ -194,25 +195,25 @@ void Frame::setTime(float time)
 //! 这个函数没用了
 void Frame::undistortKeyPoints(const Mat &K, const Mat &D)
 {
-    keyPointsUn = keyPoints;
+    mvKeyPoints = mvKeyPoints;
     if (D.at<float>(0) == 0.) {
         return;
     }
-    Mat_<Point2f> mat(1, keyPoints.size());
-    for (size_t i = 0; i < keyPoints.size(); i++) {
-        mat(i) = keyPoints[i].pt;
+    Mat_<Point2f> mat(1, mvKeyPoints.size());
+    for (size_t i = 0; i < mvKeyPoints.size(); i++) {
+        mat(i) = mvKeyPoints[i].pt;
     }
     undistortPoints(mat, mat, K, D, Mat(), K);
-    for (size_t i = 0; i < keyPoints.size(); i++) {
-        keyPointsUn[i].pt = mat(i);
+    for (size_t i = 0; i < mvKeyPoints.size(); i++) {
+        mvKeyPoints[i].pt = mat(i);
     }
-    assert(keyPoints.size() == keyPointsUn.size());
+    assert(mvKeyPoints.size() == mvKeyPoints.size());
 }
 
 void Frame::computeBoundUn(const Mat &K, const Mat &D)
 {
-    float x = (float)img.cols;
-    float y = (float)img.rows;
+    float x = (float)mImage.cols;
+    float y = (float)mImage.rows;
     if (D.at<float>(0) == 0.) {
         minXUn = 0.f;
         minYUn = 0.f;
@@ -238,8 +239,8 @@ bool Frame::inImgBound(Point2f pt)
 // From ORB_SLAM
 bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
 {
-    posX = round((kp.pt.x - minXUn) * mfGridElementWidthInv);
-    posY = round((kp.pt.y - minYUn) * mfGridElementHeightInv);
+    posX = round((kp.pt.x - minXUn) * gridElementWidthInv);
+    posY = round((kp.pt.y - minYUn) * gridElementHeightInv);
 
     //! Keypoint's coordinates are undistorted, which could cause to go out of the image
     //! 特征点坐标是经过畸变矫正过的，可能会超出图像
@@ -262,26 +263,26 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
                                         int minLevel, int maxLevel) const
 {
     vector<size_t> vIndices;
-    vIndices.reserve(keyPointsUn.size());
+    vIndices.reserve(mvKeyPoints.size());
 
     //! floor向下取整
-    int nMinCellX = floor((x - minXUn - r) * mfGridElementWidthInv);
+    int nMinCellX = floor((x - minXUn - r) * gridElementWidthInv);
     nMinCellX = max(0, nMinCellX);
     if (nMinCellX >= FRAME_GRID_COLS)
         return vIndices;
 
     //! ceil向上取整
-    int nMaxCellX = ceil((x - minXUn + r) * mfGridElementWidthInv);
+    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv);
     nMaxCellX = min(FRAME_GRID_COLS - 1, nMaxCellX);
     if (nMaxCellX < 0)
         return vIndices;
 
-    int nMinCellY = floor((y - minYUn - r) * mfGridElementHeightInv);
+    int nMinCellY = floor((y - minYUn - r) * gridElementHeightInv);
     nMinCellY = max(0, nMinCellY);
     if (nMinCellY >= FRAME_GRID_ROWS)
         return vIndices;
 
-    int nMaxCellY = ceil((y - minYUn + r) * mfGridElementHeightInv);
+    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv);
     nMaxCellY = min(FRAME_GRID_ROWS - 1, nMaxCellY);
     if (nMaxCellY < 0)
         return vIndices;
@@ -296,7 +297,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
                 continue;
 
             for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
-                const cv::KeyPoint &kpUn = keyPointsUn[vCell[j]];
+                const cv::KeyPoint &kpUn = mvKeyPoints[vCell[j]];
                 if (bCheckLevels && !bSameLevel) {
                     if (kpUn.octave < minLevel || kpUn.octave > maxLevel)
                         continue;
@@ -319,13 +320,13 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
 void Frame::copyImgTo(cv::Mat &imgRet)
 {
     lock_guard<mutex> lock(mMutexImg);
-    img.copyTo(imgRet);
+    mImage.copyTo(imgRet);
 }
 
 void Frame::copyDesTo(cv::Mat &desRet)
 {
     lock_guard<mutex> lock(mMutexDes);
-    descriptors.copyTo(desRet);
+    mDescriptors.copyTo(desRet);
 }
 
 Frame::~Frame()

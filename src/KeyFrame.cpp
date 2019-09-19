@@ -14,9 +14,9 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-typedef lock_guard<mutex> locker;
+typedef unique_lock<mutex> locker;
 
-int KeyFrame::mNextIdKF = 0;    // KF和MP的编号都是从1开始
+int KeyFrame::mNextIdKF = 0;    //! F,KF和MP的编号都是从0开始
 
 KeyFrame::KeyFrame() : mIdKF(-1), mbBowVecExist(false), mbNull(false)
 {
@@ -76,12 +76,17 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     lock_guard<mutex> lckPose(mMutexPose);
     lock_guard<mutex> lckObs(mMutexObs);
     lock_guard<mutex> lckDes(mMutexDes);
+    lock_guard<mutex> lckCov(mMutexCovis);
 
     mbNull = true;
-    descriptors.release();
-    img.release();
-    keyPoints.clear();
-    keyPointsUn.clear();
+    mpORBExtractor = nullptr;
+    mIdKF = -1;
+    mImage.release();
+    mDescriptors.release();
+    mvKeyPoints.clear();
+    mvKeyPoints.clear();
+    mvpMapPoints.clear();
+    mvbOutlier.clear();
 
     // Handle Feature based constraints
     for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; it++) {
@@ -90,25 +95,24 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; it++) {
         it->first->mFtrMeasureFrom.erase(pThis);
     }
-
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
 
-    // Handle observations in MapPoints
+    // Handle observations in MapPoints, 取消MP对此KF的关联
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
 
-    // Handle Covisibility
+    // Handle Covisibility, 取消其他KF对此KF的共视关系
     for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; it++) {
         (*it)->eraseCovisibleKF(pThis);
     }
     mObservations.clear();
     mDualObservations.clear();
+    mCovisibleKFs.clear();
     mViewMPs.clear();
     mViewMPsInfo.clear();
-    mCovisibleKFs.clear();
 }
 
 int KeyFrame::getSizeObsMP()
@@ -126,19 +130,28 @@ void KeyFrame::setViewMP(Point3f pt3f, int idx, Eigen::Matrix3d info)
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame> pKF)
 {
+    locker lock(mMutexCovis);
     mCovisibleKFs.erase(pKF);
 }
 
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame> pKF)
 {
+    locker lock(mMutexCovis);
     mCovisibleKFs.insert(pKF);
 }
 
 set<PtrKeyFrame> KeyFrame::getAllCovisibleKFs()
 {
+    locker lock(mMutexCovis);
     return mCovisibleKFs;
 }
 
+/**
+ * @brief KeyFrame::getAllObsMPs 获取KF关联的MP
+ * 在LocalMap调用Map::updateLocalGraph()时 checkParallax = false
+ * @param checkParallax 是否得到具有良好视差的MP, 默认开起
+ * @return
+ */
 set<PtrMapPoint> KeyFrame::getAllObsMPs(bool checkParallax)
 {
     locker lock(mMutexObs);
@@ -262,7 +275,7 @@ void KeyFrame::ComputeBoW(ORBVocabulary *_pVoc)
 {
     lock_guard<mutex> lck(mMutexDes);
     if (mBowVec.empty() || mFeatVec.empty()) {
-        vector<cv::Mat> vCurrentDesc = toDescriptorVector(descriptors);
+        vector<cv::Mat> vCurrentDesc = toDescriptorVector(mDescriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)
         // We assume the vocabulary tree has 6 levels, change the 4 otherwise
         _pVoc->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
@@ -289,7 +302,7 @@ DBoW2::BowVector KeyFrame::GetBowVector()
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
     vector<PtrMapPoint> ret;
-    int numKPs = keyPointsUn.size();
+    int numKPs = mvKeyPoints.size();
     for (int i = 0; i < numKPs; i++) {
         PtrMapPoint pMP = nullptr;
         std::map<int, PtrMapPoint>::iterator iter;

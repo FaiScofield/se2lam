@@ -80,7 +80,6 @@ void GlobalMapper::run()
         return;
 
     ros::Rate rate(Config::FPS * 10);
-//    while (ros::ok() && !mbExit) {
     while (ros::ok() && !mbFinished) {
 
         if (checkFinish())
@@ -153,7 +152,7 @@ void GlobalMapper::run()
         if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed)) {
             std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
 
-//            GlobalBA();
+            GlobalBA(); // 更新KF和MP
 
             mbGlobalBALastLoop = true;
             cout << "[Globa] Loop closed!"
@@ -307,7 +306,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_m
     //! Show Match Info
     std::set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
     int numMPsCurrent = spMPsCurrent.size();        // 当前KF的可观测MP数
-    int numKPsCurrent = mpKFCurr->keyPoints.size(); // 当前KF提取的KP数
+    int numKPsCurrent = mpKFCurr->mvKeyPoints.size(); // 当前KF提取的KP数
 
     //! Create New Feature based Constraint. 匹配数达到阈值要求,构建特征图和约束
     double ratioMPMatched = numGoodMPMatch * 1.0 / numMPsCurrent;
@@ -1112,9 +1111,7 @@ void GlobalMapper::ComputeBowVecAll()
 
 void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
 {
-
     //! Renew images
-
     if (mpKFCurr == NULL || mpKFCurr->isNull()) {
         return;
     }
@@ -1149,8 +1146,8 @@ void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
     imgMatch.copyTo(mImgMatch);
 
     //! Draw Features
-    for (int i = 0, iend = mpKFCurr->keyPoints.size(); i < iend; i++) {
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
         bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
         Scalar colorCurr;
@@ -1159,11 +1156,11 @@ void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
         } else {
             colorCurr = Scalar(255, 0, 0);  // 蓝色为非地图点
         }
-        circle(mImgMatch, ptCurr, 5, colorCurr, 1);
+        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
     }
 
-    for (int i = 0, iend = mpKFLoop->keyPoints.size(); i < iend; i++) {
-        KeyPoint kpLoop = mpKFLoop->keyPoints[i];
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += 480;
@@ -1175,18 +1172,18 @@ void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
         } else {
             colorLoop = Scalar(255, 0, 0);
         }
-        circle(mImgMatch, ptLoopMatch, 5, colorLoop, 1);
+        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
     }
 
     //! Draw Matches
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
 
         int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->keyPoints[idxCurr];
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
         Point2f ptCurr = kpCurr.pt;
 
         int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->keyPoints[idxLoop];
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += 480;
@@ -1206,8 +1203,8 @@ void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
             colorLoop = Scalar(255, 0, 0);
         }
 
-        circle(mImgMatch, ptCurr, 5, colorCurr, 1);
-        circle(mImgMatch, ptLoopMatch, 5, colorLoop, 1);
+        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
+        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
         if (ifMPCurr && ifMPLoop) {
             line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
         } else {
@@ -1245,8 +1242,8 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
         vIdxCurr.push_back(idxCurr);
         vIdxLoop.push_back(idxLoop);
 
-        vPtCurr.push_back(_pKFCurr->keyPointsUn[idxCurr].pt);
-        vPtLoop.push_back(_pKFLoop->keyPointsUn[idxLoop].pt);
+        vPtCurr.push_back(_pKFCurr->mvKeyPoints[idxCurr].pt);
+        vPtLoop.push_back(_pKFLoop->mvKeyPoints[idxLoop].pt);
     }
 
     // RANSAC with fundemantal matrix

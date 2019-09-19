@@ -51,7 +51,6 @@ public:
     void setFinish();
 
     void relocalization(const cv::Mat &img, const Se2 &odo);
-    void DrawMachesPoints(const cv::Mat fmg, const cv::Mat img, std::vector<int> vMatchesDistance);
 
     cv::Point2f mMatchAveOffset;    // 匹配点对的平均像素偏移, 即图像上的运动先验.
 
@@ -87,7 +86,7 @@ private:
     Frame mFrame;
     Frame mRefFrame;
     PtrKeyFrame mpKF;
-    std::vector<cv::Point2f> mPrevMatched;  // 上一参考帧的特征点
+    std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
 
     void mCreateFrame(const cv::Mat &img, const Se2 &odo);
     void mTrack(const cv::Mat &img, const Se2 &odo);
@@ -109,6 +108,7 @@ private:
     cvu::eTrackingState mLastState;
 
     int nLostFrames;
+    cv::Mat H;
 };
 
 

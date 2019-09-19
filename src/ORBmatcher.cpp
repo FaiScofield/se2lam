@@ -59,10 +59,10 @@ void getMatcheLinesEndPoints(const Frame frame1, const Frame frame2,
                              int linelable2, int pl1, int pl2)
 {
     double k1 = frame1.lineFeature[linelable1].k;
-    Point2f s = frame1.keyPointsUn[pl1].pt;
-    Point2f e = frame1.keyPointsUn[pl1].pt;
-    Point2f ms = frame2.keyPointsUn[pl2].pt;
-    Point2f me = frame2.keyPointsUn[pl2].pt;
+    Point2f s = frame1.keyPoints[pl1].pt;
+    Point2f e = frame1.keyPoints[pl1].pt;
+    Point2f ms = frame2.keyPoints[pl2].pt;
+    Point2f me = frame2.keyPoints[pl2].pt;
     if (abs(k1 < 1)) {
         if (abs(matchesLine1_S_E[linelable1].star_p.x - 0) < 0.01) {
             matchesLine1_S_E[linelable1].star_p = s;
@@ -210,15 +210,15 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
         return 0;
     }
 
-    vector<cv::KeyPoint> vKeysUn1 = pKF1->keyPointsUn;
+    vector<cv::KeyPoint> vKeysUn1 = pKF1->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec1 = pKF1->GetFeatureVector();
     vector<PtrMapPoint> vpMapPoints1 = pKF1->GetMapPointMatches();  // Localizer下无MP
-    cv::Mat Descriptors1 = pKF1->descriptors;
+    cv::Mat Descriptors1 = pKF1->mDescriptors;
 
-    vector<cv::KeyPoint> vKeysUn2 = pKF2->keyPointsUn;
+    vector<cv::KeyPoint> vKeysUn2 = pKF2->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec2 = pKF2->GetFeatureVector();
     vector<PtrMapPoint> vpMapPoints2 = pKF2->GetMapPointMatches();  // Localizer下无MP
-    cv::Mat Descriptors2 = pKF2->descriptors;
+    cv::Mat Descriptors2 = pKF2->mDescriptors;
 
 
     vector<bool> vbMatched2(vpMapPoints2.size(), false);
@@ -412,7 +412,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
             if (v < CurrentFrame.minYUn || v > CurrentFrame.maxYUn)
                 continue;
 
-            int nLastOctave = LastKF.keyPoints[i].octave;
+            int nLastOctave = LastKF.mvKeyPoints[i].octave;
 
             // Search in a window. Size depends on scale
             float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];  // 尺度越大，搜索范围越大
@@ -450,7 +450,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
                     if (CurrentFrame.mvpMapPoints[i2]->countObservation() > 0)
                         continue;
 
-                const cv::Mat& d = CurrentFrame.descriptors.row(i2);
+                const cv::Mat& d = CurrentFrame.mDescriptors.row(i2);
 
                 const int dist = DescriptorDistance(dMP, d);
 
@@ -468,7 +468,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
 
                 if (mbCheckOrientation) {
                     float rot =
-                        LastKF.keyPointsUn[i].angle - CurrentFrame.keyPointsUn[bestIdx2].angle;
+                        LastKF.mvKeyPoints[i].angle - CurrentFrame.mvKeyPoints[bestIdx2].angle;
                     if (rot < 0.0)
                         rot += 360.0f;
                     int bin = round(rot * factor);
@@ -507,9 +507,9 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
  * @brief ORBmatcher::MatchByWindow
  * 先获得cell里的粗匹配候选，再从候选的KF中根据描述子计算最小和次小距离，剔除错匹配
  *
- * @param frame1        参考帧
- * @param frame2        当前帧
- * @param vbPrevMatched 参考帧特征点[update]
+ * @param frame1        参考帧F1
+ * @param frame2        当前帧F2
+ * @param vbPrevMatched 参考帧F1特征点的位置[update]
  * @param winSize       cell尺寸
  * @param vnMatches12   匹配情况[output]
  * @param levelOffset   最大金字塔层差
@@ -535,7 +535,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
 
     //! 遍历参考帧特征点, 序号i1
     for (int i1 = 0, iend1 = frame1.N; i1 < iend1; i1++) {
-        KeyPoint kp1 = frame1.keyPointsUn[i1];
+        KeyPoint kp1 = frame1.mvKeyPoints[i1];
         int level1 = kp1.octave;
         if (level1 > maxLevel || level1 < minLevel)
             continue;
@@ -546,7 +546,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         if (vIndices2.empty())
             continue;
 
-        cv::Mat d1 = frame1.descriptors.row(i1);
+        cv::Mat d1 = frame1.mDescriptors.row(i1);
 
         int bestDist = INT_MAX;
         int bestDist2 = INT_MAX;
@@ -556,7 +556,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
             size_t i2 = *vit;
 
-            cv::Mat d2 = frame2.descriptors.row(i2);
+            cv::Mat d2 = frame2.mDescriptors.row(i2);
 
             int dist = DescriptorDistance(d1, d2);
 
@@ -586,7 +586,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
                 nmatches++;
 
                 //! for orientation check. 4.统计匹配点对的角度差的直方图, 待下一步做旋转检验
-                float rot = frame1.keyPointsUn[i1].angle - frame2.keyPointsUn[bestIdx2].angle;
+                float rot = frame1.mvKeyPoints[i1].angle - frame2.mvKeyPoints[bestIdx2].angle;
                 if (rot < 0.0)
                     rot += 360.f;
                 int bin = round(rot * factor);
@@ -621,7 +621,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
     //! update prev matched
     for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
         if (vnMatches12[i1] >= 0)
-            vbPrevMatched[i1] = frame2.keyPointsUn[vnMatches12[i1]].pt;
+            vbPrevMatched[i1] = frame2.mvKeyPoints[vnMatches12[i1]].pt;
 
     return nmatches;
 }
@@ -639,7 +639,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
  * @param winSize       cell尺寸
  * @return              返回匹配点的总数
  */
-int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
+int ORBmatcher::MatchByWindowPre(const Frame& frame1, const Frame& frame2,
                               std::vector<cv::Point2f>& vbPrevMatched, cv::Point2f& offset,
                               std::vector<int>& vnMatches12, const int winSize)
 {
@@ -654,9 +654,9 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
     vector<int> vMatchesDistance(frame2.N, INT_MAX);
     vector<int> vnMatches21(frame2.N, -1);
 
-    //! 遍历参考帧特征点, 序号i1
+    //! 遍历参考帧F1特征点, 序号i1
     for (int i1 = 0, iend1 = frame1.N; i1 < iend1; i1++) {
-        KeyPoint kp1 = frame1.keyPointsUn[i1];
+        KeyPoint kp1 = frame1.mvKeyPoints[i1];
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
         vector<size_t> vIndices2 = frame2.GetFeaturesInArea(
@@ -664,7 +664,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         if (vIndices2.empty())
             continue;
 
-        cv::Mat d1 = frame1.descriptors.row(i1);
+        cv::Mat d1 = frame1.mDescriptors.row(i1);
 
         int bestDist = INT_MAX;
         int bestDist2 = INT_MAX;
@@ -674,7 +674,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
             size_t i2 = *vit;
 
-            cv::Mat d2 = frame2.descriptors.row(i2);
+            cv::Mat d2 = frame2.mDescriptors.row(i2);
 
             int dist = DescriptorDistance(d1, d2);
 
@@ -709,7 +709,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
             nmatches++;
 
             //! for orientation check. 4.统计匹配点对的角度差的直方图, 待下一步做旋转检验
-            float rot = frame1.keyPointsUn[i1].angle - frame2.keyPointsUn[bestIdx2].angle;
+            float rot = frame1.mvKeyPoints[i1].angle - frame2.mvKeyPoints[bestIdx2].angle;
             if (rot < 0.0)
                 rot += 360.f;
             int bin = round(rot * factor);
@@ -744,10 +744,10 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
     Point2f newOffset(0.f, 0.f);
     for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
         if (vnMatches12[i1] >= 0) {
-            vbPrevMatched[i1] = frame2.keyPointsUn[vnMatches12[i1]].pt;
+            vbPrevMatched[i1] = frame2.mvKeyPoints[vnMatches12[i1]].pt;
 
-            Point2f p1 = frame1.keyPointsUn[i1].pt;
-            Point2f p2 = frame2.keyPointsUn[vnMatches12[i1]].pt;
+            Point2f p1 = frame1.mvKeyPoints[i1].pt;
+            Point2f p2 = frame2.mvKeyPoints[vnMatches12[i1]].pt;
             newOffset.x += p2.x - p1.x;
             newOffset.y += p2.y - p1.y;
         }
@@ -758,6 +758,126 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
     return nmatches;
 }
 
+/**
+ * @brief ORBmatcher::MatchByWindowWarp 利用仿射变换(透视变换H矩阵)增加先验
+ * 注意内点数较少时H12不可用
+ * @param frame1        参考帧F1
+ * @param frame2        当前帧F2
+ * @param H12           F1到F2的单应矩阵
+ * @param vnMatches12   匹配情况[output]
+ * @param winSize       cell尺寸
+ * @return              返回匹配点的总数
+ */
+int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H12,
+                                  std::vector<int>& vnMatches12, const int winSize)
+{
+    if (!H12.data) {
+        std::cerr << "Input argument error for empty H!" << std::endl;
+        return 0;
+    }
+
+    int nmatches = 0;
+    vnMatches12 = vector<int>(frame1.N, -1);
+
+    vector<int> rotHist[HISTO_LENGTH];
+    for (int i = 0; i < HISTO_LENGTH; i++)
+        rotHist[i].reserve(500);
+    const float factor = 1.f / (float)HISTO_LENGTH;
+
+    vector<int> vMatchesDistance(frame2.N, INT_MAX);
+    vector<int> vnMatches21(frame2.N, -1);
+
+    //! 遍历参考帧特征点, 序号i1
+    for (int i1 = 0, iend1 = frame1.N; i1 < iend1; i1++) {
+        KeyPoint kp1 = frame1.mvKeyPoints[i1];
+        int level = kp1.octave;
+        //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
+        Mat pt1 = (Mat_<double>(3,1) << kp1.pt.x, kp1.pt.y, 1);
+        Mat pt2 = H12 * pt1;
+        pt2 /= pt2.at<double>(2);
+        vector<size_t> vIndices2 = frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1),
+                                                            winSize, level, level);
+        if (vIndices2.empty())
+            continue;
+
+        cv::Mat d1 = frame1.mDescriptors.row(i1);
+
+        int bestDist = INT_MAX;
+        int bestDist2 = INT_MAX;
+        int bestIdx2 = -1;
+
+        //! 2.从F2的KP候选里计算最小和次小汉明距离, 序号i2
+        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
+            size_t i2 = *vit;
+
+            cv::Mat d2 = frame2.mDescriptors.row(i2);
+
+            int dist = DescriptorDistance(d1, d2);
+
+            if (vMatchesDistance[i2] <= dist)
+                continue;
+
+            if (dist < bestDist) {
+                bestDist2 = bestDist;
+                bestDist = dist;
+                bestIdx2 = i2;
+            } else if (dist < bestDist2) {
+                bestDist2 = dist;
+            }
+        }
+
+        //! 3.最小距离小于TH_LOW且小于mfNNratio倍次小距离，则将此KP与F1中对应的KP视为匹配对
+        if (bestDist <= TH_LOW && bestDist < (float)bestDist2 * mfNNratio) {
+            // 如果出现F1中多个点匹配到F2中同一个点的情况, 则取消之前的匹配用新的匹配
+            //! NOTE 已改成保留汉明距离最小的匹配
+            if (vnMatches21[bestIdx2] >= 0) {
+                if (bestDist < vMatchesDistance[bestIdx2]) {
+                    vnMatches12[vnMatches21[bestIdx2]] = -1;
+                    nmatches--;
+                } else {
+                    vnMatches21[bestIdx2] = -1;
+                    continue;
+                }
+            }
+            vnMatches12[i1] = bestIdx2;
+            vnMatches21[bestIdx2] = i1;
+            vMatchesDistance[bestIdx2] = bestDist;
+            nmatches++;
+
+            //! for orientation check. 4.统计匹配点对的角度差的直方图, 待下一步做旋转检验
+            float rot = frame1.mvKeyPoints[i1].angle - frame2.mvKeyPoints[bestIdx2].angle;
+            if (rot < 0.0)
+                rot += 360.f;
+            int bin = round(rot * factor);
+            if (bin == HISTO_LENGTH)
+                bin = 0;
+            rotHist[bin].push_back(i1);
+        }
+    }
+
+    //! 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上, 则视为误匹配剔除. orientation check
+    {
+        int ind1 = -1;
+        int ind2 = -1;
+        int ind3 = -1;
+
+        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
+
+        for (int i = 0; i < HISTO_LENGTH; i++) {
+            if (i == ind1 || i == ind2 || i == ind3)
+                continue;
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+                int idx1 = rotHist[i][j];
+                if (vnMatches12[idx1] >= 0) {
+                    vnMatches12[idx1] = -1;
+                    nmatches--;
+                }
+            }
+        }
+    }
+
+    return nmatches;
+}
 
 /**
  * @brief ORBmatcher::MatchByProjection 通过投影，对Local MapPoint进行跟踪
@@ -810,7 +930,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
             int idx = *it;
             if (pNewKF->hasObservation(idx))
                 continue;
-            cv::Mat d = pNewKF->descriptors.row(idx);
+            cv::Mat d = pNewKF->mDescriptors.row(idx);
 
             const int dist = DescriptorDistance(pMP->mMainDescriptor, d);
 
@@ -821,10 +941,10 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
                 bestDist2 = bestDist;
                 bestDist = dist;
                 bestLevel2 = bestLevel;
-                bestLevel = pNewKF->keyPoints[idx].octave;
+                bestLevel = pNewKF->mvKeyPoints[idx].octave;
                 bestIdx = idx;
             } else if (dist < bestDist2) {
-                bestLevel2 = pNewKF->keyPoints[idx].octave;
+                bestLevel2 = pNewKF->mvKeyPoints[idx].octave;
                 bestDist2 = dist;
             }
         }
@@ -886,7 +1006,7 @@ int ORBmatcher::MatchByPointAndLine(const Frame& frame1, Frame& frame2,
 
     int minDist = INT_MAX;
     for (int i1 = 0, iend1 = frame1.N; i1 < iend1; i1++) {
-        KeyPoint kp1 = frame1.keyPointsUn[i1];
+        KeyPoint kp1 = frame1.keyPoints[i1];
         int level1 = kp1.octave;
         if (level1 > maxLevel || level1 < minLevel)
             continue;
@@ -941,7 +1061,7 @@ int ORBmatcher::MatchByPointAndLine(const Frame& frame1, Frame& frame2,
                 nmatches++;
 
                 // for orientation check
-                float rot = frame1.keyPointsUn[i1].angle - frame2.keyPointsUn[bestIdx2].angle;
+                float rot = frame1.keyPoints[i1].angle - frame2.keyPoints[bestIdx2].angle;
                 if (rot < 0.0)
                     rot += 360.f;
                 int bin = round(rot * factor);
@@ -1048,7 +1168,7 @@ int ORBmatcher::MatchByPointAndLine(const Frame& frame1, Frame& frame2,
     // update prev matched
     for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
         if (vnMatches12[i1] >= 0)
-            vbPrevMatched[i1] = frame2.keyPointsUn[vnMatches12[i1]].pt;
+            vbPrevMatched[i1] = frame2.keyPoints[vnMatches12[i1]].pt;
 
 
     return nmatches;

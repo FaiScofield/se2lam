@@ -87,9 +87,9 @@ public:
     int getFtrIdx(PtrKeyFrame pKF);
 
 protected:
-    std::map<PtrKeyFrame, int> mObservations;
+    std::map<PtrKeyFrame, int> mObservations;   // first = 观测到此MP的KF, second = 在其KP中的索引
 
-    cv::Point3f mPos;
+    cv::Point3f mPos;   // 三维空间坐标
 
     void setNull();
     bool mbNull;
