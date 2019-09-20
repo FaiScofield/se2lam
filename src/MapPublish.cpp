@@ -19,7 +19,7 @@ namespace se2lam
 {
 using namespace cv;
 using namespace std;
-typedef lock_guard<mutex> locker;
+typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map *pMap)
 {
@@ -46,7 +46,7 @@ MapPublish::MapPublish(Map *pMap)
     const char *COVISGRAPH_NAMESPACE = "CovisGraph";
 
     // Set Scale Ratio
-    mScaleRatio = Config::MAPPUB_SCALE_RATIO;
+    mScaleRatio = Config::MappubScaleRatio;
 
 
     // Configure KF not in local map
@@ -266,7 +266,7 @@ void MapPublish::PublishKeyFrames()
         // 按比例缩放地图, mScaleRatio = 1000 时比例为 1:1，数据单位是[mm]
         cv::Mat p = vKFsAll[i]->getPose();
         cv::Mat Twc = cvu::inv(p);
-        cv::Mat Twb = Twc * Config::cTb;
+        cv::Mat Twb = Twc * Config::Tcb;
 
         Twc.at<float>(0, 3) = Twc.at<float>(0, 3) / mScaleRatio;
         Twc.at<float>(1, 3) = Twc.at<float>(1, 3) / mScaleRatio;
@@ -374,7 +374,7 @@ void MapPublish::PublishKeyFrames()
         // Visual Odometry Graph (estimate)
         PtrKeyFrame pKFOdoChild = pKF->mOdoMeasureFrom.first;
         if (pKFOdoChild != NULL && !mbIsLocalize) {
-            Mat Twb1 = pKFOdoChild->getPose().inv() * Config::cTb;
+            Mat Twb1 = pKFOdoChild->getPose().inv() * Config::Tcb;
             geometry_msgs::Point msgs_b2;
             msgs_b2.x = Twb1.at<float>(0, 3) / mScaleRatio;
             msgs_b2.y = Twb1.at<float>(1, 3) / mScaleRatio;
@@ -600,7 +600,7 @@ void MapPublish::PublishCameraCurr(const cv::Mat &Twc)
 
 void MapPublish::run()
 {
-    mbIsLocalize = Config::LOCALIZATION_ONLY;
+    mbIsLocalize = Config::LocalizationOnly;
 
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
@@ -643,8 +643,8 @@ void MapPublish::run()
             pubImgMatches.publish(msgMatch);
 
             // debug 存下match图片
-            if (Config::SAVE_MATCH_IMAGE) {
-                string fileName = Config::SAVE_MATCH_IMAGE_PATH + to_string(pKP->mIdKF) + ".jpg";
+            if (Config::SaveMatchImage) {
+                string fileName = Config::MatchImageStorePath + to_string(pKP->mIdKF) + ".jpg";
                 cv::imwrite(fileName, imgMatch);
             }
         }
@@ -686,25 +686,25 @@ void MapPublish::setFramePub(FramePublish *pFP)
 
 void MapPublish::RequestFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
 bool MapPublish::CheckFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinishRequested;
 }
 
 void MapPublish::SetFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinished = true;
 }
 
 bool MapPublish::isFinished()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinished;
 }
 

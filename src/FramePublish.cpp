@@ -20,7 +20,7 @@ namespace se2lam
 using namespace cv;
 using std::vector;
 
-typedef lock_guard<mutex> locker;
+typedef unique_lock<mutex> locker;
 
 FramePublish::FramePublish()
 {

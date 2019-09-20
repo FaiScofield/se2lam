@@ -33,8 +33,8 @@ Localizer::Localizer()
     mState = cvu::NO_READY_YET;
     nLostFrames = 0;
 
-    thMaxDistance = Config::maxLinearSpeed / Config::FPS;
-    thMaxAngular = (float)g2o::deg2rad(Config::maxAngularSpeed / Config::FPS);
+    thMaxDistance = Config::MaxLinearSpeed / Config::FPS;
+    thMaxAngular = (float)g2o::deg2rad(Config::MaxAngularSpeed / Config::FPS);
 }
 
 Localizer::~Localizer()
@@ -179,7 +179,7 @@ void Localizer::WriteTrajFile(ofstream& file)
         return;
     }
 
-    Mat wTb = cvu::inv(se2lam::Config::bTc * mpKFCurrRefined->getPose());
+    Mat wTb = cvu::inv(se2lam::Config::Tbc * mpKFCurrRefined->getPose());
     Mat wRb = wTb.rowRange(0, 3).colRange(0, 3);
     g2o::Vector3D euler = g2o::internal::toEuler(se2lam::toMatrix3d(wRb));
 
@@ -195,7 +195,7 @@ void Localizer::ReadFrameInfo(const Mat& img, const Se2& odo)
     mpKFRef = mpKFCurr;
 
     mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
-    mFrameCurr.Tcw = Config::cTb.clone();
+    mFrameCurr.Tcw = Config::Tcb.clone();
     mFrameCurr.Twb = mFrameRef.Twb + (odo - mFrameRef.odom);
 
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
@@ -238,11 +238,11 @@ void Localizer::DoLocalBA()
 
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, false);
-    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::bTc);
+    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::Tbc);
     int maxKFid = mpKFCurr->mIdKF + 1;
 
     // Add MPs in local map as fixed
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
     set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
 
     map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
@@ -310,10 +310,10 @@ cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
 
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, false); // mpKFCurr->mIdKF
-    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, Config::bTc);
+    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, Config::Tbc);
 
     // Add MPs in local map as fixed
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
     set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
     map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
 
@@ -357,7 +357,7 @@ cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
     Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, mpKFCurr->mIdKF));
 
     Se2 Twb;
-    Twb.fromCvSE3(cvu::inv(Tcw) * Config::cTb);
+    Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
     printf("[Localizer] #%d localBA Time = %.2fms, pose after optimization is: [%.4f, %.4f]\n",
            mpKFCurr->mIdKF, timer.time, Twb.x / 1000, Twb.y / 1000);
 
@@ -473,7 +473,7 @@ bool Localizer::DetectLoopClose()
     }
 
     //! DEBUG: Print loop closing info
-    if (bDetected && Config::LOCAL_PRINT) {
+    if (bDetected && Config::LocalPrint) {
         fprintf(stderr, "[Localizer] #%d Detect a loop close to #%d, bestScore = %f\n",
                pKFCurr->mIdKF, mpKFLoop->mIdKF, scoreBest);
     } /*else {
@@ -657,8 +657,8 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     putText(mImgMatch, nMatches, Point(mImgMatch.cols - 60, 15), 1, 1.1, Scalar(0, 255, 0), 2);
     putText(mImgMatch, score, Point(mImgMatch.cols - 60, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
 
-    if (Config::SAVE_MATCH_IMAGE) {
-        string fileName = Config::SAVE_MATCH_IMAGE_PATH + "../loop/" + to_string(mpKFCurr->mIdKF) + ".bmp";
+    if (Config::SaveMatchImage) {
+        string fileName = Config::MatchImageStorePath + "../loop/" + to_string(mpKFCurr->mIdKF) + ".bmp";
         imwrite(fileName, mImgMatch);
         fprintf(stderr, "[Localizer] #%d Save image to %s\n", mpKFCurr->mIdKF, fileName.c_str());
     }
@@ -713,10 +713,10 @@ void Localizer::UpdatePoseCurr()
 
     Se2 dOdo = mpKFRef->odom - mpKFCurr->odom;
 
-    mpKFCurr->Tcr = Config::cTb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::bTc;
+    mpKFCurr->Tcr = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
     mpKFCurr->Tcw = mpKFCurr->Tcr * mpKFRef->Tcw;
     // 更新Twb
-    mpKFCurr->Twb.fromCvSE3(cvu::inv(mpKFCurr->Tcw) * Config::cTb);
+    mpKFCurr->Twb.fromCvSE3(cvu::inv(mpKFCurr->Tcw) * Config::Tcb);
 }
 
 void Localizer::ResetLocalMap()
@@ -895,9 +895,9 @@ bool Localizer::relocalization()
             DoLocalBA();
 
             // output scores
-            string file = Config::SAVE_MATCH_IMAGE_PATH + "../loop/scores.txt";
+            string file = Config::MatchImageStorePath + "../loop/scores.txt";
             ofstream ofs(file, ios::app | ios::out);
-            if (Config::GLOBAL_PRINT) {
+            if (Config::GlobalPrint) {
                 sort(mvScores.begin(), mvScores.end(), [](double a, double b){ return a > b; });
 //                int m = std::min(15, (int)mvScores.size());
 //                ofs << mpKFCurr->mIdKF << " LoopClose Scores: ";
@@ -950,7 +950,7 @@ void Localizer::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
     vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
     vector<Point3f> vKFPoses;
     for (size_t i = 0; i < vKFsAll.size(); ++i) {
-        Mat Twb = cvu::inv(vKFsAll[i]->getPose()) * Config::cTb;
+        Mat Twb = cvu::inv(vKFsAll[i]->getPose()) * Config::Tcb;
         Point3f pose(Twb.at<float>(0, 3)/1000.f, Twb.at<float>(1, 3)/1000.f, Twb.at<float>(2, 3)/1000.f);
         vKFPoses.push_back(pose);
     }

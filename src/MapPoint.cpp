@@ -282,7 +282,7 @@ void MapPoint::updateMainKFandDescriptor()
         if (!pKF)
             continue;
 
-        lock_guard<mutex> lck(pKF->mMutexDes);
+//        unique_lock<mutex> lck(pKF->mMutexDes);
         if (!pKF->isNull()) {
             vKFs.push_back(pKF);
             vDes.push_back(pKF->mDescriptors.row(i->second));

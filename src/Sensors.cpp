@@ -9,10 +9,8 @@
 namespace se2lam
 {
 
-Sensors::Sensors()
+Sensors::Sensors() : imgUpdated(false), odoUpdated(false)
 {
-    img_updated = false;
-    odo_updated = false;
 }
 
 Sensors::~Sensors()
@@ -21,55 +19,59 @@ Sensors::~Sensors()
 
 bool Sensors::update()
 {
-    return odo_updated && img_updated;
+    return odoUpdated && imgUpdated;
 }
 
 // 当Sensors类里的当前帧数据没有被读取，则锁住当前线程
 // 直到数据被Tracker/Localizer读走，则从system接收新的数据进来
-void Sensors::updateImg(const cv::Mat &img_, double time_)
+void Sensors::updateImg(const cv::Mat& img_, double time_)
 {
-    std::unique_lock<std::mutex> lock(mutex_img);
+    std::unique_lock<std::mutex> lock(mMutexImg);
 
-    while (img_updated) {
+    while (imgUpdated) {
         cndvSensorUpdate.wait(lock);
     }
 
     img_.copyTo(mImg);
-    time_img = time_;
-    img_updated = true;
+    timeImg = time_;
+    imgUpdated = true;
 }
 
 void Sensors::updateOdo(double x_, double y_, double theta_, double time_)
 {
-    std::unique_lock<std::mutex> lock(mutex_odo);
+    std::unique_lock<std::mutex> lock(mMutexOdo);
 
-    while (odo_updated) {
+    while (odoUpdated) {
         cndvSensorUpdate.wait(lock);
     }
     mOdo.x = x_;
     mOdo.y = y_;
     mOdo.z = theta_;
-    time_odo = time_;
-    odo_updated = true;
+    timeOdo = time_;
+    odoUpdated = true;
 }
 
-void Sensors::readData(cv::Point3f &dataOdo, cv::Mat &dataImg)
+void Sensors::readData(cv::Point3f& _dataOdo, cv::Mat& _dataImg,
+                       float& _timeOdo, float& _timeimg)
 {
-    std::unique_lock<std::mutex> lock1(mutex_img);
-    std::unique_lock<std::mutex> lock2(mutex_odo);
+    std::unique_lock<std::mutex> lock1(mMutexImg);
+    std::unique_lock<std::mutex> lock2(mMutexOdo);
 
-    dataOdo = mOdo;
-    mImg.copyTo(dataImg);
+    _dataOdo = mOdo;
+    mImg.copyTo(_dataImg);
+    _timeOdo = timeOdo;
+    _timeimg = timeImg;
 
-    odo_updated = false;
-    img_updated = false;
+    odoUpdated = false;
+    imgUpdated = false;
 
     cndvSensorUpdate.notify_all();
 }
 
 void Sensors::forceSetUpdate(bool val)
 {
-    odo_updated = val;
-    img_updated = val;
+    odoUpdated = val;
+    imgUpdated = val;
 }
-}
+
+}  // namespace se2lam

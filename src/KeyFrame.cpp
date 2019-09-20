@@ -72,11 +72,11 @@ KeyFrame::~KeyFrame()
 // Please handle odometry based constraints after calling this function
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 {
-    lock_guard<mutex> lckImg(mMutexImg);
-    lock_guard<mutex> lckPose(mMutexPose);
-    lock_guard<mutex> lckObs(mMutexObs);
-    lock_guard<mutex> lckDes(mMutexDes);
-    lock_guard<mutex> lckCov(mMutexCovis);
+    locker lckImg(mMutexImg);
+    locker lckPose(mMutexPose);
+    locker lckObs(mMutexObs);
+    locker lckDes(mMutexDes);
+    locker lckCov(mMutexCovis);
 
     mbNull = true;
     mpORBExtractor = nullptr;
@@ -191,25 +191,25 @@ bool KeyFrame::hasObservation(int idx)
     return (it != mDualObservations.end());
 }
 
-Mat KeyFrame::getPose()
-{
-    locker lock(mMutexPose);
-    return Tcw.clone();
-}
+//Mat KeyFrame::getPose()
+//{
+//    locker lock(mMutexPose);
+//    return Tcw.clone();
+//}
 
-void KeyFrame::setPose(const Mat &_Tcw)
-{
-    locker lock(mMutexPose);
-    _Tcw.copyTo(Tcw);
-    Twb.fromCvSE3(cvu::inv(Tcw) * Config::cTb);
-}
+//void KeyFrame::setPose(const Mat &_Tcw)
+//{
+//    locker lock(mMutexPose);
+//    _Tcw.copyTo(Tcw);
+//    Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
+//}
 
-void KeyFrame::setPose(const Se2 &_Twb)
-{
-    locker lock(mMutexPose);
-    Twb = _Twb;
-    Tcw = Config::cTb * Twb.inv().toCvSE3();
-}
+//void KeyFrame::setPose(const Se2 &_Twb)
+//{
+//    locker lock(mMutexPose);
+//    Twb = _Twb;
+//    Tcw = Config::Tcb * Twb.inv().toCvSE3();
+//}
 
 void KeyFrame::addObservation(PtrMapPoint pMP, int idx)
 {

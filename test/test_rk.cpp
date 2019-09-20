@@ -6,32 +6,29 @@
 
 
 #include "OdoSLAM.h"
-#include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 using namespace cv;
 using namespace Eigen;
 namespace bf = boost::filesystem;
 
-const char *vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
+const char* vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
 
-struct RK_IMAGE
-{
-    RK_IMAGE(const string& s, const long long int t)
-        : fileName(s), timeStamp(t) {}
+struct RK_IMAGE {
+    RK_IMAGE(const string& s, const float& t) : fileName(s), timeStamp(t) {}
 
     string fileName;
-    long long int timeStamp;
+    float timeStamp;
 };
-
 
 bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
 {
     return r1.timeStamp < r2.timeStamp;
 }
 
-void readImagesRK(const string& dataFolder, vector<string>& files)
+void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     bf::path path(dataFolder);
     if (!bf::exists(path)) {
@@ -47,10 +44,10 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
         if (bf::is_regular_file(iter->status())) {
             // format: /frameRaw12987978101.jpg
             string s = iter->path().string();
-            auto i = s.find_last_of('/');
+            auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
-            auto t = atoll(s.substr(i+8+1, j-i-8-1).c_str());
-            allImages.push_back(RK_IMAGE(s, t));
+            auto t = atoll(s.substr(i + 1, j - i - 1).c_str());
+            allImages.push_back(RK_IMAGE(s, t/1000000.f));
         }
     }
 
@@ -63,20 +60,20 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
 
     //! 注意不能直接对string排序
     sort(allImages.begin(), allImages.end(), lessThen);
-
-    files.clear();
-    for (size_t i = 0; i < allImages.size(); ++i)
-        files.push_back(allImages[i].fileName);
+    files = allImages;
+//    files.clear();
+//    for (size_t i = 0; i < allImages.size(); ++i)
+//        files.push_back(allImages[i].fileName);
 }
 
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     //! ROS Initialize
     ros::init(argc, argv, "test_vn");
     ros::start();
 
-    if (argc < 2){
+    if (argc < 2) {
         cerr << "Usage: rosrun se2lam test_rk rk_dataPath" << endl;
         ros::shutdown();
         return -1;
@@ -96,51 +93,49 @@ int main(int argc, char **argv)
         ros::shutdown();
         return -1;
     }
-    float x,y,theta;
+
+    float x, y, theta, timeOdo;
     string line;
 
-    size_t n = static_cast<size_t>(se2lam::Config::ImgIndex);
+    size_t n = static_cast<size_t>(se2lam::Config::ImgCount);
     size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
 
     string imageFolder = se2lam::Config::DataPath + "/slamimg";
-    vector<string> allImages;
+    vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
     n = min(allImages.size(), n);
     ros::Rate rate(se2lam::Config::FPS);
-    for(size_t i = 0; i < n && system.ok(); i++) {
+    for (size_t i = 0; i < n && system.ok(); i++) {
         // 起始帧不为0的时候保证odom数据跟image对应
-        if (i < m) {
-            std::getline(rec, line);
+        std::getline(rec, line);
+        if (i < m)
             continue;
-        }
 
         string fullImgName = allImages[i];
-//        cout << "[main ] reading image: " << fullImgName << endl;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
             cerr << "[main ] No image data for image " << fullImgName << endl;
             continue;
         }
-        std::getline(rec, line);
-        istringstream iss(line);
-        iss >> x >> y >> theta;
 
-        system.receiveOdoData(x, y, theta);
-        system.receiveImgData(img);
+        istringstream iss(line);
+        iss >> timeOdo >> x >> y >> theta;
+
+        system.receiveOdoData(x, y, theta, timeOdo/1000000.f);
+        system.receiveImgData(img, allImages[i].timeStamp);
 
         rate.sleep();
     }
+    rec.close();
     cout << "[main ] Finish test_rk..." << endl;
 
-    system.requestFinish();
+    system.requestFinish();  // 让系统给其他线程发送结束指令
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "[main ] Rec close..." << endl;
-    rec.close();
+    cout << "[main ] System shutdown..." << endl;
+
     cout << "[main ] Exit test..." << endl;
     return 0;
-
 }
-

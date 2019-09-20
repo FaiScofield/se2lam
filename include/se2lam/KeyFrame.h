@@ -44,9 +44,9 @@ public:
     KeyFrame(const Frame &frame);
     ~KeyFrame();
 
-    cv::Mat getPose();
-    void setPose(const cv::Mat &_Tcw);
-    void setPose(const Se2 &_Twb);
+//    cv::Mat getPose();
+//    void setPose(const cv::Mat &_Tcw);
+//    void setPose(const Se2 &_Twb);
 
     struct IdLessThan {
         bool operator()(const shared_ptr<KeyFrame> &lhs, const shared_ptr<KeyFrame> &rhs) const {
@@ -124,9 +124,7 @@ public:
     DBoW2::FeatureVector mFeatVec;
     bool mbBowVecExist;
 
-
-
-
+//! 以下信息需要加锁访问
 protected:
     std::map<PtrMapPoint, int> mObservations;       // int为MP在此KF中对应的特征点的索引
     std::map<int, PtrMapPoint> mDualObservations;
@@ -134,7 +132,7 @@ protected:
     bool mbNull;
     std::set<shared_ptr<KeyFrame>> mCovisibleKFs;
 
-    std::mutex mMutexPose;
+//    std::mutex mMutexPose;
     std::mutex mMutexObs;
     std::mutex mMutexCovis;
 //    std::mutex mMutexImg; // 这个在Frame里已经有了

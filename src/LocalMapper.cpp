@@ -23,6 +23,8 @@ using namespace std;
 using namespace cv;
 using namespace g2o;
 
+typedef unique_lock<mutex> locker;
+
 LocalMapper::LocalMapper()
 {
     mbAcceptNewKF = true;
@@ -58,7 +60,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
                            const vector<int> &vMatched12, const vector<bool> &vbGoodPrl)
 {
     {
-        unique_lock<mutex> lock(mMutexNewKFs);
+        locker lock(mMutexNewKFs);
         mpNewKF = pKF;
     }
 
@@ -154,7 +156,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             if (!pMP->acceptNewObserve(posNewKF, mpNewKF->mvKeyPoints[i])) {
                 continue;
             }
-            if (posNewKF.z > Config::UPPER_DEPTH || posNewKF.z < Config::LOWER_DEPTH)
+            if (posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
             Track::calcSE3toXYZInfo(posNewKF, mpNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
@@ -201,7 +203,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
  */
 void LocalMapper::removeOutlierChi2()
 {
-    unique_lock<mutex> lockmapper(mutexMapper);
+    locker lockmapper(mutexMapper);
 
     SlamOptimizer optimizer;
     initOptimizer(optimizer);
@@ -268,14 +270,14 @@ void LocalMapper::localBA()
     if (mbGlobalBABegin)
         return;
 
-    unique_lock<mutex> lockmapper(mutexMapper);
+    locker lockmapper(mutexMapper);
 
     SlamOptimizer optimizer;
     SlamLinearSolver *linearSolver = new SlamLinearSolver();
     SlamBlockSolver *blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm *solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(Config::LOCAL_VERBOSE);
+    optimizer.setVerbose(Config::LocalVerbose);
 
     optimizer.setForceStopFlag(&mbAbortBA);
 
@@ -286,7 +288,7 @@ void LocalMapper::localBA()
     // assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
-    optimizer.optimize(Config::LOCAL_ITER);
+    optimizer.optimize(Config::LocalIterNum);
 
 //    if (mbPrintDebugInfo) {
 //        cerr << "[Local] LocalBA cost time " << timer.time << ", number of KFs: "
@@ -311,10 +313,10 @@ void LocalMapper::localBA()
 
 void LocalMapper::run()
 {
-    if (Config::LOCALIZATION_ONLY)
+    if (Config::LocalizationOnly)
         return;
 
-    mbPrintDebugInfo = Config::LOCAL_PRINT;
+    mbPrintDebugInfo = Config::LocalPrint;
 
     ros::Rate rate(Config::FPS * 10);
     while (ros::ok()) {
@@ -372,13 +374,13 @@ void LocalMapper::setAbortBA()
 
 bool LocalMapper::acceptNewKF()
 {
-    unique_lock<mutex> lock(mMutexAccept);
+    locker lock(mMutexAccept);
     return mbAcceptNewKF;
 }
 
 void LocalMapper::setAcceptNewKF(bool flag)
 {
-    unique_lock<mutex> lock(mMutexAccept);
+    locker lock(mMutexAccept);
     mbAcceptNewKF = flag;
 }
 
@@ -452,7 +454,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
 
 void LocalMapper::updateLocalGraphInMap()
 {
-    unique_lock<mutex> lock(mutexMapper);
+    locker lock(mutexMapper);
     mpMap->updateLocalGraph();
 }
 
@@ -460,7 +462,7 @@ void LocalMapper::updateLocalGraphInMap()
 //! 只要有冗余就一直去除冗余的KF，直到去不了为止; 但也不能去太狠，最多去5帧。
 void LocalMapper::pruneRedundantKFinMap()
 {
-    unique_lock<mutex> lock(mutexMapper);
+    locker lock(mutexMapper);
     bool bPruned = false;
     int countPrune = 0;
     do {
@@ -474,7 +476,7 @@ void LocalMapper::pruneRedundantKFinMap()
 
 void LocalMapper::setGlobalBABegin(bool value)
 {
-    lock_guard<mutex> lock(mMutexLocalGraph);
+    locker lock(mMutexLocalGraph);
     mbGlobalBABegin = value;
     if (value)
         mbAbortBA = true;
@@ -482,31 +484,31 @@ void LocalMapper::setGlobalBABegin(bool value)
 
 void LocalMapper::requestFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
 //! checkFinish()成功后break跳出主循环,然后就会调用setFinish()结束线程
 bool LocalMapper::checkFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinishRequested;
 }
 
 bool LocalMapper::isFinished()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinished;
 }
 
 void LocalMapper::setFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinished = true;
 }
 
 //void LocalMapper::getNumFKsInQueue(){
-//    unique_lock<mutex> lock(mMutexNewKFs);
+//    locker lock(mMutexNewKFs);
 //    return mlNewKeyFrames.size();
 //}
 

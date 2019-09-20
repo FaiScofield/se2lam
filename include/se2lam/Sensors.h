@@ -7,18 +7,19 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
-#include <opencv2/core/core.hpp>
-#include <thread>
-#include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <mutex>
+#include <opencv2/core/core.hpp>
+#include <thread>
 
-namespace se2lam {
+namespace se2lam
+{
 
-class Sensors {
+class Sensors
+{
 
 public:
-
     Sensors();
 
     ~Sensors();
@@ -29,35 +30,28 @@ public:
 
     void updateOdo(double x_, double y_, double theta_, double time_ = 0);
 
-    void updateImg(const cv::Mat &img_, double time_ = 0);
+    void updateImg(const cv::Mat& img_, double time_ = 0);
 
     // After readData(), img_updatd and odo_updated would be set false
-    void readData(cv::Point3f& dataOdo, cv::Mat& dataImg);
+    void readData(cv::Point3f& dataOdo, cv::Mat& dataImg, float& timeOdo, float& timeimg);
 
     void forceSetUpdate(bool val);
 
     cv::Point3f getOdo() { return mOdo; }
 
 protected:
-
     cv::Mat mImg;
     cv::Point3f mOdo;
+    float timeOdo;
+    float timeImg;
 
-    std::mutex mutex_odo;
-    std::mutex mutex_img;
-
-    std::atomic_bool odo_updated;
-    std::atomic_bool img_updated;
-
+    std::atomic_bool odoUpdated;
+    std::atomic_bool imgUpdated;
     std::condition_variable cndvSensorUpdate;
 
-    // reserve for sync
-    double time_odo;
-    double time_img;
-
+    std::mutex mMutexOdo;
+    std::mutex mMutexImg;
 };
-
-
 }
 
 

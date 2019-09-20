@@ -18,40 +18,23 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
+typedef unique_lock<mutex> locker;
+
+unsigned long Frame::nextId = 0;
 bool Frame::bIsInitialComputations = true;
-int Frame::nextId = 0;
-float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
+float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 
 
 Frame::Frame()
 {
-    mpORBExtractor = nullptr;
-    id = -1;
-    N = 0;
 }
 
-Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &K, const Mat &distCoef)
+Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
+             const Mat& K, const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
 {
-    mpORBExtractor = extractor;
-
-    //! 输入图像去畸变
-    undistort(im, mImage, K, distCoef);
-
-    //!  限制对比度自适应直方图均衡
-    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-    clahe->apply(mImage, mImage);
-
-    //! 提取特征点
-    (*mpORBExtractor)(mImage, cv::Mat(), mvKeyPoints, mDescriptors);
-
-    if (mvKeyPoints.empty())
-        return;
-    N = mvKeyPoints.size();
-
-    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
-    mvbOutlier = vector<bool>(N, false);
-
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputations) {
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
@@ -62,8 +45,28 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
         bIsInitialComputations = false;
     }
 
-    id = nextId;
-    nextId++;
+    id = nextId++;
+
+    //! 输入图像去畸变
+    assert(imgGray.channels() == 1);
+    undistort(imgGray, imgGray, K, distCoef);
+
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(imgGray, imgGray);
+
+    //! 提取特征点
+    (*mpORBExtractor)(imgGray, cv::Mat(), mvKeyPoints, mDescriptors);
+
+    N = mvKeyPoints.size();
+    if (mvKeyPoints.empty())
+        return;
+
+    if (Config::NeedVisulization)
+        imgGray.copyTo(mImage);
+
+    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
+    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
     mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
@@ -89,131 +92,90 @@ Frame::Frame(const Mat &im, const Se2 &odo, ORBextractor *extractor, const Mat &
         for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
             mGrid[i][j].reserve(nReserve);
 
-    for (size_t i = 0, iend = mvKeyPoints.size(); i < iend; i++) {
-        cv::KeyPoint &kp = mvKeyPoints[i];
+    for (size_t i = 0; i < N; i++) {
+        cv::KeyPoint& kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;
         if (PosInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
     }
-
-    odom = odo;
-// Tcw = cv::Mat::eye(4,4,CV_32FC1);
-// Tcr = cv::Mat::eye(4,4,CV_32FC1);
 }
 
-Frame::Frame(const Frame &f)
+Frame::Frame(const Frame& f)
+    : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
+      mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
+      mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
+      mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
+      mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
+      Trb(f.Trb)
 {
-    f.mImage.copyTo(mImage);
-    mvKeyPoints = f.mvKeyPoints;
-    mvKeyPoints = f.mvKeyPoints;
-    f.mDescriptors.copyTo(mDescriptors);
-    N = f.N;
-    mvpMapPoints = f.mvpMapPoints;
-    mvbOutlier = f.mvbOutlier;
+    if (Config::NeedVisulization)
+        f.mImage.copyTo(mImage);
 
-    minXUn = f.minXUn;
-    minYUn = f.minYUn;
-    maxXUn = f.maxXUn;
-    maxYUn = f.maxYUn;
-
-    mnScaleLevels = f.mnScaleLevels;
-    mfScaleFactor = f.mfScaleFactor;
-    mvScaleFactors = f.mvScaleFactors;
-    mvLevelSigma2 = f.mvLevelSigma2;
-    mvInvLevelSigma2 = f.mvInvLevelSigma2;
     for (int i = 0; i < FRAME_GRID_COLS; i++)
         for (int j = 0; j < FRAME_GRID_ROWS; j++)
             mGrid[i][j] = f.mGrid[i][j];
 
-    f.Tcw.copyTo(Tcw);
-    f.Tcr.copyTo(Tcr);
-
-    mTime = f.getTime();
-
-    id = f.id;
-    odom = f.odom;
-    Twb = f.Twb;
-    Trb = f.Trb;
-
-//    lineFeature = f.lineFeature;
-//    pointAndLineLable = f.pointAndLineLable;
-//    lineIncludePoints = f.lineIncludePoints;
+    if (!f.Tcw.empty())
+        setPose(f.Tcw);
 }
 
-Frame &Frame::operator=(const Frame &f)
+Frame& Frame::operator=(const Frame& f)
+    : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
+       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
+       mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
+       mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
+       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
+       Trb(f.Trb)
 {
-    f.mImage.copyTo(mImage);
-    mvKeyPoints = f.mvKeyPoints;
-    mvKeyPoints = f.mvKeyPoints;
-    f.mDescriptors.copyTo(mDescriptors);
-    N = f.N;
-    mvpMapPoints = f.mvpMapPoints;
-    mvbOutlier = f.mvbOutlier;
+    if (Config::NeedVisulization)
+        f.mImage.copyTo(mImage);
 
-    minXUn = f.minXUn;
-    minYUn = f.minYUn;
-    maxXUn = f.maxXUn;
-    maxYUn = f.maxYUn;
-
-    mnScaleLevels = f.mnScaleLevels;
-    mfScaleFactor = f.mfScaleFactor;
-    mvScaleFactors = f.mvScaleFactors;
-    mvLevelSigma2 = f.mvLevelSigma2;
-    mvInvLevelSigma2 = f.mvInvLevelSigma2;
     for (int i = 0; i < FRAME_GRID_COLS; i++)
         for (int j = 0; j < FRAME_GRID_ROWS; j++)
             mGrid[i][j] = f.mGrid[i][j];
 
-    f.Tcw.copyTo(Tcw);
-    f.Tcr.copyTo(Tcr);
-
-    mTime = f.getTime();
-
-    id = f.id;
-    odom = f.odom;
-    Twb = f.Twb;
-    Trb = f.Trb;
-
-//    lineFeature = f.lineFeature;
-//    pointAndLineLable = f.pointAndLineLable;
-//    lineIncludePoints = f.lineIncludePoints;
+    if (!f.Tcw.empty())
+        setPose(f.Tcw);
 
     return *this;
 }
 
-float Frame::getTime() const
+Mat KeyFrame::getPose()
 {
-    return mTime;
+    locker lock(mMutexPose);
+    return Tcw.clone();
 }
 
-void Frame::setTime(float time)
+void KeyFrame::setPose(const Mat& _Tcw)
 {
-    mTime = time;
+    locker lock(mMutexPose);
+    _Tcw.copyTo(Tcw);
+    Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
+}
+
+void KeyFrame::setPose(const Se2& _Twb)
+{
+    locker lock(mMutexPose);
+    Twb = _Twb;
+    Tcw = Config::Tcb * Twb.inv().toCvSE3();
 }
 
 //! 这个函数没用了
-void Frame::undistortKeyPoints(const Mat &K, const Mat &D)
+void Frame::undistortKeyPoints(const Mat& K, const Mat& D)
 {
     mvKeyPoints = mvKeyPoints;
     if (D.at<float>(0) == 0.) {
         return;
     }
-    Mat_<Point2f> mat(1, mvKeyPoints.size());
-    for (size_t i = 0; i < mvKeyPoints.size(); i++) {
-        mat(i) = mvKeyPoints[i].pt;
-    }
-    undistortPoints(mat, mat, K, D, Mat(), K);
-    for (size_t i = 0; i < mvKeyPoints.size(); i++) {
-        mvKeyPoints[i].pt = mat(i);
-    }
-    assert(mvKeyPoints.size() == mvKeyPoints.size());
+    undistortPoints(mvKeyPoints, mvKeyPoints, K, D, Mat(), K);
 }
 
-void Frame::computeBoundUn(const Mat &K, const Mat &D)
+//! 只执行一次
+void Frame::computeBoundUn(const Mat& K, const Mat& D)
 {
-    float x = (float)mImage.cols;
-    float y = (float)mImage.rows;
+    float x = static_cast<float>(Config::ImgSize.width);
+    float y = static_cast<float>(Config::ImgSize.height);
     if (D.at<float>(0) == 0.) {
         minXUn = 0.f;
         minYUn = 0.f;
@@ -235,9 +197,8 @@ bool Frame::inImgBound(Point2f pt)
     return (pt.x >= minXUn && pt.x <= maxXUn && pt.y >= minYUn && pt.y <= maxYUn);
 }
 
-
 // From ORB_SLAM
-bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
+bool Frame::PosInGrid(cv::KeyPoint& kp, int& posX, int& posY)
 {
     posX = round((kp.pt.x - minXUn) * gridElementWidthInv);
     posY = round((kp.pt.y - minYUn) * gridElementHeightInv);
@@ -252,14 +213,8 @@ bool Frame::PosInGrid(cv::KeyPoint &kp, int &posX, int &posY)
 
 /**
  * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
- * @param x        图像坐标u
- * @param y        图像坐标v
- * @param r        边长
- * @param minLevel 最小尺度
- * @param maxLevel 最大尺度
- * @return         满足条件的特征点的序号
  */
-vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const float &r,
+vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const float& r,
                                         int minLevel, int maxLevel) const
 {
     vector<size_t> vIndices;
@@ -297,7 +252,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
                 continue;
 
             for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
-                const cv::KeyPoint &kpUn = mvKeyPoints[vCell[j]];
+                const cv::KeyPoint& kpUn = mvKeyPoints[vCell[j]];
                 if (bCheckLevels && !bSameLevel) {
                     if (kpUn.octave < minLevel || kpUn.octave > maxLevel)
                         continue;
@@ -317,19 +272,20 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float &y, const fl
     return vIndices;
 }
 
-void Frame::copyImgTo(cv::Mat &imgRet)
+void Frame::copyImgTo(cv::Mat& imgRet)
 {
-    lock_guard<mutex> lock(mMutexImg);
+    unique_lock<mutex> lock(mMutexImg);
     mImage.copyTo(imgRet);
 }
 
-void Frame::copyDesTo(cv::Mat &desRet)
+void Frame::copyDesTo(cv::Mat& desRet)
 {
-    lock_guard<mutex> lock(mMutexDes);
+    unique_lock<mutex> lock(mMutexDes);
     mDescriptors.copyTo(desRet);
 }
 
 Frame::~Frame()
-{}
+{
+}
 
 }  // namespace se2lam

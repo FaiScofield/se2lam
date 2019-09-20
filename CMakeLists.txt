@@ -11,7 +11,7 @@ IF (CMAKE_COMPILER_IS_GNUCXX )
 #    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fsanitize-recover=address") # -O1 -g
 #    set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fsanitize=address -fsanitize-recover=address")
 
-    ADD_DEFINITIONS("-W -Wall -Wno-old-style-cast -Wno-deprecated-declarations -Wno-unused-parameter")  #-Werror
+    ADD_DEFINITIONS("-W -Wall -Wno-deprecated-declarations")  #-Werror  -Wno-unused-parameter
 ENDIF()
 
 add_subdirectory(Thirdparty/DBoW2)
@@ -19,7 +19,7 @@ add_subdirectory(Thirdparty/DBoW2)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
 # c++ 11 support for g2o, multi-thread and shared_ptr
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3") #-Werror -g -O
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ") #-Werror -g -O
 
 find_package(Eigen REQUIRED)
 #set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)

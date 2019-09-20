@@ -18,7 +18,7 @@ using namespace cv;
 using namespace std;
 using namespace Eigen;
 using namespace g2o;
-typedef lock_guard<mutex> locker;
+typedef unique_lock<mutex> locker;
 
 Map::Map() : isEmpty(true)
 {
@@ -521,7 +521,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer, vector<vector<EdgeProjectXYZ2
         // 添加位姿节点
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
         // 添加平面运动约束边
-        addPlaneMotionSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, Config::bTc);
+        addPlaneMotionSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, Config::Tbc);
     }
 
     // Add odometry based constraints. 添加里程计约束边
@@ -566,7 +566,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer, vector<vector<EdgeProjectXYZ2
     vnAllIdx.clear();
     vnAllIdx.reserve(N);
 
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
     for (int i = 0; i < N; i++) {
@@ -696,7 +696,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer &optimizer,
     vnAllIdx.clear();
     vnAllIdx.reserve(N);
 
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
     for (int i = 0; i < N; i++) {
@@ -969,12 +969,12 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame &_pKF)
         if (GlobalMapper::CreateFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
-            if (Config::GLOBAL_PRINT) {
+            if (Config::GlobalPrint) {
                 cerr << "[ Map ] GlobalMap - Add feature constraint from KF#" << ptKFFrom->mIdKF << " to KF#"
                      << ptKFTo->mIdKF << endl;
             }
         } else {
-            if (Config::GLOBAL_PRINT)
+            if (Config::GlobalPrint)
                 cerr << "[ Map ] GlobalMap - Add feature constraint failed!" << endl;
         }
     }
@@ -1061,7 +1061,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
     // Store xyz2uv edges
     const int N = mLocalGraphMPs.size();
 
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
     for (int i = 0; i < N; i++) {
@@ -1110,7 +1110,7 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
             double zc = lc(2);
             double zc_inv = 1. / zc;
             double zc_inv2 = zc_inv * zc_inv;
-            const float &fx = Config::fxCam;
+            const float &fx = Config::fx;
             Matrix23d J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
             Matrix3d Rcw = toMatrix3d(pKF->Tcw.rowRange(0, 3).colRange(0, 3));
@@ -1120,12 +1120,12 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
 
             Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
             Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);
-            float Sigma_rotxy = 1. / Config::PLANEMOTION_XROT_INFO;
-            float Sigma_z = 1. / Config::PLANEMOTION_Z_INFO;
+            float Sigma_rotxy = 1. / Config::PlaneMotionInfoXrot;
+            float Sigma_z = 1. / Config::PlaneMotionInfoZ;
             Matrix2d Sigma_all = Sigma_rotxy * J_rotxy * J_rotxy.transpose() +
                                  Sigma_z * J_z * J_z.transpose() + Sigma_u;
 
-            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, campr, toSE3Quat(Config::bTc),
+            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, campr, toSE3Quat(Config::Tbc),
                           Sigma_all.inverse(), delta);
         }
     }

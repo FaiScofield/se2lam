@@ -404,8 +404,8 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
             if (invzc < 0)
                 continue;
 
-            float u = Config::fxCam * xc * invzc + Config::cxCam;
-            float v = Config::fyCam * yc * invzc + Config::cyCam;
+            float u = Config::fx * xc * invzc + Config::cx;
+            float v = Config::fy * yc * invzc + Config::cy;
 
             if (u < CurrentFrame.minXUn || u > CurrentFrame.maxXUn)
                 continue;

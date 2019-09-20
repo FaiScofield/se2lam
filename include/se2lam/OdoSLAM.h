@@ -34,27 +34,22 @@ public:
 
     void start();
 
-    inline void receiveOdoData(double x_, double y_, double z_, double time_ = 0)
+    inline void receiveOdoData(float x_, float y_, float z_, float time_ = 0.f)
     {
         mpSensors->updateOdo(x_, y_, z_, time_);
     }
 
-    inline void receiveImgData(const cv::Mat &img_, double time_ = 0)
+    inline void receiveImgData(const cv::Mat &img_, float time_ = 0.f)
     {
         mpSensors->updateImg(img_, time_);
     }
 
-
     void requestFinish();
-
     void waitForFinish();
 
     cv::Mat getCurrentVehiclePose();
-
     cv::Mat getCurrentCameraPoseWC();
-
     cv::Mat getCurrentCameraPoseCW();
-
 
     bool ok();
 
@@ -68,25 +63,18 @@ private:
     MapStorage* mpMapStorage;
     Localizer* mpLocalizer;
     Sensors* mpSensors;
-
     ORBVocabulary* mpVocabulary;
 
     bool mbFinishRequested;
-
-    bool checkFinish();
-
     bool mbFinished;
 
+    std::mutex mMutexFinish;
+
+    bool checkFinish();
     void saveMap();
-
     void sendRequestFinish();
-
     void checkAllExit();
-
-    void clear();
-
     static void wait(OdoSLAM* system);
-
 };
 
 }

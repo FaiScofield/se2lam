@@ -23,7 +23,7 @@ using namespace std;
 using namespace cv;
 using namespace Eigen;
 
-typedef lock_guard<mutex> locker;
+typedef unique_lock<mutex> locker;
 
 bool Track::mbUseOdometry = true;
 
@@ -77,7 +77,7 @@ void Track::setSensors(Sensors *pSensors)
 
 void Track::run()
 {
-    if (Config::LOCALIZATION_ONLY)
+    if (Config::LocalizationOnly)
         return;
 
     if (mState == cvu::NO_READY_YET)
@@ -94,10 +94,11 @@ void Track::run()
             WorkTimer timer;
             timer.start();
 
+            float timeOdo, timeImg;
             Point3f odo_3f;
-            mpSensors->readData(odo_3f, img);
+            mpSensors->readData(odo_3f, img, timeOdo, timeImg);
             if (mbUseOdometry)
-                odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+                odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z, timeOdo);
             else
                 odo = Se2();    //! TODO 不用odom也要能计算出位姿
 
@@ -136,7 +137,7 @@ void Track::mCreateFrame(const Mat &img, const Se2 &odo)
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
     mFrame.Twb = Se2(0, 0, 0);          // 当前帧World->Body，即Body的世界坐标，首帧为原点
-    mFrame.Tcw = Config::cTb.clone();   // 当前帧Camera->World
+    mFrame.Tcw = Config::Tcb.clone();   // 当前帧Camera->World
 
     if (mFrame.mvKeyPoints.size() > 100) {
         cout << "========================================================" << endl;
@@ -232,7 +233,7 @@ void Track::updateFramePose()
     // Tb2b1, 当前帧Body->参考帧Body, se2形式
     Se2 dOdo = mpKF->odom - mFrame.odom;
     // Tc2c1, 当前帧Camera->参考帧Camera, Tc2c1 = Tcb * Tb2b1 * Tbc
-    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;
+    mFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     // Tc2w, 当前帧Camera->World, Tc2w = Tc2c1 * Tc1w
     mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
     // Twb2, 当前帧World->Body，se2形式，故相加， Twb2 = Twb1 * Tb1b2
@@ -253,9 +254,9 @@ void Track::updateFramePose()
     Bk.block<2, 2>(0, 0) = Phi_ik;
     Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
     Matrix3d Sigma_vk = Matrix3d::Identity();
-    Sigma_vk(0, 0) = (Config::ODO_X_NOISE * Config::ODO_X_NOISE);
-    Sigma_vk(1, 1) = (Config::ODO_Y_NOISE * Config::ODO_Y_NOISE);
-    Sigma_vk(2, 2) = (Config::ODO_T_NOISE * Config::ODO_T_NOISE);
+    Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
+    Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
+    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 }
@@ -302,16 +303,16 @@ int Track::copyForPub(vector<KeyPoint> &kp1, vector<KeyPoint> &kp2, Mat &img1, M
 // 后端优化用，信息矩阵
 void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat &cTc, g2o::Matrix6d &Info_se3)
 {
-    const Mat bTc = Config::bTc;
-    const Mat cTb = Config::cTb;
+    const Mat bTc = Config::Tbc;
+    const Mat cTb = Config::Tcb;
 
     const Mat bTb = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
 
     cTc = cTb * bTb * bTc;
 
-    float dx = dOdo.x * Config::ODO_X_UNCERTAIN + Config::ODO_X_NOISE;
-    float dy = dOdo.y * Config::ODO_Y_UNCERTAIN + Config::ODO_Y_NOISE;
-    float dtheta = dOdo.theta * Config::ODO_T_UNCERTAIN + Config::ODO_T_NOISE;
+    float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
+    float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
+    float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
 
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
     //    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4,
@@ -349,8 +350,8 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eig
     Point3f xyz2 = cvu::se3map(Tcw2, xyz);
     float length1 = cv::norm(xyz1);
     float length2 = cv::norm(xyz2);
-    float dxy1 = 2.f * length1 / Config::fxCam;
-    float dxy2 = 2.f * length2 / Config::fxCam;
+    float dxy1 = 2.f * length1 / Config::fx;
+    float dxy2 = 2.f * length2 / Config::fx;
     float dz1 = dxy2 / sinParallax;
     float dz2 = dxy1 / sinParallax;
 
@@ -445,9 +446,9 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
         bool c5 = abs(dOdo.theta) >= g2o::deg2rad(20.);  // 旋转量超过30°，这里原来少了绝对值符号
-        cv::Mat cTc = Config::cTb * dOdo.toCvSE3() * Config::bTc;  // NOTE 注意相机的平移量不等于里程的平移量
+        cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;  // NOTE 注意相机的平移量不等于里程的平移量
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
-        bool c6 = cv::norm(xy) >= (0.5 * Config::UPPER_DEPTH * 0.1);  // 相机的平移量足够大 0.5*
+        bool c6 = cv::norm(xy) >= (0.5 * Config::UpperDepth * 0.1);  // 相机的平移量足够大 0.5*
 
         bNeedKFByOdo = c5 || c6;  // 相机旋转超过2°，或者相机移动距离超过一定距离(取决于深度上限,考虑了不同深度下视野的不同)
     }
@@ -524,25 +525,25 @@ int Track::doTriangulate()
 
 void Track::requestFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
 bool Track::checkFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinishRequested;
 }
 
 bool Track::isFinished()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinished;
 }
 
 void Track::setFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinished = true;
 }
 
