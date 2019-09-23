@@ -16,9 +16,9 @@ using namespace std;
 
 typedef unique_lock<mutex> locker;
 
-int KeyFrame::mNextIdKF = 0;    //! F,KF和MP的编号都是从0开始
+unsigned long KeyFrame::mNextIdKF = 1;    //! F,KF和MP的编号都是从1开始
 
-KeyFrame::KeyFrame() : mIdKF(-1), mbBowVecExist(false), mbNull(false)
+KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mbNull(false)
 {
     PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
@@ -49,12 +49,11 @@ KeyFrame::KeyFrame() : mIdKF(-1), mbBowVecExist(false), mbNull(false)
 KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbNull(false)
 {
     size_t n = frame.N;
-    mViewMPs = vector<Point3f>(n, Point3f(-1, -1, -1));
+    mViewMPs = vector<Point3f>(n, Point3f(-1.f, -1.f, -1.f));
     mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>(
         n, Eigen::Matrix3d::Identity() * -1);
 
-    mIdKF = mNextIdKF;
-    mNextIdKF++;
+    mIdKF = mNextIdKF++;
 
     PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
@@ -65,9 +64,7 @@ KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbN
 }
 
 KeyFrame::~KeyFrame()
-{
-}
-
+{}
 
 // Please handle odometry based constraints after calling this function
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
@@ -78,12 +75,14 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     locker lckDes(mMutexDes);
     locker lckCov(mMutexCovis);
 
+    if (mIdKF == 1)
+        return;
+
     mbNull = true;
     mpORBExtractor = nullptr;
-    mIdKF = -1;
+    mIdKF = 0;
     mImage.release();
     mDescriptors.release();
-    mvKeyPoints.clear();
     mvKeyPoints.clear();
     mvpMapPoints.clear();
     mvbOutlier.clear();
@@ -156,8 +155,7 @@ set<PtrMapPoint> KeyFrame::getAllObsMPs(bool checkParallax)
 {
     locker lock(mMutexObs);
     set<PtrMapPoint> spMP;
-    auto i = mObservations.begin(), iend = mObservations.end();
-    for (; i != iend; i++) {
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
         PtrMapPoint pMP = i->first;
         if (!pMP)
             continue;
@@ -179,15 +177,15 @@ bool KeyFrame::hasObservation(const PtrMapPoint &pMP)
 {
     locker lock(mMutexObs);
     map<PtrMapPoint, int>::iterator it = mObservations.find(pMP);
-    return (it != mObservations.end());
 
-//    return mObservations.count(pMP);
+    return (it != mObservations.end());
 }
 
-bool KeyFrame::hasObservation(int idx)
+bool KeyFrame::hasObservation(unsigned long idx)
 {
     locker lock(mMutexObs);
     auto it = mDualObservations.find(idx);
+
     return (it != mDualObservations.end());
 }
 
@@ -211,16 +209,18 @@ bool KeyFrame::hasObservation(int idx)
 //    Tcw = Config::Tcb * Twb.inv().toCvSE3();
 //}
 
-void KeyFrame::addObservation(PtrMapPoint pMP, int idx)
+void KeyFrame::addObservation(PtrMapPoint pMP, size_t idx)
 {
     locker lock(mMutexObs);
+    if (!pMP)
+        return;
     if (pMP->isNull())
         return;
     mObservations[pMP] = idx;
     mDualObservations[idx] = pMP;
 }
 
-map<PtrMapPoint, int> KeyFrame::getObservations()
+map<PtrMapPoint, size_t> KeyFrame::getObservations()
 {
     locker lock(mMutexObs);
     return mObservations;
@@ -229,12 +229,12 @@ map<PtrMapPoint, int> KeyFrame::getObservations()
 void KeyFrame::eraseObservation(const PtrMapPoint pMP)
 {
     locker lock(mMutexObs);
-    int idx = mObservations[pMP];
+    size_t idx = mObservations[pMP];
     mObservations.erase(pMP);
     mDualObservations.erase(idx);
 }
 
-void KeyFrame::eraseObservation(int idx)
+void KeyFrame::eraseObservation(size_t idx)
 {
     locker lock(mMutexObs);
     mObservations.erase(mDualObservations[idx]);
@@ -285,13 +285,13 @@ void KeyFrame::ComputeBoW(ORBVocabulary *_pVoc)
 
 DBoW2::FeatureVector KeyFrame::GetFeatureVector()
 {
-    //    boost::mutex::scoped_lock lock(mMutexFeatures);
+//    boost::mutex::scoped_lock lock(mMutexFeatures);
     return mFeatVec;
 }
 
 DBoW2::BowVector KeyFrame::GetBowVector()
 {
-    //    boost::mutex::scoped_lock lock(mMutexFeatures);
+//    boost::mutex::scoped_lock lock(mMutexFeatures);
     return mBowVec;
 }
 
@@ -302,12 +302,11 @@ DBoW2::BowVector KeyFrame::GetBowVector()
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
     vector<PtrMapPoint> ret;
-    int numKPs = mvKeyPoints.size();
-    for (int i = 0; i < numKPs; i++) {
-        PtrMapPoint pMP = nullptr;
-        std::map<int, PtrMapPoint>::iterator iter;
+    size_t N = mvKeyPoints.size();
+    std::map<int, PtrMapPoint>::iterator iter;
+    for (size_t i = 0; i < N; i++) {
+        PtrMapPoint pMP = static_cast<PtrMapPoint>(nullptr);
         iter = mDualObservations.find(i);
-
         if (iter == mDualObservations.end()) {
             ret.push_back(pMP);  //!@Vance: 此特征点没有match上的MP
         } else {
@@ -324,10 +323,11 @@ vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
  * @param pMP   观测上要设置的MP
  * @param idx   特征点的编号
  */
-void KeyFrame::setObservation(const PtrMapPoint &pMP, int idx)
+void KeyFrame::setObservation(const PtrMapPoint &pMP, size_t idx)
 {
     locker lock(mMutexObs);
 
+    // 保证之前此索引位置有观测，然后替换掉
     if (mDualObservations.find(idx) == mDualObservations.end())
         return;
 
@@ -336,17 +336,17 @@ void KeyFrame::setObservation(const PtrMapPoint &pMP, int idx)
     mDualObservations[idx] = pMP;
 }
 
-PtrMapPoint KeyFrame::getObservation(int idx)
+PtrMapPoint KeyFrame::getObservation(size_t idx)
 {
     locker lock(mMutexObs);
 
     if (!mDualObservations[idx]) {
-        fprintf(stderr, "[KeyFrame] This is a NULL index in feature!\n");
+        fprintf(stderr, "[KeyFrame] This is a NULL index in observation!\n");
     }
     return mDualObservations[idx];
 }
 
-int KeyFrame::getFtrIdx(const PtrMapPoint &pMP)
+size_t KeyFrame::getFtrIdx(const PtrMapPoint &pMP)
 {
     locker lock(mMutexObs);
     if (mObservations.find(pMP) == mObservations.end())

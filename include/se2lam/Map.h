@@ -8,19 +8,21 @@
 #ifndef MAP_H
 #define MAP_H
 
+#include "Config.h"
 #include "KeyFrame.h"
 #include "MapPoint.h"
-#include "Config.h"
 #include "optimizer.h"
-#include <unordered_map>
-#include <set>
 #include <opencv2/flann.hpp>
+#include <set>
+#include <unordered_map>
 
-namespace se2lam {
+namespace se2lam
+{
 
 class LocalMapper;
 
-class Map{
+class Map
+{
 
 public:
     Map();
@@ -41,7 +43,7 @@ public:
     bool empty();
 
     PtrKeyFrame getCurrentKF();
-    void setCurrentKF(const PtrKeyFrame &pKF);
+    void setCurrentKF(const PtrKeyFrame& pKF);
 
     void setCurrentFramePose(const cv::Mat& pose);
     cv::Mat getCurrentFramePose();
@@ -60,9 +62,11 @@ public:
     void lock();
     void unlock();
 
-    static cv::Point2f compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, std::set<PtrMapPoint>& spMPs);
+    static cv::Point2f compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2,
+                                      std::set<PtrMapPoint>& spMPs);
 
-    static double compareViewMPs(const PtrKeyFrame & pKF, const set<PtrKeyFrame> & spKFs, std::set<PtrMapPoint> & spMPs, int k = 2);
+    static double compareViewMPs(const PtrKeyFrame& pKF, const set<PtrKeyFrame>& spKFs,
+                                 std::set<PtrMapPoint>& spMPs, int k = 2);
 
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
 
@@ -78,11 +82,15 @@ public:
 
     void loadLocalGraph(SlamOptimizer& optimizer);
 
-    void loadLocalGraph(SlamOptimizer& optimizer, std::vector< std::vector<g2o::EdgeProjectXYZ2UV*> > &vpEdgesAll, std::vector< std::vector<int> >& vnAllIdx);
+    void loadLocalGraph(SlamOptimizer& optimizer,
+                        std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,
+                        std::vector<std::vector<int>>& vnAllIdx);
 
-    void loadLocalGraphOnlyBa(SlamOptimizer& optimizer, std::vector< std::vector<g2o::EdgeProjectXYZ2UV*> > &vpEdgesAll, std::vector< std::vector<int> >& vnAllIdx);
+    void loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
+                              std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,
+                              std::vector<std::vector<int>>& vnAllIdx);
 
-    int removeLocalOutlierMP(const vector<vector<int> > &vnOutlierIdxAll);
+    int removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll);
 
     void optimizeLocalGraph(SlamOptimizer& optimizer);
 
@@ -97,23 +105,23 @@ public:
 
 
     //! For GlobalMapper
-    void mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFCurr, PtrKeyFrame& pKFLoop);
+    void mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFCurr,
+                        PtrKeyFrame& pKFLoop);
 
     //! Set KF pair waiting for feature constraint generation, called by localmapper
-    std::vector<pair<PtrKeyFrame, PtrKeyFrame>> SelectKFPairFeat(const PtrKeyFrame &_pKF);
+    std::vector<pair<PtrKeyFrame, PtrKeyFrame>> SelectKFPairFeat(const PtrKeyFrame& _pKF);
 
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
-    bool UpdateFeatGraph(const PtrKeyFrame &_pKF);
+    bool UpdateFeatGraph(const PtrKeyFrame& _pKF);
 
 protected:
-
     PtrKeyFrame mCurrentKF;
 
     bool isEmpty;
 
     //! Global Map
-    std::set<PtrMapPoint, MapPoint::IdLessThan> mMPs;   //!@Vance: 全局地图点集合，以id升序排序
-    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mKFs;   //!@Vance: 全局关键帧集合，以id升序排序
+    std::set<PtrMapPoint, MapPoint::IdLessThan> mMPs;  //!@Vance: 全局地图点集合，以id升序排序
+    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mKFs;  //!@Vance: 全局关键帧集合，以id升序排序
 
     //! Local Map
     std::vector<PtrMapPoint> mLocalGraphMPs;
@@ -128,8 +136,8 @@ protected:
     std::mutex mMutexCurrentKF;
     std::mutex mMutexCurrentFrame;
 
-}; //class Map
+};  // class Map
 
-}// namespace se2lam
+}  // namespace se2lam
 
 #endif

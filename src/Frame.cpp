@@ -20,7 +20,7 @@ using namespace std;
 
 typedef unique_lock<mutex> locker;
 
-unsigned long Frame::nextId = 0;
+unsigned long Frame::nextId = 1;
 bool Frame::bIsInitialComputations = true;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
@@ -30,7 +30,7 @@ Frame::Frame()
 {
 }
 
-Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
+Frame::Frame(const Mat& imgGray, const float& time, const Se2& odo, ORBextractor* extractor,
              const Mat& K, const Mat& distCoef)
     : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
 {
@@ -65,8 +65,8 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
     if (Config::NeedVisulization)
         imgGray.copyTo(mImage);
 
-    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
-    mvbOutlier = vector<bool>(N, false);
+//    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
+//    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
     mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
@@ -104,7 +104,7 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
 Frame::Frame(const Frame& f)
     : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-      mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
+      /*mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier),*/ mnScaleLevels(f.mnScaleLevels),
       mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
       Trb(f.Trb)
@@ -123,7 +123,7 @@ Frame::Frame(const Frame& f)
 Frame& Frame::operator=(const Frame& f)
     : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
        mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-       mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
+       /*mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier),*/ mnScaleLevels(f.mnScaleLevels),
        mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
        mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
        Trb(f.Trb)
@@ -141,24 +141,50 @@ Frame& Frame::operator=(const Frame& f)
     return *this;
 }
 
-Mat KeyFrame::getPose()
+Se2 Frame::getTwb()
+{
+    locker lock(mMutexPose);
+    return Twb;
+}
+
+Mat Frame::getTcr()
+{
+    locker lock(mMutexPose);
+    return Tcr.clone();
+}
+
+Mat Frame::getPose()
 {
     locker lock(mMutexPose);
     return Tcw.clone();
 }
 
-void KeyFrame::setPose(const Mat& _Tcw)
+Point3f Frame::getCameraCenter()
+{
+    locker lock(mMutexPose);
+    Mat Ow = cvu::inv(Tcw).rowRange(0, 3).col(3);
+
+    return Mat_<Point3f>(Ow);
+}
+
+void Frame::setPose(const Mat& _Tcw)
 {
     locker lock(mMutexPose);
     _Tcw.copyTo(Tcw);
     Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
 }
 
-void KeyFrame::setPose(const Se2& _Twb)
+void Frame::setPose(const Se2& _Twb)
 {
     locker lock(mMutexPose);
     Twb = _Twb;
     Tcw = Config::Tcb * Twb.inv().toCvSE3();
+}
+
+void Frame::setTcr(const Mat &_Tcr)
+{
+    locker lock(mMutexPose);
+    _Tcr.copyTo(Tcr);
 }
 
 //! 这个函数没用了

@@ -124,9 +124,10 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                     continue;
                 }
                 Eigen::Matrix3d xyzinfo, xyzinfo0;
+                Mat Tcr = mpNewKF->getTcr();
                 Track::calcSE3toXYZInfo(pPrefKF->mViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1),
-                                        mpNewKF->Tcr, xyzinfo0, xyzinfo);
-                mpNewKF->setViewMP(cvu::se3map(mpNewKF->Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo);
+                                        Tcr, xyzinfo0, xyzinfo);
+                mpNewKF->setViewMP(cvu::se3map(Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo);
                 mpNewKF->addObservation(pMP, vMatched12[i]);
                 pMP->addObservation(mpNewKF, vMatched12[i]);
             }
@@ -149,17 +150,18 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
+            Mat Tcw = mpNewKF->getPose();
             Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
-                                           Config::Kcam * pMP->mMainKF->Tcw.rowRange(0, 3),
-                                           Config::Kcam * mpNewKF->Tcw.rowRange(0, 3));
-            Point3f posNewKF = cvu::se3map(mpNewKF->Tcw, x3d);
+                                           Config::Kcam * pMP->mMainKF->getPose().rowRange(0, 3),
+                                           Config::Kcam * Tcw.rowRange(0, 3));
+            Point3f posNewKF = cvu::se3map(Tcw, x3d);
             if (!pMP->acceptNewObserve(posNewKF, mpNewKF->mvKeyPoints[i])) {
                 continue;
             }
             if (posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, mpNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
+            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->mMainKF->getPose(), infoNew, infoOld);
             mpNewKF->setViewMP(posNewKF, i, infoNew);
             mpNewKF->addObservation(pMP, i);
             pMP->addObservation(mpNewKF, i);
@@ -175,10 +177,10 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                 continue;
 
             //! TODO 这里对localMPs的坐标系要再确认一下！
-            Point3f posW = cvu::se3map(cvu::inv(pPrefKF->Tcw), localMPs[i]);
-            Point3f posKF = cvu::se3map(mpNewKF->Tcr, localMPs[i]);
+            Point3f posW = cvu::se3map(cvu::inv(pPrefKF->getPose()), localMPs[i]);
+            Point3f posKF = cvu::se3map(mpNewKF->getTcr(), localMPs[i]);
             Eigen::Matrix3d xyzinfo, xyzinfo0;
-            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->Tcw, mpNewKF->Tcw, xyzinfo0, xyzinfo);
+            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->getPose(), mpNewKF->getPose(), xyzinfo0, xyzinfo);
 
             mpNewKF->setViewMP(posKF, vMatched12[i], xyzinfo);
             pPrefKF->setViewMP(localMPs[i], i, xyzinfo0);
@@ -255,9 +257,9 @@ void LocalMapper::removeOutlierChi2()
     vpEdgesAll.clear();
     vnAllIdx.clear();
 
-    printf("[Local] #%d(KF#%d) Remove removeOutlierChi2 Time %fms\n",
+    printf("[Local] #%ld(KF#%ld) Remove removeOutlierChi2 Time %fms\n",
             mpNewKF->id, mpNewKF->mIdKF, timer.time);
-    printf("[Local] #%d(KF#%d) Outlier MP: %d; total MP: %d\n",
+    printf("[Local] #%ld(KF#%ld) Outlier MP: %d; total MP: %d\n",
             mpNewKF->id, mpNewKF->mIdKF, nBadMP, nAllMP);
 }
 
@@ -343,7 +345,7 @@ void LocalMapper::run()
             localBA();                  // 这里又做了一次LocalBA，有更新位姿
 
             timer.stop();
-            fprintf(stderr, "[Local] #%d(KF#%d) Time cost for LocalMapper's process: %fms.\n",
+            fprintf(stderr, "[Local] #%ld(KF#%ld) Time cost for LocalMapper's process: %fms.\n",
                     mpNewKF->id, mpNewKF->mIdKF, timer.time);
 
             //! 标志位置为false防止多次处理，直到加入新的KF才会再次启动
@@ -393,7 +395,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (max(id0, id1) > (mpNewKF->mIdKF)) {
+            if (max(id0, id1) > static_cast<int>(mpNewKF->mIdKF)) {
                 // Not odometry edge
                 continue;
             }
@@ -435,7 +437,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &_optimizer)
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (max(id0, id1) > (mpNewKF->mIdKF)) {
+            if (max(id0, id1) > static_cast<int>(mpNewKF->mIdKF)) {
                 if (pEdge->chi2() < 10)
                     continue;
                 cerr << "XYZ2UV edge: ";
@@ -470,7 +472,7 @@ void LocalMapper::pruneRedundantKFinMap()
         countPrune++;
     } while (bPruned && countPrune < 5);
 
-    printf("[Local] #%d(KF#%d) Prune %d Redundant Local KFs\n",
+    printf("[Local] #%ld(KF#%ld) Prune %d Redundant Local KFs\n",
            mpNewKF->id, mpNewKF->mIdKF, countPrune);
 }
 

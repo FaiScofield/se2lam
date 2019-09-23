@@ -15,8 +15,6 @@
 namespace se2lam
 {
 
-// extern std::ofstream se2log("/home/vance/output/se2log.log", std::ios_base::app);
-
 struct Se2 {
     float x;
     float y;

@@ -32,24 +32,17 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <vector>
 
-#include "lineDetection.h"
-
 
 namespace se2lam
 {
-
-//struct pointLineLable {
-//    int pointLable;
-//    int lineLable;
-//    double lent;
-//};
 
 class ORBextractor
 {
 public:
     enum { HARRIS_SCORE = 0, FAST_SCORE = 1 };
 
-    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 1,
+    //! 超天花板的摄像头没有z方向位移, 金字塔层数可以设为1
+    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 6,
                  int scoreType = FAST_SCORE, int fastTh = 15);  // 20
 
     ~ORBextractor() {}
@@ -61,11 +54,6 @@ public:
     int inline GetLevels() { return nlevels; }
 
     float inline GetScaleFactor() { return scaleFactor; }
-
-//    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
-//                    std::vector<lineSort_S> &linefeature, cv::OutputArray descriptors);
-//    std::vector<pointLineLable> pointAndLineLable;
-//    std::vector<std::vector<int>> lineIncluePoints;
 
 protected:
     void ComputePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());

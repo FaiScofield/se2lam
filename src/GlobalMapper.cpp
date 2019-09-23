@@ -164,7 +164,7 @@ void GlobalMapper::run()
         timer.stop();
         double t5 = timer.time;
 
-        fprintf(stderr, "[Globa] #%d(KF#%d) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
+        fprintf(stderr, "[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
                 mpKFCurr->id, mpKFCurr->mIdKF, t1 + t2 + t3 + t4 + t5,
                 mpMap->countKFs(), mpMap->countMPs());
 
@@ -375,12 +375,12 @@ void GlobalMapper::GlobalBA()
         if (pKF->isNull())
             continue;
 
-        Mat T_w_c = cvu::inv(pKF->Tcw);
+        Mat Twc = cvu::inv(pKF->getPose());
         bool bIfFix = (pKF->mIdKF == 0);
 
 //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior *pEdge = addVertexSE3PlaneMotion(
-            optimizer, toIsometry3D(T_w_c), pKF->mIdKF, Config::Tbc, SE3OffsetParaId, bIfFix);
+            optimizer, toIsometry3D(Twc), pKF->mIdKF, Config::Tbc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
 //        pEdge->setLevel(1);
 

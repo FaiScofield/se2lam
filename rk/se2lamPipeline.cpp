@@ -4,7 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
-
+#include "Config.h"
 #include "OdoSLAM.h"
 #include <boost/filesystem.hpp>
 #include <opencv2/opencv.hpp>
@@ -20,7 +20,7 @@ struct RK_IMAGE {
     RK_IMAGE(const string& s, const float& t) : fileName(s), timeStamp(t) {}
 
     string fileName;
-    long long int timeStamp;
+    float timeStamp;
 };
 
 bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
@@ -28,11 +28,12 @@ bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
     return r1.timeStamp < r2.timeStamp;
 }
 
-void readImagesRK(const string& dataFolder, vector<string>& files)
+void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     bf::path path(dataFolder);
     if (!bf::exists(path)) {
         cerr << "[main ] Data folder doesn't exist!" << endl;
+        ros::shutdown();
         return;
     }
 
@@ -47,25 +48,70 @@ void readImagesRK(const string& dataFolder, vector<string>& files)
             auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
             auto t = atoll(s.substr(i + 1, j - i - 1).c_str());
-            allImages.push_back(RK_IMAGE(s, t));
+            allImages.emplace_back(RK_IMAGE(s, t/1000000.f));
         }
     }
 
     if (allImages.empty()) {
         cerr << "[main ] Not image data in the folder!" << endl;
+        ros::shutdown();
         return;
-    } else
+    } else {
         cout << "[main ] Read " << allImages.size() << " files in the folder." << endl;
-
+    }
 
     //! 注意不能直接对string排序
     sort(allImages.begin(), allImages.end(), lessThen);
-
-    files.clear();
-    for (size_t i = 0; i < allImages.size(); ++i)
-        files.push_back(allImages[i].fileName);
+    files = allImages;
 }
 
+void readOdomsRK(const string& odomFile, vector<se2lam::Se2>& odoData)
+{
+    ifstream rec(odomFile);
+    if (!rec.is_open()) {
+        cerr << "[main ] Error in opening file: " << odomFile << endl;
+        rec.close();
+        ros::shutdown();
+        return;
+    }
+
+    odoData.clear();
+    string line;
+    while (std::getline(rec, line) && !line.empty()) {
+        istringstream iss(line);
+        se2lam::Se2 odo;
+        iss >> odo.timeStamp >> odo.x >> odo.y >> odo.theta;  // theta 可能会比超过pi,使用前要归一化
+        odoData.emplace_back(odo);
+    }
+    rec.close();
+
+    if (odoData.empty()) {
+        cerr << "[main ] Not odom data in the file!" << endl;
+        ros::shutdown();
+        return;
+    } else {
+        cout << "[main ] Read " << odoData.size() << " datas from the file." << endl;
+    }
+}
+
+void dataAlignment(const vector<RK_IMAGE>& allImages, const vector<se2lam::Se2>& allOdoms,
+                   map<RK_IMAGE, queue<se2lam::Se2>>& dataAligned)
+{
+    auto iter = allOdoms.begin();
+    for (size_t i = 0; i < allImages.size(); ++i) {
+        float imgTime = allImages[i].timeStamp;
+        queue<se2lam::Se2> odoDeq;
+        while (iter != allOdoms.end()) {
+            if (iter->timeStamp <= imgTime) {
+                odoDeq.emplace_back(*iter);
+                iter++;
+            } else {
+                break;
+            }
+        }
+        dataAligned.insert(make_pair<RK_IMAGE, queue<se2lam::Se2>>(allImages[i], odoDeq));
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -80,53 +126,41 @@ int main(int argc, char** argv)
     }
 
     se2lam::OdoSLAM system;
-
     system.setVocFileBin(vocFile);
     system.setDataPath(argv[1]);
     system.start();
 
-    string fullOdoName = se2lam::Config::DataPath + "/odo_raw.txt";
-    ifstream rec(fullOdoName);
-    if (!rec.is_open()) {
-        cerr << "[main ] Error in opening the odo_raw.txt file! Please check if exists!" << endl;
-        rec.close();
-        ros::shutdown();
-        return -1;
-    }
-
-    float x, y, theta;
-    string line;
-
-    size_t n = static_cast<size_t>(se2lam::Config::ImgCount);
-    size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
-
     string imageFolder = se2lam::Config::DataPath + "/slamimg";
     vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
-    n = min(allImages.size(), n);
-    ros::Rate rate(se2lam::Config::FPS);
-    for (size_t i = 0; i < n && system.ok(); i++) {
-        // 起始帧不为0的时候保证odom数据跟image对应
-        std::getline(rec, line);
-        if (i < m)
-            continue;
 
-        string fullImgName = allImages[i];
+    string odomRawFile = se2lam::Config::DataPath + "/OdomRaw.txt";
+    vector<se2lam::Se2> allOdoms;
+    readOdomsRK(odomRawFile, allOdoms);
+
+    map<RK_IMAGE, queue<se2lam::Se2>> dataAligned;
+    dataAlignment(allImages, allOdoms, dataAligned);
+    assert(allImages.size() == dataAligned.size());
+
+    size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
+    size_t n = static_cast<size_t>(se2lam::Config::ImgCount);
+    n = min(allImages.size(), n);
+
+    ros::Rate rate(se2lam::Config::FPS);
+    for (size_t i = m; i < n && system.ok(); i++) {
+        string fullImgName = allImages[i].fileName;
+        float imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
             cerr << "[main ] No image data for image " << fullImgName << endl;
             continue;
         }
 
-        istringstream iss(line);
-        iss >> x >> y >> theta;
-
-        system.receiveOdoData(x, y, theta);
-        system.receiveImgData(img);
+        system.receiveOdoData(dataAligned[allImages[i]]);
+        system.receiveImgData(img, imgTime);
 
         rate.sleep();
     }
-    rec.close();
     cout << "[main ] Finish test_rk..." << endl;
 
     system.requestFinish();  // 让系统给其他线程发送结束指令
@@ -135,7 +169,6 @@ int main(int argc, char** argv)
     ros::shutdown();
 
     cout << "[main ] System shutdown..." << endl;
-
     cout << "[main ] Exit test..." << endl;
     return 0;
 }

@@ -387,7 +387,7 @@ void MapPublish::PublishKeyFrames()
 //        mErrorSum += norm(d);
     }
 
-//    printf("[Mappub] #%d VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
+//    printf("[Mappub] #%ld VO和odom的平均位移误差为: %.2fmm\n", mpMap->getCurrentKF()->id, mErrorSum/vKFsAll.size());
 
     //! Visual Odometry Graph for Localize only case
     //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
@@ -407,7 +407,7 @@ void MapPublish::PublishKeyFrames()
 
             if (currState == cvu::OK && lastState == cvu::LOST) {
                 firstLocatied = true;
-                fprintf(stderr, "[MapPublis] #%d lastState = LOST and currentState = OK\n", id);
+                fprintf(stderr, "[MapPublis] #%ld lastState = LOST and currentState = OK\n", id);
             }
             if (firstLocatied) {
                 firstLocatied = false;
@@ -416,7 +416,7 @@ void MapPublish::PublishKeyFrames()
 
             mOdoGraph.points.push_back(msgsLast);
             mOdoGraph.points.push_back(msgsCurr);
-//            printf("[MapPublis] #%d msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f], Twb: [%.4f, %.4f]\n",
+//            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f], Twb: [%.4f, %.4f]\n",
 //                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
 //                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
 //                   Twb.x/1000., Twb.y/1000.);
@@ -628,7 +628,7 @@ void MapPublish::run()
         if (!mbIsLocalize) {
             cv::Mat imgMatch = mpFramePub->drawMatch();
             float lastThetaKF = pKP->odom.theta;
-            float currTheta = mpLocalize->getCurrentFrameOdom().z;
+            float currTheta = mpLocalize->getCurrentFrameOdom().theta;
             float dt = normalize_angle(currTheta - lastThetaKF) * 180 / M_PI;
 
             // 显示保留两位小数

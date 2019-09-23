@@ -5,17 +5,16 @@
 */
 
 #include "Sensors.h"
+#include <iostream>
 
 namespace se2lam
 {
 
 Sensors::Sensors() : imgUpdated(false), odoUpdated(false)
-{
-}
+{}
 
 Sensors::~Sensors()
-{
-}
+{}
 
 bool Sensors::update()
 {
@@ -24,7 +23,7 @@ bool Sensors::update()
 
 // 当Sensors类里的当前帧数据没有被读取，则锁住当前线程
 // 直到数据被Tracker/Localizer读走，则从system接收新的数据进来
-void Sensors::updateImg(const cv::Mat& img_, double time_)
+void Sensors::updateImg(const cv::Mat& img_, float time_)
 {
     std::unique_lock<std::mutex> lock(mMutexImg);
 
@@ -37,7 +36,7 @@ void Sensors::updateImg(const cv::Mat& img_, double time_)
     imgUpdated = true;
 }
 
-void Sensors::updateOdo(double x_, double y_, double theta_, double time_)
+void Sensors::updateOdo(float x_, float y_, float theta_, float time_)
 {
     std::unique_lock<std::mutex> lock(mMutexOdo);
 
@@ -51,20 +50,50 @@ void Sensors::updateOdo(double x_, double y_, double theta_, double time_)
     odoUpdated = true;
 }
 
-void Sensors::readData(cv::Point3f& _dataOdo, cv::Mat& _dataImg,
-                       float& _timeOdo, float& _timeimg)
+void Sensors::updateOdo(std::queue<Se2> &odoQue_)
+{
+    std::unique_lock<std::mutex> lock(mMutexOdo);
+
+    while (odoUpdated) {
+        cndvSensorUpdate.wait(lock);
+    }
+
+    mvOdoSeq.clear();
+    while (!odoQue_.empty()) {
+        mvOdoSeq.emplace_back(odoQue_.front());
+        odoQue_.pop();
+    }
+    if (mvOdoSeq.empty())
+        std::cerr << "[Sensor] No odom data between two image!" << std::endl;
+
+    odoUpdated = true;
+}
+
+void Sensors::readData(cv::Point3f& dataOdo_, cv::Mat& dataImg_)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
 
-    _dataOdo = mOdo;
-    mImg.copyTo(_dataImg);
-    _timeOdo = timeOdo;
-    _timeimg = timeImg;
+    dataOdo_ = mOdo;
+    mImg.copyTo(dataImg_);
 
     odoUpdated = false;
     imgUpdated = false;
 
+    cndvSensorUpdate.notify_all();
+}
+
+void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, float& timeImg_)
+{
+    std::unique_lock<std::mutex> lock1(mMutexImg);
+    std::unique_lock<std::mutex> lock2(mMutexOdo);
+
+    mImg.copyTo(dataImg_);
+    timeImg_ = timeImg;
+    dataOdoSeq_ = mvOdoSeq;
+
+    odoUpdated = false;
+    imgUpdated = false;
     cndvSensorUpdate.notify_all();
 }
 

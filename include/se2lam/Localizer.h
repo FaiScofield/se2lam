@@ -71,7 +71,7 @@ public:
     void requestFinish();
     bool isFinished();
 
-    cv::Point3f getCurrentFrameOdom();
+    Se2 getCurrentFrameOdom();
     Se2 getCurrKFPose();
     Se2 getRefKFPose();
     PtrKeyFrame getKFCurr();

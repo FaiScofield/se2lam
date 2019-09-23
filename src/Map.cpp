@@ -149,7 +149,7 @@ void Map::mergeMP(PtrMapPoint &toKeep, PtrMapPoint &toDelete)
 
     toDelete->mergedInto(toKeep);
     mMPs.erase(toDelete);
-    fprintf(stderr, "[ Map ] Have a merge between #%d and #%d MP.\n", toKeep->mId,
+    fprintf(stderr, "[ Map ] Have a merge between #%ld and #%ld MP.\n", toKeep->mId,
             toDelete->mId);
 
     //!@Vance: 更新局部的MP
@@ -235,7 +235,7 @@ bool Map::pruneRedundantKF()
 
                     //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
-                        printf("[ Map ] #%d(KF#%d) Prune KF#%d\n", mCurrentKF->id, mCurrentKF->mIdKF,
+                        printf("[ Map ] #%ld(KF#%ld) Prune KF#%ld\n", mCurrentKF->id, mCurrentKF->mIdKF,
                                thisKF->mIdKF);
 
                         mKFs.erase(thisKF);
@@ -299,7 +299,7 @@ bool Map::pruneRedundantKF()
         std::swap(vpKFs, mLocalGraphKFs);
     }
 
-    printf("[ Map ] #%d(KF#%d) Prune Local KFs: %ld, Mps: %ld\n",
+    printf("[ Map ] #%ld(KF#%ld) Prune Local KFs: %ld, Mps: %ld\n",
            mCurrentKF->id, mCurrentKF->mIdKF,
            nKFsBefore - mLocalGraphKFs.size(), nMPsBefore - mLocalGraphMPs.size());
     return pruned;
@@ -326,7 +326,7 @@ void Map::updateLocalGraph()
 
     //! kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中, 否则经过同一个地方不会考虑到之前添加的KF
     addLocalGraphThroughKdtree(setLocalKFs);
-    printf("[ Map ] #%d(KF#%d) Get %ld KFs using kdtree!\n", mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
+    printf("[ Map ] #%ld(KF#%ld) Get %ld KFs using kdtree!\n", mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
     int searchLevel = 1;    // 3
@@ -339,7 +339,7 @@ void Map::updateLocalGraph()
         }
         searchLevel--;
     }
-    printf("[ Map ] #%d(KF#%d) %ld KFs were set to local KFs. LocalMap get a new job to do! \n",
+    printf("[ Map ] #%ld(KF#%ld) %ld KFs were set to local KFs. LocalMap get a new job to do! \n",
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
 
     //!@Vance: 获得localKFs的所有MPs, 不要求要有良好视差
@@ -384,7 +384,7 @@ void Map::mergeLoopClose(const std::map<int, int> &mapMatchMP, PtrKeyFrame &pKFC
     pKFCurr->addCovisibleKF(pKFLoop);
     pKFLoop->addCovisibleKF(pKFCurr);
 
-    fprintf(stderr, "[ Map ] Merge loop close between KF#%d and KF#%d\n", pKFCurr->mIdKF, pKFLoop->mIdKF);
+    fprintf(stderr, "[ Map ] Merge loop close between KF#%ld and KF#%ld\n", pKFCurr->mIdKF, pKFLoop->mIdKF);
     for (auto iter = mapMatchMP.begin(); iter != mapMatchMP.end(); iter++) {
         int idKPCurr = iter->first;
         int idKPLoop = iter->second;
@@ -487,8 +487,8 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer, vector<vector<EdgeProjectXYZ2
     int camParaId = 0;
     addCamPara(optimizer, Config::Kcam, camParaId);
 
-    int maxKFid = -1;
-    int minKFid = -1;
+    unsigned long maxKFid = 0;
+    unsigned long minKFid = 0;
     // If no reference KF, the KF with minId should be fixed
 
     if (mRefKFs.empty()) {
@@ -644,8 +644,8 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer &optimizer,
     int camParaId = 0;
     addCamPara(optimizer, Config::Kcam, camParaId);
 
-    int maxKFid = -1;
-    int minKFid = -1;
+    unsigned long maxKFid = 0;
+    unsigned long minKFid = 0;
     // If no reference KF, the KF with minId should be fixed
 
     if (mRefKFs.empty()) {
@@ -989,8 +989,8 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
     int camParaId = 0;
     CamPara *campr = addCamPara(optimizer, (Config::Kcam), camParaId);
 
-    int maxKFid = -1;
-    int minKFid = -1;
+    unsigned long maxKFid = 0;
+    unsigned long minKFid = 0;
     // If no reference KF, the KF with minId should be fixed
 
     if (mRefKFs.empty()) {
@@ -1018,7 +1018,8 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
 
         bool fixed = (pKF->id == minKFid) || (pKF->id == 0);
 
-        g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
+        Se2 Twb = pKF->getTwb();
+        g2o::SE2 pose(static_cast<double>(Twb.x), Twb.y, Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
 //        addVertexSE2(optimizer, pose, vertexIdKF, true);    //! 用odom做位姿,不更新KF,只更新MP. 20190906
     }
@@ -1052,7 +1053,8 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
 
         int vertexIdKF = i + nLocalKFs;
 
-        g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
+        Se2 Twb = pKF->getTwb();
+        g2o::SE2 pose(Twb.x, Twb.y, Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, true);
     }
 
@@ -1113,8 +1115,9 @@ void Map::loadLocalGraph(SlamOptimizer &optimizer)
             const float &fx = Config::fx;
             Matrix23d J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
-            Matrix3d Rcw = toMatrix3d(pKF->Tcw.rowRange(0, 3).colRange(0, 3));
-            Vector3d pi(pKF->Twb.x, pKF->Twb.y, 0);
+            Matrix3d Rcw = toMatrix3d(pKF->getPose().rowRange(0, 3).colRange(0, 3));
+            Se2 Twb = pKF->getTwb();
+            Vector3d pi(Twb.x, Twb.y, 0);
 
             Matrix23d J_pi_Rcw = J_pi * Rcw;
 

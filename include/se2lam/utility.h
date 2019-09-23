@@ -9,12 +9,13 @@
 #ifndef SUGAR_CV_H
 #define SUGAR_CV_H
 
+#include "Config.h"
+#include "KeyFrame.h"
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
-#include "Config.h"
+
 
 namespace cvu {
-
 
 using std::vector;
 using cv::Mat;
@@ -27,6 +28,8 @@ enum eTrackingState {
     OK = 1,
     LOST = 2
 };
+
+
 
 Mat inv(const Mat& T4x4);
 

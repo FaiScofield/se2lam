@@ -9,7 +9,7 @@
 #define FRAME_H
 
 #include "Config.h"
-#include "MapPoint.h"
+//#include "MapPoint.h"
 #include "ORBextractor.h"
 #include <memory>
 #include <mutex>
@@ -18,6 +18,7 @@
 namespace se2lam
 {
 
+//class MapPoint;
 
 struct PreSE2 {
 public:
@@ -28,14 +29,12 @@ public:
 const int FRAME_GRID_ROWS = 36;  // default 48 for 480
 const int FRAME_GRID_COLS = 48;  // default 64 for 640
 
-class KeyFrame;
-
 class Frame
 {
 public:
     Frame();
-    Frame(const cv::Mat& im, const Se2& odo, ORBextractor* extractor, const cv::Mat& K,
-          const cv::Mat& distCoef);
+    Frame(const cv::Mat& imgGray, const float& time, const Se2& odo, ORBextractor* extractor,
+          const cv::Mat& K, const cv::Mat& distCoef);
 
     Frame(const Frame& f);
     Frame& operator=(const Frame& f);
@@ -44,9 +43,13 @@ public:
     void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
     void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
 
+    Se2 getTwb();
+    cv::Mat getTcr();
     cv::Mat getPose();
-    void setPose(const cv::Mat &_Tcw);
-    void setPose(const Se2 &_Twb);
+    cv::Point3f getCameraCenter();
+    void setPose(const cv::Mat& _Tcw);
+    void setPose(const Se2& _Twb);
+    void setTcr(const cv::Mat& _Tcr);
 
     bool PosInGrid(cv::KeyPoint& kp, int& posX, int& posY);
     bool inImgBound(cv::Point2f pt);
@@ -59,7 +62,7 @@ public:
 public:
     //! static variable
     static bool bIsInitialComputations;  // 首帧畸变校正后会重新计算图像边界,然后此flag取反
-    static float minXUn;    // 图像边界
+    static float minXUn;                 // 图像边界
     static float minYUn;
     static float maxXUn;
     static float maxYUn;
@@ -72,15 +75,15 @@ public:
 
     //! frame information
     float mTimeStamp;
-    unsigned long id; // 图像序号
-    Se2 odom;  // 原始里程计输入
+    unsigned long id;  // 图像序号
+    Se2 odom;          // 原始里程计输入
 
     int N;  // 特征总数
     cv::Mat mImage;
     cv::Mat mDescriptors;
     std::vector<cv::KeyPoint> mvKeyPoints;
-    std::vector<PtrMapPoint> mvpMapPoints;  // 每个特征点对应的MapPoint
-    std::vector<bool> mvbOutlier;   // 局外点标志
+//    std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;  // 每个特征点对应的MapPoint
+//    std::vector<bool> mvbOutlier;           // 局外点标志
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
     // 图像金字塔相关
@@ -90,13 +93,13 @@ public:
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
 
-//! 以下信息需要加锁访问/修改
+    //! 以下信息需要加锁访问/修改
 protected:
     // 位姿信息
     cv::Mat Tcr;  // Current Camera frame to Reference Camera frame, 三角化和此有关
     cv::Mat Tcw;  // Current Camera frame to World frame
-    Se2 Trb;   // reference KF body to current frame body
-    Se2 Twb;   // world to body
+    Se2 Trb;      // reference KF body to current frame body
+    Se2 Twb;      // world to body
 
     std::mutex mMutexImg;
     std::mutex mMutexDes;
