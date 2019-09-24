@@ -111,7 +111,7 @@ void DrawTrajectory(const vector_poses& poses1, const vector_poses& poses2) {
 
         glLineWidth(2);
         // draw poses 1
-        for (size_t i=0; i<poses1.size()-1; i++) {
+        for (size_t i=0; i<poses1.size()-1; ++i) {
             glColor3f(1.0f, 0.0f, 0.0f);
             glBegin(GL_LINES);
             auto p1 = poses1[i], p2 = poses1[i + 1];
@@ -121,7 +121,7 @@ void DrawTrajectory(const vector_poses& poses1, const vector_poses& poses2) {
         }
 
         // draw poses 2
-        for (size_t j=0; j<poses2.size()-1; j++) {
+        for (size_t j=0; j<poses2.size()-1; ++j) {
             glColor3f(0.0f, 1.0f, 0.0f);
             glBegin(GL_LINES);
             auto p1 = poses2[j], p2 = poses2[j + 1];
@@ -182,7 +182,7 @@ void ICP_solve(const vector_poses& p_e, const vector_poses& p_g,
     // center mass
     Eigen::Vector2f center_e, center_g;
     int N = p_e.size();
-    for (int i=0; i<N; i++) {
+    for (int i=0; i<N; ++i) {
         center_e += p_e[i];
         center_g += p_g[i];
     }
@@ -193,14 +193,14 @@ void ICP_solve(const vector_poses& p_e, const vector_poses& p_g,
 
     // remove the center
     vector<Eigen::Vector2f> t_e, t_g;
-    for (int i=0; i<N; i++) {
+    for (int i=0; i<N; ++i) {
         t_e.push_back(p_e[i] - center_e);
         t_g.push_back(p_g[i] - center_g);
     }
 
     // compute t_e * t_g^T
     Eigen::Matrix2f W = Eigen::Matrix2f::Zero();
-    for (int i=0; i<N; i++) {
+    for (int i=0; i<N; ++i) {
         W += t_g[i] * t_e[i].transpose();
     }
 //    cout << "W = " << W << endl;

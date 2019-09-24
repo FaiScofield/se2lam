@@ -31,7 +31,7 @@ public:
     ~Track();
 
     void run();
-    Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, cv::Mat& dataImg, float& timeImg);
+    Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, float& timeImg);
 
     void setMap(Map* pMap);
     void setLocalMapper(LocalMapper* pLocalMapper);
@@ -63,8 +63,8 @@ public:
     int N1 = 0, N2 = 0, N3 = 0;
 
 private:
-    void mCreateFirstFrame(const cv::Mat& img, const float& imgTime, const Se2& odo);
-    void mTrack(const cv::Mat& img, const float& imgTime, const Se2& odo);
+    void createFirstFrame(const cv::Mat& img, const float& imgTime, const Se2& odo);
+    void trackReferenceKF(const cv::Mat& img, const float& imgTime, const Se2& odo);
     void relocalization(const cv::Mat& img, const float& imgTime, const Se2& odo);
     void resetLocalTrack();
 
@@ -76,6 +76,7 @@ private:
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
+    static bool mbPrint;
 
     // only useful when odo time not sync with img time
     float mTimeOdo;
@@ -92,15 +93,15 @@ private:
     Frame mCurrentFrame;
     PtrKeyFrame mpReferenceKF;
     std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
-    std::vector<cv::Point3f> mLocalMPs;  // 当前帧KP的候选MP观测在相机坐标系下的坐标即Pc
+    std::vector<cv::Point3f> mLocalMPs;  // 参考帧KP的MP观测在相机坐标系下的坐标即Pc, 这和mViewMPs有啥关系??
     std::set<PtrKeyFrame> mspKFLocal;
     std::set<PtrMapPoint> mspMPLocal;
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
 
     // New KeyFrame rules (according to fps)
-    int nMinFrames;
-    int nMaxFrames;
+    int nMinFrames, nMaxFrames;
+    double mMaxAngle, mMaxDistance;
 
     // preintegration on SE2
     PreSE2 preSE2;

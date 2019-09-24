@@ -105,7 +105,7 @@ int main(int argc, char** argv)
     readImagesRK(imageFolder, allImages);
     n = min(allImages.size(), n);
     ros::Rate rate(se2lam::Config::FPS);
-    for (size_t i = 0; i < n && system.ok(); i++) {
+    for (size_t i = 0; i < n && system.ok(); ++i) {
         // 起始帧不为0的时候保证odom数据跟image对应
         std::getline(rec, line);
         if (i < m)

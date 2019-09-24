@@ -14,7 +14,7 @@ using namespace cv;
 using namespace std;
 
 //! 变换矩阵的逆
-Mat inv(const Mat &T4x4)
+Mat inv(const Mat& T4x4)
 {
     assert(T4x4.cols == 4 && T4x4.rows == 4);
     Mat RT = T4x4.rowRange(0, 3).colRange(0, 3).t();
@@ -25,11 +25,11 @@ Mat inv(const Mat &T4x4)
     return T;
 }
 
-void pts2Ftrs(const vector<KeyPoint> &_orgnFtrs, const vector<Point2f> &_points,
-              vector<KeyPoint> &_features)
+void pts2Ftrs(const vector<KeyPoint>& _orgnFtrs, const vector<Point2f>& _points,
+              vector<KeyPoint>& _features)
 {
     _features.resize(_points.size());
-    for (size_t i = 0; i < _points.size(); i++) {
+    for (size_t i = 0; i < _points.size(); ++i) {
         _features[i] = _orgnFtrs[i];
         _features[i].pt = _points[i];
     }
@@ -58,7 +58,7 @@ Mat sk_sym(const Point3f _v)
  *
  * @see         Multiple View Geometry in Computer Vision - 12.2 Linear triangulation methods p312
  */
-Point3f triangulate(const Point2f &pt1, const Point2f &pt2, const Mat &P1, const Mat &P2)
+Point3f triangulate(const Point2f& pt1, const Point2f& pt2, const Mat& P1, const Mat& P2)
 {
     Mat A(4, 4, CV_32FC1);
 
@@ -70,12 +70,12 @@ Point3f triangulate(const Point2f &pt1, const Point2f &pt2, const Mat &P1, const
     Mat u, w, vt, x3D;
     SVD::compute(A, w, u, vt, cv::SVD::MODIFY_A | SVD::FULL_UV);
     x3D = vt.row(3).t();
-    x3D = x3D.rowRange(0, 3) / x3D.at<float>(3);    // 第四行置1, 归一化
+    x3D = x3D.rowRange(0, 3) / x3D.at<float>(3);  // 第四行置1, 归一化
 
     return Point3f(x3D);
 }
 
-Point2f camprjc(const Mat &_K, const Point3f &_pt)
+Point2f camprjc(const Mat& _K, const Point3f& _pt)
 {
     Point3f uvw = Matx33f(_K) * _pt;
     return Point2f(uvw.x / uvw.z, uvw.y / uvw.z);
@@ -83,7 +83,7 @@ Point2f camprjc(const Mat &_K, const Point3f &_pt)
 
 
 // 计算视差角余弦值
-bool checkParallax(const Point3f &o1, const Point3f &o2, const Point3f &pt3, int minDegree)
+bool checkParallax(const Point3f& o1, const Point3f& o2, const Point3f& pt3, int minDegree)
 {
     float minCos[4] = {0.9998, 0.9994, 0.9986, 0.9976};
     Point3f p1 = pt3 - o1;
@@ -92,14 +92,14 @@ bool checkParallax(const Point3f &o1, const Point3f &o2, const Point3f &pt3, int
     return cosParallax < minCos[minDegree - 1];
 }
 
-Point3f se3map(const Mat &_Tcw, const Point3f &_pt)
+Point3f se3map(const Mat& T, const Point3f& P)
 {
-    Matx33f R(_Tcw.rowRange(0, 3).colRange(0, 3));
-    Point3f t(_Tcw.rowRange(0, 3).col(3));
-    return (R * _pt + t);
+    Matx33f R(T.rowRange(0, 3).colRange(0, 3));
+    Point3f t(T.rowRange(0, 3).col(3));
+    return (R * P + t);
 }
 
-//void normalizeYawAngle(se2lam::Se2 &odom)
+// void normalizeYawAngle(se2lam::Se2 &odom)
 //{
 //    if (odom.theta < -M_PI)
 //        odom.theta += M_PI;
@@ -108,7 +108,7 @@ Point3f se3map(const Mat &_Tcw, const Point3f &_pt)
 //}
 
 // Gamma变换 gamma = 1.2 越小越亮
-cv::Mat gamma(const cv::Mat &grayImg, float gamma)
+cv::Mat gamma(const cv::Mat& grayImg, float gamma)
 {
     cv::Mat imgGamma, imgOut;
     grayImg.convertTo(imgGamma, CV_32F, 1.0 / 255, 0);
@@ -119,7 +119,7 @@ cv::Mat gamma(const cv::Mat &grayImg, float gamma)
 }
 
 // Laplace边缘锐化 scale = 6~10  越小越强
-cv::Mat sharpping(const cv::Mat &img, float scale)
+cv::Mat sharpping(const cv::Mat& img, float scale)
 {
     cv::Mat imgOut;
 

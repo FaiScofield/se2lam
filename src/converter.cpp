@@ -60,8 +60,8 @@ g2o::SE3Quat toSE3Quat(const g2o::Isometry3D& iso)
 cv::Mat toCvMat6f(const g2o::Matrix6d& m)
 {
     cv::Mat mat(6, 6, CV_32FC1);
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j)
             mat.at<float>(i, j) = (float)m(i, j);
     return mat;
 }
@@ -69,8 +69,8 @@ cv::Mat toCvMat6f(const g2o::Matrix6d& m)
 g2o::Matrix6d toMatrix6d(const cv::Mat& cvMat6d)
 {
     g2o::Matrix6d m = g2o::Matrix6d::Zero();
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j)
             m(i, j) = cvMat6d.at<float>(i, j);
     return m;
 }
@@ -81,7 +81,7 @@ std::vector<cv::Mat> toDescriptorVector(const cv::Mat& Descriptors)
 {
     std::vector<cv::Mat> vDesc;
     vDesc.reserve(Descriptors.rows);
-    for (int j = 0; j < Descriptors.rows; j++)
+    for (int j = 0; j < Descriptors.rows; ++j)
         vDesc.push_back(Descriptors.row(j));
 
     return vDesc;
@@ -109,8 +109,8 @@ cv::Mat toCvMat(const g2o::SE3Quat& SE3)
 cv::Mat toCvMat(const Eigen::Matrix<double, 4, 4>& m)
 {
     cv::Mat cvMat(4, 4, CV_32FC1);
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
             cvMat.at<float>(i, j) = m(i, j);
 
     return cvMat.clone();
@@ -120,8 +120,8 @@ cv::Mat toCvMat(const Eigen::Matrix<double, 4, 4>& m)
 cv::Mat toCvMat(const Eigen::Matrix3d& m)
 {
     cv::Mat cvMat(3, 3, CV_32FC1);
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
             cvMat.at<float>(i, j) = m(i, j);
 
     return cvMat.clone();
@@ -130,7 +130,7 @@ cv::Mat toCvMat(const Eigen::Matrix3d& m)
 cv::Mat toCvMat(const Eigen::Matrix<double, 3, 1>& m)
 {
     cv::Mat cvMat(3, 1, CV_32FC1);
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; ++i)
         cvMat.at<float>(i) = m(i);
 
     return cvMat.clone();
@@ -139,12 +139,12 @@ cv::Mat toCvMat(const Eigen::Matrix<double, 3, 1>& m)
 cv::Mat toCvSE3(const Eigen::Matrix<double, 3, 3>& R, const Eigen::Matrix<double, 3, 1>& t)
 {
     cv::Mat cvMat = cv::Mat::eye(4, 4, CV_32FC1);
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
             cvMat.at<float>(i, j) = R(i, j);
         }
     }
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; ++i) {
         cvMat.at<float>(i, 3) = t(i);
     }
 

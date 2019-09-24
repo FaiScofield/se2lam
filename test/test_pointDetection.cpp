@@ -84,7 +84,7 @@ int removeOutliers(const vector<KeyPoint> &kpRef, const vector<KeyPoint> &kpCur,
     ptCur.reserve(kpCur.size());
     idx.reserve(kpRef.size());
 
-    for (int i = 0, iend = kpRef.size(); i < iend; i++) {
+    for (int i = 0, iend = kpRef.size(); i < iend; ++i) {
         if (matches12[i] < 0)
             continue;
         idx.push_back(i);
@@ -102,7 +102,7 @@ int removeOutliers(const vector<KeyPoint> &kpRef, const vector<KeyPoint> &kpCur,
     }
 
     int nInlier = 0;
-    for (int i = 0, iend = mask.size(); i < iend; i++) {
+    for (int i = 0, iend = mask.size(); i < iend; ++i) {
         if (!mask[i])
             matches12[idx[i]] = -1;
         else
@@ -219,7 +219,7 @@ int main(int argc, char** argv)
         //! ORB提取特征点
         frameCur = Frame(imgClahe, Se2(), kpExtractor, K, D);
         imgWithFeatureCur = imgCur.clone();
-        for (int i = 0, iend = frameCur.N; i < iend; i++) {
+        for (int i = 0, iend = frameCur.N; i < iend; ++i) {
             circle(imgWithFeatureCur, frameCur.mvKeyPoints[i].pt, 2, Scalar(255, 0, 0));
         }
 
@@ -263,7 +263,7 @@ int main(int argc, char** argv)
             vconcat(imgCurWarp, imgWithFeatureRef, outImgWarp);
             vconcat(imgCurAffine, imgWithFeatureRef, outImgAffine);
             vconcat(imgWithFeatureCur, imgWithFeatureRef, outImgORBMatch);
-            for (int i = 0, iend = frameRef.mvKeyPoints.size(); i < iend; i++) {
+            for (int i = 0, iend = frameRef.mvKeyPoints.size(); i < iend; ++i) {
                 if (matchIdx12[i] < 0) {
                     continue;
                 } else {

@@ -13,8 +13,12 @@
 
 namespace se2lam
 {
+
 using namespace std;
 using namespace cv;
+
+OdoSLAM::OdoSLAM()
+{}
 
 OdoSLAM::~OdoSLAM()
 {
@@ -29,10 +33,6 @@ OdoSLAM::~OdoSLAM()
     delete mpSensors;
 
     delete mpVocabulary;
-}
-
-OdoSLAM::OdoSLAM()
-{
 }
 
 void OdoSLAM::setVocFileBin(const char* strVoc)
@@ -189,15 +189,15 @@ void OdoSLAM::saveMap()
 
     if (Config::SaveNewMap) {
         mpMapStorage->setFilePath(Config::MapFileStorePath, Config::WriteMapFileName);
-        printf("[System] Saving the map.\n");
         mpMapStorage->saveMap();
     }
 
     // Save keyframe trajectory
     cerr << "\n[System] Saving keyframe trajectory ..." << endl;
-    ofstream towrite(Config::MapFileStorePath + "/se2lam_kf_trajectory.txt");
+    ofstream towrite(Config::MapFileStorePath + Config::WriteTrajFileName);
+    towrite << "#format: id x y z theta" << endl;
     vector<PtrKeyFrame> vct = mpMap->getAllKF();
-    for (size_t i = 0; i < vct.size(); i++) {
+    for (size_t i = 0, iend = vct.size(); i != iend; ++i) {
         if (!vct[i]->isNull()) {
             Mat Twb = cvu::inv(Config::Tbc * vct[i]->getPose());
             Mat Rwb = Twb.rowRange(0, 3).colRange(0, 3);

@@ -56,7 +56,7 @@ cv::Mat getLineMask(const cv::Mat image, std::vector<lineSort_S> &linefeatures, 
     cv::Mat imgOut = cv::Mat::zeros(image.rows, image.cols, CV_8UC1);
     cv::Point2f star, end;
 
-    for (int i = 0; i < imageline.linesTh1.size() / 4; i++) {
+    for (int i = 0; i < imageline.linesTh1.size() / 4; ++i) {
         star.x = imageline.linesTh1(0, i);
         star.y = imageline.linesTh1(1, i);
         end.x = imageline.linesTh1(2, i);
@@ -108,7 +108,7 @@ cv::Mat lineDetection::getLineMaskByHf(cv::Mat img, bool extentionLine)
     HoughLinesP(edges, lines, 1, CV_PI / 180, 120, minLineLength, maxLineGap);
     cv::Mat mask;
     cv::Mat imgOut = cv::Mat::zeros(img.rows, img.cols, CV_8UC1);
-    for (size_t i = 0; i < lines.size(); i++) {
+    for (size_t i = 0; i < lines.size(); ++i) {
         cv::Vec4i L = lines[i];
         double k = double(L[3] - L[1]) / double(L[2] - L[0]);
         double b = L[1] - k * L[0];
@@ -137,7 +137,7 @@ cv::Mat lineDetection::getLineMaskByHf(cv::Mat img, bool extentionLine)
 void lineDetection::ComputeThreeMaxima(vector<vector<int>> rotHist, int lenth, int &ind1, int &ind2,
                                        int &ind3, int &ind4)
 {
-    for (int i = 0; i < lenth; i++) {
+    for (int i = 0; i < lenth; ++i) {
         int n = rotHist[i].size();
         if (n > ind1) {
             ind4 = ind3;
@@ -209,7 +209,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
     number = edlines.size();
     lineSort.reserve(number);
     // cout<<number<<endl;
-    for (int i = 0; i < number; i++) {
+    for (int i = 0; i < number; ++i) {
         lineSortTemp.star.x = edlines[i].startPointX + shiftX;
         lineSortTemp.star.y = edlines[i].startPointY + shiftY;
         lineSortTemp.end.x = edlines[i].endPointX + shiftX;
@@ -224,7 +224,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
     sort(lineSort.begin(), lineSort.end(), lineSort_compareClass());  //从大到小排序
     std::vector<std::vector<double>> linesOut1o;
     linesOut1o.reserve(number);
-    for (int i = 0; i < number; i++) {
+    for (int i = 0; i < number; ++i) {
         double x1 = lineSort[i].star.x;
         double y1 = lineSort[i].star.y;
         double x2 = lineSort[i].end.x;
@@ -259,7 +259,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
     /* LSD call */
     linesLSD = lsd(&number, imageLSD, xsize, ysize);
     lineSort.reserve(number);
-    for (int i = 0; i < number; i++) {
+    for (int i = 0; i < number; ++i) {
         lineSortTemp.x1 = linesLSD[7 * i + 0];
         lineSortTemp.y1 = linesLSD[7 * i + 1];
         lineSortTemp.x2 = linesLSD[7 * i + 2];
@@ -272,7 +272,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
     sort(lineSort.begin(), lineSort.end(), lineSort_compareClass());  // ��������
     linesOut1.reserve(number);
     linesOut2.reserve(number);
-    for (int i = 0; i < number; i++) {
+    for (int i = 0; i < number; ++i) {
         double x1 = lineSort[i].x1;
         double y1 = lineSort[i].y1;
         double x2 = lineSort[i].x2;
@@ -300,7 +300,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
 #endif
 
     linesTh1.resize(4, lineNum1);
-    for (int i = 0; i < lineNum1; i++) {
+    for (int i = 0; i < lineNum1; ++i) {
         linesTh1(0, i) = linesOut1[i][0];
         linesTh1(1, i) = linesOut1[i][1];
         linesTh1(2, i) = linesOut1[i][2];
@@ -308,7 +308,7 @@ void lineDetection::LineDetect(const cv::Mat &image, double thLength1, double th
     }
 
     linesTh2.resize(4, lineNum2);
-    for (int i = 0; i < lineNum2; i++) {
+    for (int i = 0; i < lineNum2; ++i) {
         linesTh2(0, i) = linesOut2[i][0];
         linesTh2(1, i) = linesOut2[i][1];
         linesTh2(2, i) = linesOut2[i][2];
@@ -342,7 +342,7 @@ int lineDetection::pointInwhichLine(double x, double y, double &lenth,
                 (x < keyline->star.x + 5 && x > keyline->end.x - 5))
                 goto part1;
             else {
-                i++;
+                ++i;
                 continue;
             }
         } else {
@@ -350,7 +350,7 @@ int lineDetection::pointInwhichLine(double x, double y, double &lenth,
                 (y < keyline->star.y + 5 && y > keyline->end.y - 5))
                 goto part1;
             else {
-                i++;
+                ++i;
                 continue;
             }
         }
@@ -367,7 +367,7 @@ int lineDetection::pointInwhichLine(double x, double y, double &lenth,
             lnum = i;
             // cout<<"n="<<i<<endl;
         }
-        i++;
+        ++i;
     }
     lenth = Lmin;
     return lnum;

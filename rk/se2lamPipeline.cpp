@@ -98,7 +98,7 @@ void dataAlignment(const vector<RK_IMAGE>& allImages, const vector<se2lam::Se2>&
                    map<RK_IMAGE, queue<se2lam::Se2>>& dataAligned)
 {
     auto iter = allOdoms.begin();
-    for (size_t i = 0; i < allImages.size(); ++i) {
+    for (size_t i = 0, iend = allImages.size(); i < iend; ++i) {
         float imgTime = allImages[i].timeStamp;
         queue<se2lam::Se2> odoDeq;
         while (iter != allOdoms.end()) {
@@ -147,7 +147,7 @@ int main(int argc, char** argv)
     n = min(allImages.size(), n);
 
     ros::Rate rate(se2lam::Config::FPS);
-    for (size_t i = m; i < n && system.ok(); i++) {
+    for (size_t i = m; i < n && system.ok(); ++i) {
         string fullImgName = allImages[i].fileName;
         float imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);

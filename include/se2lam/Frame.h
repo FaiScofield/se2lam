@@ -50,6 +50,7 @@ public:
     void setPose(const cv::Mat& _Tcw);
     void setPose(const Se2& _Twb);
     void setTcr(const cv::Mat& _Tcr);
+    void setTrb(const Se2& _Trb);
 
     bool PosInGrid(cv::KeyPoint& kp, int& posX, int& posY);
     bool inImgBound(cv::Point2f pt);

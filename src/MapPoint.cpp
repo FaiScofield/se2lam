@@ -61,7 +61,7 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
     locker lock(mMutexObs);
     mbNull = true;
     mbGoodParallax = false;
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
@@ -77,7 +77,7 @@ void MapPoint::setNull()
     locker lock(mMutexObs);
     mbNull = true;
     mbGoodParallax = false;
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(it->second))
             pKF->eraseObservation(it->second);
@@ -182,7 +182,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
 
     // Get the oldest KF in the last 6 KFs. 由从此KF往前的第6帧KF和此KF做三角化更新MP坐标
     PtrKeyFrame pKF0 = mObservations.begin()->first;
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF_ = it->first;
         if (!pKF_)
             continue;
@@ -226,7 +226,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
             Mat xyzinfoW = Rcw0.t() * toCvMat(xyzinfo0) * Rcw0;
 
             // Update measurements in other KFs
-            for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+            for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
                 PtrKeyFrame pKF_k = it->first;
                 if (!pKF_k)
                     continue;
@@ -267,9 +267,9 @@ void MapPoint::setPos(const Point3f& pt3f)
 }
 
 /**
- * @brief 判断KF观测是否合理, LocalMap里关联MP时调用
- * @param posKF  能观测到此MP的KF
- * @param kp     KF对应的特征点
+ * @brief   根据观测方向及坐标合理性, 判断此MP是不是KF的一个合理观测, LocalMap里关联MP时调用
+ * @param posKF  此MP在KF相机坐标系下的坐标, 即Pc
+ * @param kp     此MP投影到KF后匹配上的特征点
  * @return
  */
 bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
@@ -286,7 +286,7 @@ std::set<PtrKeyFrame> MapPoint::getObservations()
 {
     locker lock(mMutexObs);
     std::set<PtrKeyFrame> pKFs;
-    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
         PtrKeyFrame pKF = i->first;
         if (!pKF)
             continue;
@@ -325,7 +325,7 @@ void MapPoint::updateMainKFandDescriptor()
 
     Point3f normal(0.f, 0.f, 0.f);
     int n = 0;
-    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
         PtrKeyFrame pKF = i->first;
         if (!pKF)
             continue;
@@ -347,9 +347,9 @@ void MapPoint::updateMainKFandDescriptor()
     // Compute distances between them
     const size_t N = vDes.size();
     float Distances[N][N];
-    for (size_t i = 0; i < N; i++) {
+    for (size_t i = 0; i != N; ++i) {
         Distances[i][i] = 0;
-        for (size_t j = i + 1; j < N; j++) {
+        for (size_t j = i + 1; j < N; ++j) {
             int distij = ORBmatcher::DescriptorDistance(vDes[i], vDes[j]);
             Distances[i][j] = distij;
             Distances[j][i] = distij;
@@ -359,7 +359,7 @@ void MapPoint::updateMainKFandDescriptor()
     // Take the descriptor with least median distance to the rest
     int bestMedian = INT_MAX;
     size_t bestIdx = 0;
-    for (size_t i = 0; i < N; i++) {
+    for (size_t i = 0; i != N; ++i) {
         vector<int> vDists(Distances[i], Distances[i] + N);
         std::sort(vDists.begin(), vDists.end());
         int median = vDists[0.5 * (N - 1)];
@@ -392,7 +392,7 @@ void MapPoint::updateMainKFandDescriptor()
 void MapPoint::updateMeasureInKFs()
 {
     locker lock(mMutexObs);
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (!pKF)
             continue;
@@ -416,7 +416,7 @@ int MapPoint::countObservation()
 void MapPoint::mergedInto(const shared_ptr<MapPoint>& pMP)
 {
     locker lock(mMutexObs);
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (!pKF)
             continue;
@@ -426,6 +426,8 @@ void MapPoint::mergedInto(const shared_ptr<MapPoint>& pMP)
         pKF->setObservation(pMP, idx);
         pMP->addObservation(pKF, idx);
     }
+    //! 不用setNull吗?
+//     mbNull = true;
 }
 
 size_t MapPoint::getFtrIdx(const PtrKeyFrame& pKF)

@@ -103,4 +103,35 @@ void Sensors::forceSetUpdate(bool val)
     imgUpdated = val;
 }
 
+
+Se2 Sensors::dataAlignment(std::vector<Se2> &dataOdoSeq_, float &timeImg_)
+{
+    Se2 res;
+    size_t n = dataOdoSeq_.size();
+    if (n < 2) {
+        std::cerr << "[Track] ** WARNING ** Less odom sequence input!" << std::endl;
+        return res;
+    }
+
+    //! 计算单帧图像时间内的平均速度
+    Se2 tranSum = dataOdoSeq_[n - 1] - dataOdoSeq_[0];
+    float dt = dataOdoSeq_[n - 1].timeStamp - dataOdoSeq_[0].timeStamp;
+    float r = (timeImg_ - dataOdoSeq_[n - 1].timeStamp) / dt;
+
+    assert(r >= 0.f);
+
+    Se2 transDelta(tranSum.x * r, tranSum.y * r, tranSum.theta * r);
+    res = dataOdoSeq_[n - 1] + transDelta;
+    res.timeStamp = timeImg_;
+
+    return res;
+}
+
+void Sensors::readData(Se2 &odo, cv::Mat &img, float &time)
+{
+    odo = dataAlignment(mvOdoSeq, timeImg);
+    mImg.copyTo(img);
+    time = timeImg;
+}
+
 }  // namespace se2lam

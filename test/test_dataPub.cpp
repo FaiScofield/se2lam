@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 
 
     ros::Rate rate(10);
-    for (int i = 0; i < N && ros::ok(); i++) {
+    for (int i = 0; i < N && ros::ok(); ++i) {
         string fullImgName = path + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         getline(rec, line);

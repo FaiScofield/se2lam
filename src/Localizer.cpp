@@ -83,15 +83,15 @@ void Localizer::run()
 
         //! Get new measurement: image and odometry
         cv::Mat img;
+        float imgTime;
         Se2 odo;
         Point3f odo_3f;
         bool sensorUpdated = mpSensors->update();
         if (!sensorUpdated)
             continue;
 
-        mpSensors->readData(odo_3f, img);
-        odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
-        ReadFrameInfo(img, odo);  // 每一帧都是KF，mpKFRef数据赋值
+        mpSensors->readData(odo, img, imgTime);
+        ReadFrameInfo(img, imgTime, odo);  // 每一帧都是KF，mpKFRef数据赋值
 
         //! 定位成功后会更新Tcw, 并由Tcw更新Twb
         if (getTrackingState() == cvu::FIRST_FRAME) {
@@ -192,14 +192,14 @@ void Localizer::WriteTrajFile(ofstream& file)
          << euler(2) << endl;
 }
 
-void Localizer::ReadFrameInfo(const Mat& img, const Se2& odo)
+void Localizer::ReadFrameInfo(const Mat& img, const float& imgTime, const Se2& odo)
 {
     locker lock(mMutexKFLocal);
 
     mFrameRef = mFrameCurr;
     mpKFRef = mpKFCurr;
 
-    mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    mFrameCurr = Frame(img, imgTime, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 //    mFrameCurr.Tcw = Config::Tcb.clone();
 //    mFrameCurr.Twb = mFrameRef.Twb + (odo - mFrameRef.odom);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
@@ -252,7 +252,7 @@ void Localizer::DoLocalBA()
     const float delta = Config::ThHuber;
     set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
 
-    map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
+    map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
 
     // Add Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -323,7 +323,7 @@ cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
     set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
-    map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
+    map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
 
     // Add MP Vertex and Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -422,7 +422,7 @@ void Localizer::ComputeBowVecAll()
     vector<PtrKeyFrame> vpKFs;
     vpKFs = mpMap->getAllKF();
     int numKFs = vpKFs.size();
-    for (int i = 0; i < numKFs; i++) {
+    for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame pKF = vpKFs[i];
         if (pKF->mbBowVecExist) {
             continue;
@@ -453,7 +453,7 @@ bool Localizer::DetectLoopClose()
     double scoreBest = 0;
     int bestIndex = -1;
 
-    for (int i = 0; i < numKFs; i++) {
+    for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame pKF = vpKFsAll[i];
         DBoW2::BowVector BowVec = pKF->mBowVec;
 
@@ -551,7 +551,7 @@ void Localizer::DrawImgCurr()
     if (mImgCurr.channels() == 1)
         cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
 
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
         KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
 
@@ -593,7 +593,7 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     vconcat(mImgCurr, mImgLoop, mImgMatch);  // 垂直拼接
 
     //! Draw Features
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
         KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
         bool ifMPCurr = mpKFCurr->hasObservation(i);
@@ -605,7 +605,7 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
         }
         circle(mImgMatch, ptCurr, 3, colorCurr, 1);
     }
-    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
         KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
@@ -703,7 +703,7 @@ void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
     // RANSAC with fundemantal matrix
     vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
     findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
-    for (unsigned int i = 0; i < vInlier.size(); i++) {
+    for (unsigned int i = 0; i < vInlier.size(); ++i) {
         int idxCurr = vIdxCurr[i];
         int idxLoop = vIdxLoop[i];
         if (vInlier[i] == true) {

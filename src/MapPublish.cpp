@@ -259,7 +259,7 @@ void MapPublish::PublishKeyFrames()
     }
 
     //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
-    for (int i = 0, iend = vKFsAll.size(); i < iend; i++) {
+    for (int i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         if (vKFsAll[i]->isNull())
             continue;
 
@@ -345,7 +345,7 @@ void MapPublish::PublishKeyFrames()
         // Covisibility Graph
         std::set<PtrKeyFrame> covKFs = vKFsAll[i]->getAllCovisibleKFs();
         if (!covKFs.empty()) {
-            for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++) {
+            for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; ++it) {
                 if ((*it)->mIdKF > vKFsAll[i]->mIdKF)
                     continue;
                 Mat Twb = (*it)->getPose().inv() /** Config::cTb*/;
@@ -480,7 +480,7 @@ void MapPublish::PublishMapPoints()
 
 
     mMPsNeg.points.reserve(vpMPNeg.size());
-    for (int i = 0, iend = vpMPNeg.size(); i < iend; i++) {
+    for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
         if (vpMPNeg[i]->isNull() || !vpMPNeg[i]->isGoodPrl()) {
             continue;
         }
@@ -493,7 +493,7 @@ void MapPublish::PublishMapPoints()
 
 
     mMPsAct.points.reserve(vpMPAct.size());
-    for (int i = 0, iend = vpMPAct.size(); i < iend; i++) {
+    for (int i = 0, iend = vpMPAct.size(); i != iend; ++i) {
         if (vpMPAct[i]->isNull() || !vpMPAct[i]->isGoodPrl()) {
             continue;
         }

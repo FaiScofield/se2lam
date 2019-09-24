@@ -70,26 +70,26 @@ public:
     //! Functions for observation operations
     std::set<PtrMapPoint> getAllObsMPs(bool checkParallax = true);
     // Return all observations as a std::map
-    std::map<PtrMapPoint, int> getObservations();
+    std::map<PtrMapPoint, size_t> getObservations();
 
-    void addObservation(PtrMapPoint pMP, int idx);
+    void addObservation(PtrMapPoint pMP, size_t idx);
     void eraseObservation(const PtrMapPoint pMP);
-    void eraseObservation(int idx);
+    void eraseObservation(size_t idx);
 
     int getSizeObsMP();  // Count how many observed MP
 
     // Whether a MP is observed by this KF.
     bool hasObservation(const PtrMapPoint& pMP);
     // Whether the index in image KeyPoints corresponds to an observed MP
-    bool hasObservation(int idx);
+    bool hasObservation(size_t idx);
 
     // Get an observed MP by an index. 从图像特征点id获取观测点MP
-    PtrMapPoint getObservation(int id);
+    PtrMapPoint getObservation(size_t id);
     // Get the corresponding index of an observed MP
-    int getFtrIdx(const PtrMapPoint& pMP);
+    size_t getFtrIdx(const PtrMapPoint& pMP);
 
     // Set a new MP in location index (used in MP merge)
-    void setObservation(const PtrMapPoint& pMP, int idx);
+    void setObservation(const PtrMapPoint& pMP, size_t idx);
 
     void ComputeBoW(ORBVocabulary* _pVoc);
     DBoW2::FeatureVector GetFeatureVector();
@@ -113,7 +113,7 @@ public:
     unsigned long mIdKF;
 
     //! TODO 此变量的作用和变化还需要探究一下, 是否需要加锁访问? 是否可以改成PtrMapPoint?
-    vector<cv::Point3f> mViewMPs;  // MP在当前KF相机坐标系下的坐标
+    vector<cv::Point3f> mViewMPs;  // MP在当前KF相机坐标系下的坐标, 即Pc
     vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mViewMPsInfo;
 
     // KeyFrame contraints: From this or To this

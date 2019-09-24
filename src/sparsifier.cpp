@@ -29,7 +29,7 @@ void Sparsifier::JacobianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, g2o::CameraPa
     g2o::Vector2D z_ref = pCamParam->cam_map(KF.map(MP));
     g2o::Vector6d v6KF = KF.toMinimalVector();
 
-    for (int i=0; i<6; i++) {
+    for (int i=0; i<6; ++i) {
         g2o::Vector6d v6KF_delta = v6KF;
         v6KF_delta[i] += 0.000001;
 
@@ -43,7 +43,7 @@ void Sparsifier::JacobianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, g2o::CameraPa
         J(i,1) = dz(1)/0.000001;
     }
 
-    for (int i=0; i<3; i++) {
+    for (int i=0; i<3; ++i) {
         Eigen::Vector3d MP_delta = MP;
         MP_delta[i] += 0.000001;
 
@@ -66,7 +66,7 @@ void Sparsifier::JacobianSE3XYZ(const g2o::SE3Quat KF, const g2o::Vector3D MP,
     g2o::Vector3D z_delta;
     g2o::Vector3D dz;
 
-    for (int i=0; i<9; i++) {
+    for (int i=0; i<9; ++i) {
 
         if (i<6) {
             g2o::Vector6d v6KF_delta = v6KF;
@@ -113,7 +113,7 @@ void Sparsifier::DoMarginalizeSE3XYZ(const std::vector<g2o::SE3Quat, Eigen::alig
     vector<MeasSE3XYZ> vMeasureRelated;
 
     int numMeas = vMeasure.size();
-    for (int i=0; i<numMeas; i++) {
+    for (int i=0; i<numMeas; ++i) {
         MeasSE3XYZ measure = vMeasure.at(i);
         if (measure.idKF != 0 && measure.idKF != 1) {
             continue;
@@ -131,7 +131,7 @@ void Sparsifier::DoMarginalizeSE3XYZ(const std::vector<g2o::SE3Quat, Eigen::alig
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(dim, dim);
 
     int numMeasRel = vMeasureRelated.size();
-    for (int i=0; i<numMeasRel; i++) {
+    for (int i=0; i<numMeasRel; ++i) {
         MeasSE3XYZ measure = vMeasureRelated.at(i);
 
         int idKF = measure.idKF;
@@ -190,7 +190,7 @@ void Sparsifier::JacobianSE3(const g2o::SE3Quat KF1, const g2o::SE3Quat KF2,
     g2o::Vector6d z_delta;
     g2o::Vector6d dz;
 
-    for (int i=0; i<12; i++) {
+    for (int i=0; i<12; ++i) {
         if (i<6) {
             g2o::Vector6d v6_KF1_delta = v6_KF1;
             v6_KF1_delta[i] += delta;
@@ -241,7 +241,7 @@ void Sparsifier::InfoSE3(const g2o::SE3Quat KF1, const g2o::SE3Quat KF2, const E
     Eigen::Matrix<double, 6, 6> U = svd.matrixU();
     Eigen::Matrix<double, 6, 6> V = svd.matrixV();
 
-    for (int i=0; i<6; i++) {
+    for (int i=0; i<6; ++i) {
         Eigen::Matrix<double, 6, 1> ui = U.block<6,1>(0,i);
         Eigen::Matrix<double, 6, 1> vi = V.block<6,1>(0,i);
 
@@ -257,7 +257,7 @@ void Sparsifier::InfoSE3(const g2o::SE3Quat KF1, const g2o::SE3Quat KF2, const E
 
     // Set limit on eigenvalues and refine info matrix
     Eigen::Matrix<double, 6, 6> S = Eigen::MatrixXd::Zero(6,6);
-    for (int i=0; i<6; i++) {
+    for (int i=0; i<6; ++i) {
         S(i,i) = s(i,0);
     }
     I = U*S*(V.transpose());

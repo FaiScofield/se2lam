@@ -139,7 +139,7 @@ void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int& ind1, 
     int max2 = 0;
     int max3 = 0;
 
-    for (int i = 0; i < L; i++) {
+    for (int i = 0; i < L; ++i) {
         const int s = histo[i].size();
         if (s > max1) {
             max3 = max2;
@@ -178,7 +178,7 @@ int ORBmatcher::DescriptorDistance(const cv::Mat& a, const cv::Mat& b)
 
     int dist = 0;
 
-    for (int i = 0; i < 8; i++, pa++, pb++) {
+    for (int i = 0; i < 8; ++i, pa++, pb++) {
         unsigned int v = *pa ^ *pb;
         v = v - ((v >> 1) & 0x55555555);
         v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
@@ -224,7 +224,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
     vector<bool> vbMatched2(vpMapPoints2.size(), false);
 
     vector<int> rotHist[HISTO_LENGTH];
-    for (int i = 0; i < HISTO_LENGTH; i++)
+    for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(500);
 
     const float factor = 1.0f / HISTO_LENGTH;
@@ -335,12 +335,12 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
         //! 计算rotHist中最大的三个的index
         ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-        for (int i = 0; i < HISTO_LENGTH; i++) {
+        for (int i = 0; i < HISTO_LENGTH; ++i) {
             //! 如果特征点的旋转角度变化量属于这三个组，则保留
             if (i == ind1 || i == ind2 || i == ind3)
                 continue;
             //! 将除了ind1 ind2 ind3以外的匹配点去掉
-            for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
                 mapMatches12.erase(rotHist[i][j]);
                 nmatches--;
             }
@@ -369,7 +369,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
 
     // Rotation Histogram (to check rotation consistency) 旋转方向的直方图，用于检查旋转连续性
     vector<int> rotHist[HISTO_LENGTH];
-    for (int i = 0; i < HISTO_LENGTH; i++)
+    for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(500);
     const float factor = HISTO_LENGTH / 360.0f;
 
@@ -389,7 +389,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
     const bool bBackward = -tlc.at<float>(2) > 0;  // 非单目情况，如果Z小于基线，则表示朝z前进
 
     // 对上一帧有效的MapPoints进行跟踪
-    for (int i = 0; i < LastKF.N; i++) {
+    for (int i = 0; i < LastKF.N; ++i) {
         PtrMapPoint pMP = LastKF.getObservation(i);
 
         if (pMP && !LastKF.mvbOutlier[i]) {
@@ -421,7 +421,8 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
 
             // NOTE 尺度越大,图像越小
             // 以下可以这么理解，例如一个有一定面积的圆点，在某个尺度n下它是一个特征点
-            // 当前进时，圆点的面积增大，在某个尺度m下它是一个特征点，由于面积增大，则需要在更高的尺度下才能检测出来
+            //
+当前进时，圆点的面积增大，在某个尺度m下它是一个特征点，由于面积增大，则需要在更高的尺度下才能检测出来
             // 因此m>=n，对应前进的情况，nCurOctave>=nLastOctave。后退的情况可以类推
             if (bForward)  // 前进,则上一帧兴趣点在所在的尺度nLastOctave<=nCurOctave
                 vIndices2 = CurrentFrame.GetFeaturesInArea(u, v, radius, nLastOctave);
@@ -443,7 +444,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
 
             // 遍历满足条件的特征点
             for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end();
-                 vit != vend; vit++) {
+                 vit != vend; ++vit) {
                 // 如果该特征点已经有对应的MapPoint了,则退出该次循环
                 const size_t i2 = *vit;
                 if (CurrentFrame.mvpMapPoints[i2])
@@ -489,9 +490,9 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, KeyFrame& LastKF, const 
 
         ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-        for (int i = 0; i < HISTO_LENGTH; i++) {
+        for (int i = 0; i < HISTO_LENGTH; ++i) {
             if (i != ind1 && i != ind2 && i != ind3) {
-                for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+                for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
                     CurrentFrame.mvpMapPoints[rotHist[i][j]] = static_cast<PtrMapPoint>(NULL);
                     nmatches--;
                 }
@@ -526,7 +527,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
     vnMatches12 = vector<int>(frame1.N, -1);
 
     vector<int> rotHist[HISTO_LENGTH];
-    for (int i = 0; i < HISTO_LENGTH; i++)
+    for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(500);
     const float factor = 1.f / (float)HISTO_LENGTH;
 
@@ -553,7 +554,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         int bestIdx2 = -1;
 
         //! 2.从F2的KP候选里计算最小和次小汉明距离, 序号i2
-        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
+        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; ++vit) {
             size_t i2 = *vit;
 
             cv::Mat d2 = frame2.mDescriptors.row(i2);
@@ -597,7 +598,8 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
         }
     }
 
-    //! orientation check. 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上, 则视为误匹配剔除
+    //! orientation check. 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上,
+    //! 则视为误匹配剔除
     {
         int ind1 = -1;
         int ind2 = -1;
@@ -605,10 +607,10 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
 
         ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-        for (int i = 0; i < HISTO_LENGTH; i++) {
+        for (int i = 0; i < HISTO_LENGTH; ++i) {
             if (i == ind1 || i == ind2 || i == ind3)
                 continue;
-            for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
                 int idx1 = rotHist[i][j];
                 if (vnMatches12[idx1] >= 0) {
                     vnMatches12[idx1] = -1;
@@ -649,7 +651,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
     vnMatches12 = vector<int>(frame1.N, -1);
 
     vector<int> rotHist[HISTO_LENGTH];
-    for (int i = 0; i < HISTO_LENGTH; i++)
+    for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(500);
     const float factor = 1.f / (float)HISTO_LENGTH;
 
@@ -661,11 +663,11 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         KeyPoint kp1 = frame1.mvKeyPoints[i1];
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
-        Mat pt1 = (Mat_<double>(3,1) << kp1.pt.x, kp1.pt.y, 1);
+        Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
         Mat pt2 = H12 * pt1;
         pt2 /= pt2.at<double>(2);
-        vector<size_t> vIndices2 = frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1),
-                                                            winSize, level, level);
+        vector<size_t> vIndices2 =
+            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())
             continue;
 
@@ -676,7 +678,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         int bestIdx2 = -1;
 
         //! 2.从F2的KP候选里计算最小和次小汉明距离, 序号i2
-        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++) {
+        for (auto vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; ++vit) {
             size_t i2 = *vit;
 
             cv::Mat d2 = frame2.mDescriptors.row(i2);
@@ -724,7 +726,8 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         }
     }
 
-    //! 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上, 则视为误匹配剔除. orientation check
+    //! 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上, 则视为误匹配剔除.
+    //! orientation check
     {
         int ind1 = -1;
         int ind2 = -1;
@@ -732,10 +735,10 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
 
         ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-        for (int i = 0; i < HISTO_LENGTH; i++) {
+        for (int i = 0; i < HISTO_LENGTH; ++i) {
             if (i == ind1 || i == ind2 || i == ind3)
                 continue;
-            for (size_t j = 0, jend = rotHist[i].size(); j < jend; j++) {
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
                 int idx1 = rotHist[i][j];
                 if (vnMatches12[idx1] >= 0) {
                     vnMatches12[idx1] = -1;
@@ -749,14 +752,14 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
 }
 
 /**
- * @brief ORBmatcher::MatchByProjection 通过投影，对Local MapPoint进行跟踪
+ * @brief   将localMPs中不是KF观测的MPs投影到当前KF上进行匹配
  *   在LocalMapper的addNewKF()里调用
- * @param pNewKF        当前关键帧
- * @param localMPs      局部地图点
- * @param winSize       搜索半径 15
+ * @param pNewKF        要投影的当前KF
+ * @param localMPs      Map里提取出的局部地图点
+ * @param winSize       搜索半径 15/20
  * @param levelOffset   金字塔层搜索相对范围 2
  * @param vMatchesIdxMP 匹配上的MP索引[output]
- * @return              返回匹配点数
+ * @return              返回匹配成功的点对数
  */
 int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
                                   const int winSize, const int levelOffset,
@@ -767,14 +770,13 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
     vMatchesIdxMP = vector<int>(pNewKF->N, -1);
     vector<int> vMatchesDistance(pNewKF->N, INT_MAX);
 
-    for (int i = 0, iend = localMPs.size(); i < iend; i++) {
+    for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
         PtrMapPoint pMP = localMPs[i];
         if (pMP->isNull() || !pMP->isGoodPrl())
             continue;
         if (pNewKF->hasObservation(pMP))
             continue;
-        // Point2f predictUV = scv::prjcPt2Cam(Config::Kcam, pNewKF->Tcw,
-        // pMP->getPos());
+
         Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->Tcw, pMP->getPos()));
         if (!pNewKF->inImgBound(predictUV))
             continue;
@@ -795,7 +797,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
         int bestIdx = -1;
 
         // Get best and second matches with near keypoints
-        for (auto it = vNearIndices.begin(), iend = vNearIndices.end(); it != iend; it++) {
+        for (auto it = vNearIndices.begin(), iend = vNearIndices.end(); it != iend; ++it) {
             int idx = *it;
             if (pNewKF->hasObservation(idx))
                 continue;

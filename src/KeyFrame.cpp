@@ -35,13 +35,13 @@ KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mbNull(false)
     mvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
-    for (int i = 1; i < mnScaleLevels; i++) {
+    for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
     }
 
     mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for (int i = 0; i < mnScaleLevels; i++)
+    for (int i = 0; i != mnScaleLevels; ++i)
         mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
 }
 
@@ -84,27 +84,27 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mImage.release();
     mDescriptors.release();
     mvKeyPoints.clear();
-    mvpMapPoints.clear();
-    mvbOutlier.clear();
+//    mvpMapPoints.clear();
+//    mvbOutlier.clear();
 
     // Handle Feature based constraints
-    for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; it++) {
+    for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; ++it) {
         it->first->mFtrMeasureTo.erase(pThis);
     }
-    for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; it++) {
+    for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; ++it) {
         it->first->mFtrMeasureFrom.erase(pThis);
     }
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; it++) {
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
-    for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; it++) {
+    for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
     mObservations.clear();
@@ -155,7 +155,7 @@ set<PtrMapPoint> KeyFrame::getAllObsMPs(bool checkParallax)
 {
     locker lock(mMutexObs);
     set<PtrMapPoint> spMP;
-    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; i++) {
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
         PtrMapPoint pMP = i->first;
         if (!pMP)
             continue;
@@ -176,12 +176,12 @@ bool KeyFrame::isNull()
 bool KeyFrame::hasObservation(const PtrMapPoint &pMP)
 {
     locker lock(mMutexObs);
-    map<PtrMapPoint, int>::iterator it = mObservations.find(pMP);
+    map<PtrMapPoint, size_t>::iterator it = mObservations.find(pMP);
 
     return (it != mObservations.end());
 }
 
-bool KeyFrame::hasObservation(unsigned long idx)
+bool KeyFrame::hasObservation(size_t idx)
 {
     locker lock(mMutexObs);
     auto it = mDualObservations.find(idx);
@@ -303,8 +303,8 @@ vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
     vector<PtrMapPoint> ret;
     size_t N = mvKeyPoints.size();
-    std::map<int, PtrMapPoint>::iterator iter;
-    for (size_t i = 0; i < N; i++) {
+    std::map<size_t, PtrMapPoint>::iterator iter;
+    for (size_t i = 0; i != N; ++i) {
         PtrMapPoint pMP = static_cast<PtrMapPoint>(nullptr);
         iter = mDualObservations.find(i);
         if (iter == mDualObservations.end()) {

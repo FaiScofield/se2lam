@@ -40,7 +40,6 @@ FramePublish::~FramePublish()
 //! NOTE 这个线程没有一直跑，相关函数只有在MapPublish里被调用
 void FramePublish::run()
 {
-
     ros::NodeHandle nh;
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
@@ -130,7 +129,7 @@ cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, cons
         cvtColor(trainImg, out, CV_GRAY2BGR);
 
     int nGoodMatchs = 0;
-    for (unsigned i = 0; i < matches.size(); i++) {
+    for (unsigned i = 0; i < matches.size(); ++i) {
         if (matches[i] < 0) {
             continue;
         } else {
@@ -152,7 +151,7 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat& img, vect
     Mat out = img.clone();
     if (img.channels() == 1)
         cvtColor(img, out, CV_GRAY2BGR);
-    for (unsigned i = 0; i < matched.size(); i++) {
+    for (unsigned i = 0; i < matched.size(); ++i) {
         Point2f pt1 = keys[i].pt;
         if (matched[i] < 0) {
             circle(out, pt1, 5, Scalar(255, 0, 0), 1);

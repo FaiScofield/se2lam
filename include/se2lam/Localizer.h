@@ -15,9 +15,11 @@
 #include "Sensors.h"
 #include "cvutil.h"
 
-namespace se2lam {
+namespace se2lam
+{
 
-class Localizer {
+class Localizer
+{
 public:
     //! Functions
     Localizer();
@@ -28,18 +30,19 @@ public:
     bool relocalization();
 
     // Initialization
-    void setMap(Map *pMap);
+    void setMap(Map* pMap);
     void setORBVoc(ORBVocabulary* pORBVoc);
     void setSensors(Sensors* pSensors);
 
-    void ReadFrameInfo(const cv::Mat &img, const Se2& odo);
+    void ReadFrameInfo(const cv::Mat& img, const float& imgTime, const Se2& odo);
 
     void MatchLocalMap();
 
     // Loop closing
     bool DetectLoopClose();
-    bool VerifyLoopClose(std::map<int,int> & mapMatchMP, std::map<int,int> & mapMatchAll, std::map<int,int> & mapMatchRaw);
-    void MatchLoopClose(std::map<int,int> mapMatchGood);
+    bool VerifyLoopClose(std::map<int, int>& mapMatchMP, std::map<int, int>& mapMatchAll,
+                         std::map<int, int>& mapMatchRaw);
+    void MatchLoopClose(std::map<int, int> mapMatchGood);
 
     void DoLocalBA();
     void DetectIfLost();
@@ -52,21 +55,22 @@ public:
     void ResetLocalMap();
 
     // Subfunctions
-    void RemoveMatchOutlierRansac(PtrKeyFrame pKFCurr, PtrKeyFrame pKFLoop, std::map<int, int> & mapMatch);
+    void RemoveMatchOutlierRansac(PtrKeyFrame pKFCurr, PtrKeyFrame pKFLoop,
+                                  std::map<int, int>& mapMatch);
     void ComputeBowVecAll();
     std::vector<PtrKeyFrame> GetLocalKFs();
     std::vector<PtrMapPoint> GetLocalMPs();
 
     // IO
     void UpdatePoseCurr();
-    void DrawImgMatch(const std::map<int, int> & mapMatch);
+    void DrawImgMatch(const std::map<int, int>& mapMatch);
     void DrawImgCurr();
 
     void UpdateCovisKFCurr();
     int FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);
 
     // DEBUG
-    void WriteTrajFile(std::ofstream & file);
+    void WriteTrajFile(std::ofstream& file);
 
     void requestFinish();
     bool isFinished();
@@ -130,12 +134,7 @@ protected:
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
 };
-
-
-
-
-
 }
 
 
-#endif // LOCALIZE_H
+#endif  // LOCALIZE_H

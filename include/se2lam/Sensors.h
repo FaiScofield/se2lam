@@ -38,10 +38,12 @@ public:
     // After readData(), img_updatd and odo_updated would be set false
     void readData(cv::Point3f& dataOdo_, cv::Mat& dataImg_);
     void readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, float& timeImg_);
+    void readData(Se2& odo, cv::Mat& img, float& time);
 
     void forceSetUpdate(bool val);
 
     cv::Point3f getOdo() { return mOdo; }
+    Se2 dataAlignment(std::vector<Se2> &dataOdoSeq_, float &timeImg_);
 
 protected:
     cv::Mat mImg;

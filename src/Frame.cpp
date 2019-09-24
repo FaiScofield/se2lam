@@ -65,8 +65,8 @@ Frame::Frame(const Mat& imgGray, const float& time, const Se2& odo, ORBextractor
     if (Config::NeedVisulization)
         imgGray.copyTo(mImage);
 
-//    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
-//    mvbOutlier = vector<bool>(N, false);
+    //    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
+    //    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
     mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
@@ -77,22 +77,22 @@ Frame::Frame(const Mat& imgGray, const float& time, const Se2& odo, ORBextractor
     mvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
-    for (int i = 1; i < mnScaleLevels; i++) {
+    for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
     }
 
     mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for (int i = 0; i < mnScaleLevels; i++)
+    for (int i = 0; i != mnScaleLevels; ++i)
         mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
 
     //! Assign Features to Grid Cells. 将特征点按照cell存放
     int nReserve = 0.5 * N / (FRAME_GRID_COLS * FRAME_GRID_ROWS);
-    for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)
-        for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
+    for (int i = 0; i != FRAME_GRID_COLS; ++i)
+        for (int j = 0; j < FRAME_GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
 
-    for (size_t i = 0; i < N; i++) {
+    for (size_t i = 0; i != N; ++i) {
         cv::KeyPoint& kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;
@@ -112,8 +112,8 @@ Frame::Frame(const Frame& f)
     if (Config::NeedVisulization)
         f.mImage.copyTo(mImage);
 
-    for (int i = 0; i < FRAME_GRID_COLS; i++)
-        for (int j = 0; j < FRAME_GRID_ROWS; j++)
+    for (int i = 0; i != FRAME_GRID_COLS; ++i)
+        for (int j = 0; j < FRAME_GRID_ROWS; ++j)
             mGrid[i][j] = f.mGrid[i][j];
 
     if (!f.Tcw.empty())
@@ -121,22 +121,39 @@ Frame::Frame(const Frame& f)
 }
 
 Frame& Frame::operator=(const Frame& f)
-    : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
-       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-       /*mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier),*/ mnScaleLevels(f.mnScaleLevels),
-       mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
-       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
-       Trb(f.Trb)
 {
+    mpORBExtractor = f.mpORBExtractor;
+
     if (Config::NeedVisulization)
         f.mImage.copyTo(mImage);
 
-    for (int i = 0; i < FRAME_GRID_COLS; i++)
-        for (int j = 0; j < FRAME_GRID_ROWS; j++)
-            mGrid[i][j] = f.mGrid[i][j];
+    mvKeyPoints = f.mvKeyPoints;
+    f.mDescriptors.copyTo(mDescriptors);
 
+    mTimeStamp = f.mTimeStamp;
+    id = f.id;
+    N = f.N;
+
+    odom = f.odom;
+    Trb = f.Trb;
+    Tcr = f.Tcr;
     if (!f.Tcw.empty())
         setPose(f.Tcw);
+
+    //    mvpMapPoints = f.mvpMapPoints;
+    //    mvbOutlier = f.mvbOutlier;
+
+    mnScaleLevels = f.mnScaleLevels;
+    mfScaleFactor = f.mfScaleFactor;
+    mvScaleFactors = f.mvScaleFactors;
+    mvLevelSigma2 = f.mvLevelSigma2;
+    mvInvLevelSigma2 = f.mvInvLevelSigma2;
+
+
+    for (int i = 0; i != FRAME_GRID_COLS; ++i)
+        for (int j = 0; j < FRAME_GRID_ROWS; ++j)
+            mGrid[i][j] = f.mGrid[i][j];
+
 
     return *this;
 }
@@ -181,10 +198,16 @@ void Frame::setPose(const Se2& _Twb)
     Tcw = Config::Tcb * Twb.inv().toCvSE3();
 }
 
-void Frame::setTcr(const Mat &_Tcr)
+void Frame::setTcr(const Mat& _Tcr)
 {
     locker lock(mMutexPose);
     _Tcr.copyTo(Tcr);
+}
+
+void Frame::setTrb(const Se2& _Trb)
+{
+    locker lock(mMutexPose);
+    Trb = _Trb;
 }
 
 //! 这个函数没用了
@@ -277,7 +300,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
             if (vCell.empty())
                 continue;
 
-            for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
+            for (size_t j = 0, jend = vCell.size(); j < jend; ++j) {
                 const cv::KeyPoint& kpUn = mvKeyPoints[vCell[j]];
                 if (bCheckLevels && !bSameLevel) {
                     if (kpUn.octave < minLevel || kpUn.octave > maxLevel)

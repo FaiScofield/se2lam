@@ -109,7 +109,7 @@ Matrix6d invJJl(const Vector6d &v6d)
     //! vector order: [rot, trans]
 
     Vector3D rho, phi;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; ++i) {
         phi[i] = v6d[i];
         rho[i] = v6d[i + 3];
     }
@@ -316,8 +316,8 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
 #endif
 
     // Make sure the infor matrix is symmetric. 确保信息矩阵正定
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < i; j++)
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < i; ++j)
             Info_cw(i, j) = Info_cw(j, i);
 
     EdgeSE3ExpmapPrior *planeConstraint = new EdgeSE3ExpmapPrior();
@@ -413,7 +413,7 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
     vector<float> q_b_c = toQuaternion(R_b_c);
     float norm_q_b_c =
         sqrt(q_b_c[0] * q_b_c[0] + q_b_c[1] * q_b_c[1] + q_b_c[2] * q_b_c[2] + q_b_c[3] * q_b_c[3]);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; ++i)
         q_b_c[i] = q_b_c[i] / norm_q_b_c;
 
     cv::Mat Q_qbar_b_c = (cv::Mat_<float>(4, 4) << -q_b_c[0], -q_b_c[1], -q_b_c[2], -q_b_c[3],
@@ -428,16 +428,16 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
 
     g2o::Matrix6d Info_pose = g2o::Matrix6d::Zero();
 
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
             Info_pose(i + 3, j + 3) = Info_q_cm_c.at<float>(i + 1, j + 1);
 
     cv::Mat Info_t_bm_b = (cv::Mat_<float>(3, 3) << 1e-6, 0, 0, 0, 1e-6, 0, 0, 0, 1);
 
     cv::Mat R_w_c = T_w_c.rowRange(0, 3).colRange(0, 3);
     cv::Mat Info_t_cm_c = R_w_c.t() * Info_t_bm_b * R_w_c;
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
             Info_pose(i, j) = Info_t_cm_c.at<float>(i, j);
     g2o::Isometry3D Iso_w_c = toIsometry3D(T_w_c);
 
@@ -615,8 +615,8 @@ bool verifyInfo(const g2o::Matrix6d &info)
 {
     bool symmetric = true;
     double th = 0.0001;
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < i; j++)
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < i; ++j)
             symmetric = (std::abs(info(i, j) - info(j, i)) < th) && symmetric;
     return symmetric;
 }
