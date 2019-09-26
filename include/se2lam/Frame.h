@@ -18,7 +18,7 @@
 namespace se2lam
 {
 
-//class MapPoint;
+// class MapPoint;
 
 struct PreSE2 {
 public:
@@ -33,7 +33,9 @@ class Frame
 {
 public:
     Frame();
-    Frame(const cv::Mat& imgGray, const float& time, const Se2& odo, ORBextractor* extractor,
+    Frame(const cv::Mat& imgGray, const Se2& odo, ORBextractor* extractor, const cv::Mat& K,
+          const cv::Mat& distCoef);
+    Frame(const cv::Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
           const cv::Mat& K, const cv::Mat& distCoef);
 
     Frame(const Frame& f);
@@ -41,7 +43,7 @@ public:
     ~Frame();
 
     void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
-    void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
+//    void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
 
     Se2 getTwb();
     cv::Mat getTcr();
@@ -57,8 +59,8 @@ public:
     std::vector<size_t> GetFeaturesInArea(const float& x, const float& y, const float& r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
 
-    void copyImgTo(cv::Mat& imgRet);
-    void copyDesTo(cv::Mat& desRet);
+    void copyImgTo(cv::Mat& imgRet) { mImage.copyTo(imgRet); }
+    void copyDesTo(cv::Mat& desRet) { mDescriptors.copyTo(desRet); }
 
 public:
     //! static variable
@@ -75,7 +77,7 @@ public:
     ORBextractor* mpORBExtractor;
 
     //! frame information
-    float mTimeStamp;
+    double mTimeStamp;
     unsigned long id;  // 图像序号
     Se2 odom;          // 原始里程计输入
 
@@ -83,8 +85,6 @@ public:
     cv::Mat mImage;
     cv::Mat mDescriptors;
     std::vector<cv::KeyPoint> mvKeyPoints;
-//    std::vector<std::shared_ptr<MapPoint>> mvpMapPoints;  // 每个特征点对应的MapPoint
-//    std::vector<bool> mvbOutlier;           // 局外点标志
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
     // 图像金字塔相关
@@ -102,8 +102,6 @@ protected:
     Se2 Trb;      // reference KF body to current frame body
     Se2 Twb;      // world to body
 
-    std::mutex mMutexImg;
-    std::mutex mMutexDes;
     std::mutex mMutexPose;
 };
 

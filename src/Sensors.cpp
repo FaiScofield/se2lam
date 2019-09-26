@@ -11,10 +11,12 @@ namespace se2lam
 {
 
 Sensors::Sensors() : imgUpdated(false), odoUpdated(false)
-{}
+{
+}
 
 Sensors::~Sensors()
-{}
+{
+}
 
 bool Sensors::update()
 {
@@ -23,7 +25,7 @@ bool Sensors::update()
 
 // 当Sensors类里的当前帧数据没有被读取，则锁住当前线程
 // 直到数据被Tracker/Localizer读走，则从system接收新的数据进来
-void Sensors::updateImg(const cv::Mat& img_, float time_)
+void Sensors::updateImg(const cv::Mat& img_, double time_)
 {
     std::unique_lock<std::mutex> lock(mMutexImg);
 
@@ -36,7 +38,7 @@ void Sensors::updateImg(const cv::Mat& img_, float time_)
     imgUpdated = true;
 }
 
-void Sensors::updateOdo(float x_, float y_, float theta_, float time_)
+void Sensors::updateOdo(float x_, float y_, float theta_, double time_)
 {
     std::unique_lock<std::mutex> lock(mMutexOdo);
 
@@ -45,12 +47,13 @@ void Sensors::updateOdo(float x_, float y_, float theta_, float time_)
     }
     mOdo.x = x_;
     mOdo.y = y_;
-    mOdo.z = theta_;
-    timeOdo = time_;
+    mOdo.theta = theta_;
+    mOdo.timeStamp = time_;
+
     odoUpdated = true;
 }
 
-void Sensors::updateOdo(std::queue<Se2> &odoQue_)
+void Sensors::updateOdo(std::vector<Se2>& odoQue_)
 {
     std::unique_lock<std::mutex> lock(mMutexOdo);
 
@@ -58,18 +61,14 @@ void Sensors::updateOdo(std::queue<Se2> &odoQue_)
         cndvSensorUpdate.wait(lock);
     }
 
-    mvOdoSeq.clear();
-    while (!odoQue_.empty()) {
-        mvOdoSeq.emplace_back(odoQue_.front());
-        odoQue_.pop();
-    }
+    mvOdoSeq = odoQue_;
     if (mvOdoSeq.empty())
         std::cerr << "[Sensor] No odom data between two image!" << std::endl;
 
     odoUpdated = true;
 }
 
-void Sensors::readData(cv::Point3f& dataOdo_, cv::Mat& dataImg_)
+void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
@@ -79,11 +78,10 @@ void Sensors::readData(cv::Point3f& dataOdo_, cv::Mat& dataImg_)
 
     odoUpdated = false;
     imgUpdated = false;
-
     cndvSensorUpdate.notify_all();
 }
 
-void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, float& timeImg_)
+void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
@@ -97,14 +95,28 @@ void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, float& 
     cndvSensorUpdate.notify_all();
 }
 
+void Sensors::readData(Se2& odo, cv::Mat& img, double& time)
+{
+    std::unique_lock<std::mutex> lock1(mMutexImg);
+    std::unique_lock<std::mutex> lock2(mMutexOdo);
+
+    odo = dataAlignment(mvOdoSeq, timeImg);
+    mOdo = odo;
+    mImg.copyTo(img);
+    time = timeImg;
+
+    odoUpdated = false;
+    imgUpdated = false;
+    cndvSensorUpdate.notify_all();
+}
+
 void Sensors::forceSetUpdate(bool val)
 {
     odoUpdated = val;
     imgUpdated = val;
 }
 
-
-Se2 Sensors::dataAlignment(std::vector<Se2> &dataOdoSeq_, float &timeImg_)
+Se2 Sensors::dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& timeImg_)
 {
     Se2 res;
     size_t n = dataOdoSeq_.size();
@@ -127,11 +139,6 @@ Se2 Sensors::dataAlignment(std::vector<Se2> &dataOdoSeq_, float &timeImg_)
     return res;
 }
 
-void Sensors::readData(Se2 &odo, cv::Mat &img, float &time)
-{
-    odo = dataAlignment(mvOdoSeq, timeImg);
-    mImg.copyTo(img);
-    time = timeImg;
-}
+
 
 }  // namespace se2lam

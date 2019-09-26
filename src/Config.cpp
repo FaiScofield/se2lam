@@ -113,7 +113,7 @@ void Config::readConfig(const std::string& path)
     camPara["rvec_b_c"] >> rvec;  // rad
     camPara["tvec_b_c"] >> tvec;  // [mm]
 
-    // convert double(CV_64FC1) to float
+    // convert double(CV_64FC1) to float(CV_32FC1)
     cv::Rodrigues(rvec, r);
     K.convertTo(Kcam, CV_32FC1);
     D.convertTo(Dcam, CV_32FC1);
@@ -153,7 +153,7 @@ void Config::readConfig(const std::string& path)
     settings["max_linear_speed"] >> MaxLinearSpeed;
     settings["max_angular_speed"] >> MaxAngularSpeed;
 
-    settings["scale_facotr"] >> ScaleFactor;
+    settings["scale_factor"] >> ScaleFactor;
     settings["max_level"] >> MaxLevel;
     settings["max_feature_num"] >> MaxFtrNumber;
     settings["feature_sigma"] >> FeatureSigma;
@@ -232,10 +232,10 @@ void Config::checkParamValidity()
               << " - FPS: " << FPS << std::endl
               << " - Image start index: " << ImgStartIndex << std::endl
               << " - Image count: " << ImgCount << std::endl
-              << " - MP upper depth: " << UpperDepth << std::endl
-              << " - MP lower depth: " << LowerDepth << std::endl
-              << " - Max linear speed: " << MaxLinearSpeed << std::endl
-              << " - Max angular speed: " << MaxAngularSpeed << std::endl
+              << " - MP upper depth[mm]: " << UpperDepth << std::endl
+              << " - MP lower depth[mm]: " << LowerDepth << std::endl
+              << " - Max linear speed[mm/s]: " << MaxLinearSpeed << std::endl
+              << " - Max angular speed[deg/s]: " << MaxAngularSpeed << std::endl
               << " - Scale factor: " << ScaleFactor << std::endl
               << " - Max Pyramid level: " << MaxLevel << std::endl
               << " - Max feature extraction: " << MaxFtrNumber << std::endl
@@ -243,7 +243,7 @@ void Config::checkParamValidity()
               << " - Local iteration time: " << LocalIterNum << std::endl
               << " - Global iteration time: " << GlobalIterNum << std::endl
               << " - Max local frame num: " << MaxLocalFrameNum << std::endl
-              << " - Local frame search radius: " << LocalFrameSearchRadius << std::endl
+              << " - Local KF search radius[mm]: " << LocalFrameSearchRadius << std::endl
               << " - Use prev map: " << UsePrevMap << std::endl
               << " - Save new map: " << SaveNewMap << std::endl
               << " - Map file store path: " << MapFileStorePath << std::endl
@@ -251,6 +251,10 @@ void Config::checkParamValidity()
               << " - Map file name(write): " << WriteMapFileName << std::endl
               << " - Trajectory file name(write): " << WriteTrajFileName << std::endl
               << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
+              << " - Need visulization: " << NeedVisulization << std::endl
+              << " - Local print(debug): " << LocalPrint << std::endl
+              << " - Global print(debug): " << GlobalPrint << std::endl
+              << " - Save match images(debug): " << SaveMatchImage << std::endl
               << std::endl;
 
     assert(Kcam.data);
@@ -277,22 +281,19 @@ void Config::checkParamValidity()
     assert(MappubScaleRatio >= 1);
 }
 
-Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.f)
+Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.)
 {
 }
 
-Se2::Se2(float _x, float _y, float _theta, float _time)
+Se2::Se2(float _x, float _y, float _theta, double _time)
     : x(_x), y(_y), theta(normalize_angle(_theta)), timeStamp(_time)
-{
-}
+{}
 
 Se2::Se2(const Se2& that) : x(that.x), y(that.y), theta(that.theta), timeStamp(that.timeStamp)
-{
-}
+{}
 
 Se2::~Se2()
-{
-}
+{}
 
 Se2 Se2::inv() const
 {
@@ -324,8 +325,13 @@ Se2 Se2::operator-(const Se2& that) const
 }
 
 Se2& Se2::operator=(const Se2& that)
-    : x(that.x), y(that.y), theta(that.theta), timeStamp(that.timeStamp)
 {
+    x = that.x;
+    y = that.y;
+    theta = that.theta;
+    timeStamp = that.timeStamp;
+
+    return *this;
 }
 
 cv::Mat Se2::toCvSE3() const

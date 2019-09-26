@@ -12,6 +12,13 @@ target_link_libraries(rkDataToRosbag
     ${OpenCV_LIBS}
 )
 
+add_executable(se2lamPipeline se2lamPipeline.cpp)
+target_link_libraries(se2lamPipeline
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+)
+
 
 #find_package(PythonLibs 2.7)
 find_package(Pangolin)

@@ -83,7 +83,7 @@ void Localizer::run()
 
         //! Get new measurement: image and odometry
         cv::Mat img;
-        float imgTime;
+        double imgTime;
         Se2 odo;
         Point3f odo_3f;
         bool sensorUpdated = mpSensors->update();
@@ -109,7 +109,7 @@ void Localizer::run()
         //! TODO 回环验证需要更严格的条件
         if (getTrackingState() == cvu::LOST) {
             bool bIfRelocalized = false;
-            bool bIfLocalMatched = false;
+//            bool bIfLocalMatched = false;
 
 //            bIfLocalMatched = TrackLocalMap();
 //            if (bIfLocalMatched) {

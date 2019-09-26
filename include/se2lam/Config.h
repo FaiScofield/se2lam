@@ -19,10 +19,10 @@ struct Se2 {
     float x;
     float y;
     float theta;
-    float timeStamp;    // for odo message
+    double timeStamp;    // for odo message
 
     Se2();
-    Se2(float _x, float _y, float _theta, float _time = 0.f);
+    Se2(float _x, float _y, float _theta, double _time = 0.f);
     Se2(const Se2& that);
     ~Se2();
     Se2 inv() const;
@@ -34,7 +34,7 @@ struct Se2 {
 
     friend std::ostream& operator<<(std::ostream& os, const Se2& that)
     {
-        os << " [" << that.x / 1000 << ", " << that.y / 1000 << ", " << that.theta << "]";
+        os << " [" << that.x * 1e-3 << ", " << that.y * 1e-3 << ", " << that.theta << "]";
         return os;
     }
 };
@@ -68,7 +68,7 @@ public:
     void stop()
     {
         tickEnd = cv::getTickCount();
-        time = (tickEnd - tickBegin) / (cv::getTickFrequency() * 1000.);
+        time = (tickEnd - tickBegin) * 1000. / cv::getTickFrequency(); // [mm]
     }
 };
 

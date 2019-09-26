@@ -101,7 +101,7 @@ int main(int argc, char** argv)
     size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
 
     string imageFolder = se2lam::Config::DataPath + "/slamimg";
-    vector<RK_IMAGE> allImages;
+    vector<string> allImages;
     readImagesRK(imageFolder, allImages);
     n = min(allImages.size(), n);
     ros::Rate rate(se2lam::Config::FPS);

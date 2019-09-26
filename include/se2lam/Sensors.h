@@ -12,8 +12,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <opencv2/core/core.hpp>
-#include <thread>
 #include <queue>
+#include <thread>
 
 namespace se2lam
 {
@@ -30,27 +30,27 @@ public:
 
     void setUpdated(bool val);
 
-    void updateOdo(float x_, float y_, float theta_, float time_ = 0);
-    void updateOdo(std::queue<Se2>& odoDeque_);
+    void updateOdo(float x_, float y_, float theta_, double time_ = 0);
+    void updateOdo(std::vector<Se2>& odoDeque_);
 
-    void updateImg(const cv::Mat& img_, float time_ = 0);
+    void updateImg(const cv::Mat& img_, double time_ = 0);
 
     // After readData(), img_updatd and odo_updated would be set false
-    void readData(cv::Point3f& dataOdo_, cv::Mat& dataImg_);
-    void readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, float& timeImg_);
-    void readData(Se2& odo, cv::Mat& img, float& time);
+    void readData(Se2& dataOdo_, cv::Mat& dataImg_);
+    void readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_);
+    void readData(Se2& odo, cv::Mat& img, double& time);
 
     void forceSetUpdate(bool val);
 
-    cv::Point3f getOdo() { return mOdo; }
-    Se2 dataAlignment(std::vector<Se2> &dataOdoSeq_, float &timeImg_);
+    Se2 getOdo() { return mOdo; }
+    Se2 dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& timeImg_);
 
 protected:
     cv::Mat mImg;
-    cv::Point3f mOdo;
+    Se2 mOdo;
     std::vector<Se2> mvOdoSeq;
-    float timeImg;
-    float timeOdo;
+    double timeImg;
+    double timeOdo;
 
     std::atomic_bool imgUpdated;
     std::atomic_bool odoUpdated;
@@ -59,7 +59,6 @@ protected:
     std::mutex mMutexOdo;
     std::mutex mMutexImg;
 };
-
 }
 
 

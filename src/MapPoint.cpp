@@ -71,10 +71,9 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
     mMainKF = nullptr;
 }
 
-// Abandon a MP as an outlier, only for internal use
+//! Abandon a MP as an outlier, only for internal use. 注意不要加锁mMutexObs
 void MapPoint::setNull()
 {
-    locker lock(mMutexObs);
     mbNull = true;
     mbGoodParallax = false;
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
@@ -87,11 +86,31 @@ void MapPoint::setNull()
     mMainKF = nullptr;
 }
 
-
-Point3f MapPoint::getPos()
+size_t MapPoint::countObservation()
 {
-    locker lock(mMutexPos);
-    return mPos;
+    locker lock(mMutexObs);
+    return mObservations.size();
+}
+
+bool MapPoint::hasObservation(const PtrKeyFrame& pKF)
+{
+    locker lock(mMutexObs);
+    return (mObservations.find(pKF) != mObservations.end());
+}
+
+std::set<PtrKeyFrame> MapPoint::getObservations()
+{
+    locker lock(mMutexObs);
+    std::set<PtrKeyFrame> pKFs;
+    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
+        PtrKeyFrame pKF = i->first;
+        if (!pKF)
+            continue;
+        if (pKF->isNull())
+            continue;
+        pKFs.insert(i->first);
+    }
+    return pKFs;
 }
 
 /**
@@ -108,7 +127,7 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
     mObservations.erase(pKF);
 
     if (mObservations.size() == 0) {
-        setNull();
+        setNull();  // 这个函数不能加锁mMutexObs
     } else {
         updateMainKFandDescriptor();
     }
@@ -189,7 +208,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
         if (pKF->mIdKF - pKF_->mIdKF > 6)
             continue;
 //        if (pKF_->mIdKF < pKF_->mIdKF) {  //! NOTE 这里写错了!
-        if (pKF_->mIdKF < pKF0->mIdKF) {  //! @Vance: 20190918改
+        if (pKF_->mIdKF < pKF0->mIdKF) {  //! @Vance: 20190918修正
             pKF0 = pKF_;
         }
     }
@@ -214,6 +233,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
                 locker lock(mMutexPos);
                 mPos = posW;
                 mbGoodParallax = true;
+                printf("[MapPoint] Parallax of MP %ld updated to good now!\n", mId);
             }
 
             // Update measurements in KFs. 更新约束和信息矩阵
@@ -260,6 +280,12 @@ int MapPoint::getOctave(const PtrKeyFrame pKF)
     return pKF->mvKeyPoints[index].octave;
 }
 
+Point3f MapPoint::getPos()
+{
+    locker lock(mMutexPos);
+    return mPos;
+}
+
 void MapPoint::setPos(const Point3f& pt3f)
 {
     locker lock(mMutexPos);
@@ -282,20 +308,7 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
     return c1 && c2 && c3;
 }
 
-std::set<PtrKeyFrame> MapPoint::getObservations()
-{
-    locker lock(mMutexObs);
-    std::set<PtrKeyFrame> pKFs;
-    for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
-        PtrKeyFrame pKF = i->first;
-        if (!pKF)
-            continue;
-        if (pKF->isNull())
-            continue;
-        pKFs.insert(i->first);
-    }
-    return pKFs;
-}
+
 
 Point2f MapPoint::getMainMeasure()
 {
@@ -303,9 +316,14 @@ Point2f MapPoint::getMainMeasure()
     return mMainKF->mvKeyPoints[idx].pt;
 }
 
+Mat MapPoint::getDescriptor()
+{
+    locker lock(mMutexObs);
+    return mMainDescriptor.clone();
+}
 /**
  * @brief 更新MP的mainKF,描述子以及平均观测方向mNormalVector
- * 在addObservation()和eraseObservation()后需要调用!
+ * 在addObservation()和eraseObservation()后需要调用! 注意不要加锁mMutexObs
  */
 void MapPoint::updateMainKFandDescriptor()
 {
@@ -373,6 +391,7 @@ void MapPoint::updateMainKFandDescriptor()
         locker lock2(mMutexPos);
         mNormalVector = normal / n;               // 获得平均的观测方向
     }
+
     mMainKF = vKFs[bestIdx];
     mMainDescriptor = vDes[bestIdx].clone();
 
@@ -403,12 +422,6 @@ void MapPoint::updateMeasureInKFs()
         Point3f posKF = cvu::se3map(Tcw, mPos);
         pKF->mViewMPs[it->second] = posKF;
     }
-}
-
-int MapPoint::countObservation()
-{
-    locker lock(mMutexObs);
-    return mObservations.size();
 }
 
 
@@ -442,11 +455,7 @@ void MapPoint::setGoodPrl(bool value)
 }
 
 
-bool MapPoint::hasObservation(const PtrKeyFrame& pKF)
-{
-    locker lock(mMutexObs);
-    return (mObservations.find(pKF) != mObservations.end());
-}
+
 
 Point3f MapPoint::getNormalVector()
 {

@@ -35,7 +35,7 @@ public:
     void eraseObservation(const PtrKeyFrame& pKF);
     void eraseObservations(const std::vector<std::pair<PtrKeyFrame, size_t>>& obsCandidates);
     bool hasObservation(const PtrKeyFrame& pKF);
-    int countObservation();
+    size_t countObservation();
 
     int getOctave(const PtrKeyFrame pKF);
     size_t getFtrIdx(const PtrKeyFrame& pKF);

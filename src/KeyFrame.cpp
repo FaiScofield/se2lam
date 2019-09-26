@@ -69,10 +69,8 @@ KeyFrame::~KeyFrame()
 // Please handle odometry based constraints after calling this function
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 {
-    locker lckImg(mMutexImg);
     locker lckPose(mMutexPose);
     locker lckObs(mMutexObs);
-    locker lckDes(mMutexDes);
     locker lckCov(mMutexCovis);
 
     if (mIdKF == 1)
@@ -84,8 +82,6 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mImage.release();
     mDescriptors.release();
     mvKeyPoints.clear();
-//    mvpMapPoints.clear();
-//    mvbOutlier.clear();
 
     // Handle Feature based constraints
     for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; ++it) {
@@ -114,7 +110,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mViewMPsInfo.clear();
 }
 
-int KeyFrame::getSizeObsMP()
+size_t KeyFrame::getSizeObsMP()
 {
     locker lock(mMutexObs);
     return mObservations.size();
@@ -273,7 +269,6 @@ void KeyFrame::setOdoMeasureTo(shared_ptr<KeyFrame> pKF, const Mat &_mea, const 
 
 void KeyFrame::ComputeBoW(ORBVocabulary *_pVoc)
 {
-    lock_guard<mutex> lck(mMutexDes);
     if (mBowVec.empty() || mFeatVec.empty()) {
         vector<cv::Mat> vCurrentDesc = toDescriptorVector(mDescriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)

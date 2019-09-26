@@ -9,26 +9,30 @@
 #define LOCALMAPPER_H
 
 #include "Map.h"
+#include "Track.h"
 #include "optimizer.h"
 
-namespace se2lam{
+namespace se2lam
+{
 
-//#define TIME_TO_LOG_LOCAL_BA
-
+class Track;
 class GlobalMapper;
 
-class LocalMapper{
+class LocalMapper
+{
 public:
     LocalMapper();
 
     void run();
 
-    void setMap(Map *pMap);
+    void setMap(Map* pMap);
     void setGlobalMapper(GlobalMapper* pGlobalMapper);
 
-    void addNewKF(PtrKeyFrame &pKF, const std::vector<cv::Point3f>& localMPs, const std::vector<int> &vMatched12, const std::vector<bool>& vbGoodPrl);
+    void addNewKF(PtrKeyFrame& pKF, const std::vector<cv::Point3f>& localMPs,
+                  const std::vector<int>& vMatched12, const std::vector<bool>& vbGoodPrl);
 
-    void findCorrespd(const std::vector<int> &vMatched12, const std::vector<cv::Point3f> &localMPs, const std::vector<bool>& vbGoodPrl);
+    void findCorrespd(const std::vector<int>& vMatched12, const std::vector<cv::Point3f>& localMPs,
+                      const std::vector<bool>& vbGoodPrl);
 
     void removeOutlierChi2();
 
@@ -39,7 +43,7 @@ public:
     void setGlobalBABegin(bool value);
 
     // For debugging by hbtang
-    void printOptInfo(const SlamOptimizer & _optimizer);
+    void printOptInfo(const SlamOptimizer& _optimizer);
 
     void requestFinish();
     bool isFinished();
@@ -47,7 +51,7 @@ public:
     void updateLocalGraphInMap();
     void pruneRedundantKFinMap();
 
-//    int getNumFKsInQueue();
+    //    int getNumFKsInQueue();
 
     bool mbPrintDebugInfo;
 
@@ -58,7 +62,7 @@ protected:
     GlobalMapper* mpGlobalMapper;
     ORBVocabulary* mpORBVoc;
 
-//    std::list<PtrKeyFrame> mlNewKFs;
+    //    std::list<PtrKeyFrame> mlNewKFs;
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
 
@@ -76,13 +80,12 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
-//    bool mbStopped;
-//    bool mbStopRequested;
-//    bool mbNotStop;
-//    std::mutex mMutexStop;
+    //    bool mbStopped;
+    //    bool mbStopRequested;
+    //    bool mbNotStop;
+    //    std::mutex mMutexStop;
 };
-
 }
 
 
-#endif // LOCALMAPPER_H
+#endif  // LOCALMAPPER_H

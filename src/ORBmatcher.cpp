@@ -630,7 +630,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
 
 
 /**
- * @brief ORBmatcher::MatchByWindowWarp 利用仿射变换(透视变换H矩阵)增加先验
+ * @brief   利用仿射变换(透视变换H矩阵)增加先验
  * 注意内点数较少时H12不可用
  * @param frame1        参考帧F1
  * @param frame2        当前帧F2
@@ -777,7 +777,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
         if (pNewKF->hasObservation(pMP))
             continue;
 
-        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->Tcw, pMP->getPos()));
+        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->getPose(), pMP->getPos()));
         if (!pNewKF->inImgBound(predictUV))
             continue;
         const int predictLevel = pMP->mMainOctave;
@@ -803,7 +803,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
                 continue;
             cv::Mat d = pNewKF->mDescriptors.row(idx);
 
-            const int dist = DescriptorDistance(pMP->mMainDescriptor, d);
+            const int dist = DescriptorDistance(pMP->getDescriptor(), d);
 
             if (vMatchesDistance[idx] <= dist)
                 continue;

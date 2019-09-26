@@ -30,9 +30,8 @@ Frame::Frame()
 {
 }
 
-Frame::Frame(const Mat& imgGray, const float& time, const Se2& odo, ORBextractor* extractor,
-             const Mat& K, const Mat& distCoef)
-    : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
+Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const Mat& K,
+             const Mat& distCoef) : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputations) {
@@ -92,7 +91,80 @@ Frame::Frame(const Mat& imgGray, const float& time, const Se2& odo, ORBextractor
         for (int j = 0; j < FRAME_GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
 
-    for (size_t i = 0; i != N; ++i) {
+    for (int i = 0; i != N; ++i) {
+        cv::KeyPoint& kp = mvKeyPoints[i];
+
+        int nGridPosX, nGridPosY;
+        if (PosInGrid(kp, nGridPosX, nGridPosY))
+            mGrid[nGridPosX][nGridPosY].push_back(i);
+    }
+}
+
+Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
+             const Mat& K, const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
+{
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
+    if (bIsInitialComputations) {
+        //! 计算去畸变后的图像边界
+        computeBoundUn(K, distCoef);
+
+        gridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
+        gridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
+
+        bIsInitialComputations = false;
+    }
+
+    id = nextId++;
+
+    Mat imgUn, imgClahed;
+
+    //! 输入图像去畸变
+    assert(imgGray.channels() == 1);
+    undistort(imgGray, imgUn, K, distCoef);
+
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(imgUn, imgClahed);
+
+    //! 提取特征点
+    (*mpORBExtractor)(imgClahed, cv::Mat(), mvKeyPoints, mDescriptors);
+
+    N = mvKeyPoints.size();
+    if (mvKeyPoints.empty())
+        return;
+
+    if (Config::NeedVisulization)
+        imgClahed.copyTo(mImage);
+
+    //    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
+    //    mvbOutlier = vector<bool>(N, false);
+
+    //! Scale Levels Info
+    mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
+    mfScaleFactor = mpORBExtractor->GetScaleFactor();  // default 1.2
+
+    //! 计算金字塔每层尺度和高斯噪声
+    mvScaleFactors.resize(mnScaleLevels);
+    mvLevelSigma2.resize(mnScaleLevels);
+    mvScaleFactors[0] = 1.0f;
+    mvLevelSigma2[0] = 1.0f;
+    for (int i = 1; i != mnScaleLevels; ++i) {
+        mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+    }
+
+    mvInvLevelSigma2.resize(mvLevelSigma2.size());
+    for (int i = 0; i != mnScaleLevels; ++i)
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
+
+    //! Assign Features to Grid Cells. 将特征点按照cell存放
+    int nReserve = 0.5 * N / (FRAME_GRID_COLS * FRAME_GRID_ROWS);
+    for (int i = 0; i != FRAME_GRID_COLS; ++i)
+        for (int j = 0; j < FRAME_GRID_ROWS; ++j)
+            mGrid[i][j].reserve(nReserve);
+
+    for (int i = 0; i != N; ++i) {
         cv::KeyPoint& kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;
@@ -181,7 +253,7 @@ Point3f Frame::getCameraCenter()
     locker lock(mMutexPose);
     Mat Ow = cvu::inv(Tcw).rowRange(0, 3).col(3);
 
-    return Mat_<Point3f>(Ow);
+    return Point3f(Ow);
 }
 
 void Frame::setPose(const Mat& _Tcw)
@@ -211,14 +283,14 @@ void Frame::setTrb(const Se2& _Trb)
 }
 
 //! 这个函数没用了
-void Frame::undistortKeyPoints(const Mat& K, const Mat& D)
-{
-    mvKeyPoints = mvKeyPoints;
-    if (D.at<float>(0) == 0.) {
-        return;
-    }
-    undistortPoints(mvKeyPoints, mvKeyPoints, K, D, Mat(), K);
-}
+// void Frame::undistortKeyPoints(const Mat& K, const Mat& D)
+//{
+//    mvKeyPoints = mvKeyPoints;
+//    if (D.at<float>(0) == 0.) {
+//        return;
+//    }
+//    undistortPoints(mvKeyPoints, mvKeyPoints, K, D, Mat(), K);
+//}
 
 //! 只执行一次
 void Frame::computeBoundUn(const Mat& K, const Mat& D)
@@ -321,20 +393,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     return vIndices;
 }
 
-void Frame::copyImgTo(cv::Mat& imgRet)
-{
-    unique_lock<mutex> lock(mMutexImg);
-    mImage.copyTo(imgRet);
-}
-
-void Frame::copyDesTo(cv::Mat& desRet)
-{
-    unique_lock<mutex> lock(mMutexDes);
-    mDescriptors.copyTo(desRet);
-}
-
 Frame::~Frame()
-{
-}
+{}
 
 }  // namespace se2lam

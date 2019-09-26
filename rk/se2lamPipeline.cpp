@@ -12,6 +12,7 @@
 using namespace std;
 using namespace cv;
 using namespace Eigen;
+using namespace se2lam;
 namespace bf = boost::filesystem;
 
 const char* vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
@@ -20,10 +21,16 @@ struct RK_IMAGE {
     RK_IMAGE(const string& s, const float& t) : fileName(s), timeStamp(t) {}
 
     string fileName;
-    float timeStamp;
+    double timeStamp;
+
+    // for map container
+    bool operator <(const RK_IMAGE& that) const
+    {
+        return timeStamp < that.timeStamp;
+    }
 };
 
-bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
+inline bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
 {
     return r1.timeStamp < r2.timeStamp;
 }
@@ -48,7 +55,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
             auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
             auto t = atoll(s.substr(i + 1, j - i - 1).c_str());
-            allImages.emplace_back(RK_IMAGE(s, t/1000000.f));
+            allImages.emplace_back(RK_IMAGE(s, t * 1e-6));
         }
     }
 
@@ -57,7 +64,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
         ros::shutdown();
         return;
     } else {
-        cout << "[main ] Read " << allImages.size() << " files in the folder." << endl;
+        cout << "[main ] Read " << allImages.size() << " image files in the folder." << endl;
     }
 
     //! 注意不能直接对string排序
@@ -65,7 +72,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     files = allImages;
 }
 
-void readOdomsRK(const string& odomFile, vector<se2lam::Se2>& odoData)
+void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
 {
     ifstream rec(odomFile);
     if (!rec.is_open()) {
@@ -79,8 +86,11 @@ void readOdomsRK(const string& odomFile, vector<se2lam::Se2>& odoData)
     string line;
     while (std::getline(rec, line) && !line.empty()) {
         istringstream iss(line);
-        se2lam::Se2 odo;
+        Se2 odo;
         iss >> odo.timeStamp >> odo.x >> odo.y >> odo.theta;  // theta 可能会比超过pi,使用前要归一化
+        odo.timeStamp *= 1e-6;
+        odo.x *= 1000.f;
+        odo.y *= 1000.f;
         odoData.emplace_back(odo);
     }
     rec.close();
@@ -90,26 +100,41 @@ void readOdomsRK(const string& odomFile, vector<se2lam::Se2>& odoData)
         ros::shutdown();
         return;
     } else {
-        cout << "[main ] Read " << odoData.size() << " datas from the file." << endl;
+        cout << "[main ] Read " << odoData.size() << " odom datas from the file." << endl;
     }
 }
 
-void dataAlignment(const vector<RK_IMAGE>& allImages, const vector<se2lam::Se2>& allOdoms,
-                   map<RK_IMAGE, queue<se2lam::Se2>>& dataAligned)
+void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
+                   map<RK_IMAGE, vector<Se2>>& dataAligned)
 {
-    auto iter = allOdoms.begin();
+    // 去除掉没有odom数据的图像
+    Se2 firstOdo = allOdoms[0];
+    auto iter = allImages.begin();
+    for (auto iend = allImages.end(); iter != iend; ++iter) {
+        if (iter->timeStamp < firstOdo.timeStamp)
+            continue;
+        else
+            break;
+    }
+    allImages.erase(allImages.begin(), iter);
+    cout << "[main ] Cut some images for timestamp too earlier, now image size: "
+         << allImages.size() << endl;
+
+    // 数据对齐
+    auto ite = allOdoms.begin(), its = allOdoms.begin();
     for (size_t i = 0, iend = allImages.size(); i < iend; ++i) {
-        float imgTime = allImages[i].timeStamp;
-        queue<se2lam::Se2> odoDeq;
-        while (iter != allOdoms.end()) {
-            if (iter->timeStamp <= imgTime) {
-                odoDeq.emplace_back(*iter);
-                iter++;
-            } else {
+        double imgTime = allImages[i].timeStamp;
+
+        while (ite != allOdoms.end()) {
+            if (ite->timeStamp <= imgTime)
+                ite++;
+            else
                 break;
-            }
         }
-        dataAligned.insert(make_pair<RK_IMAGE, queue<se2lam::Se2>>(allImages[i], odoDeq));
+        vector<Se2> odoDeq = vector<Se2>(its, ite);
+        its = ite;
+
+        dataAligned[allImages[i]] = odoDeq;
     }
 }
 
@@ -125,31 +150,31 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    se2lam::OdoSLAM system;
+    OdoSLAM system;
     system.setVocFileBin(vocFile);
     system.setDataPath(argv[1]);
     system.start();
 
-    string imageFolder = se2lam::Config::DataPath + "/slamimg";
+    string imageFolder = Config::DataPath + "/slamimg";
     vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
 
-    string odomRawFile = se2lam::Config::DataPath + "/OdomRaw.txt";
-    vector<se2lam::Se2> allOdoms;
+    string odomRawFile = Config::DataPath + "/OdomRaw.txt";
+    vector<Se2> allOdoms;
     readOdomsRK(odomRawFile, allOdoms);
 
-    map<RK_IMAGE, queue<se2lam::Se2>> dataAligned;
+    map<RK_IMAGE, vector<Se2>> dataAligned;
     dataAlignment(allImages, allOdoms, dataAligned);
     assert(allImages.size() == dataAligned.size());
 
-    size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
-    size_t n = static_cast<size_t>(se2lam::Config::ImgCount);
+    size_t m = static_cast<size_t>(Config::ImgStartIndex);
+    size_t n = static_cast<size_t>(Config::ImgCount);
     n = min(allImages.size(), n);
 
-    ros::Rate rate(se2lam::Config::FPS);
-    for (size_t i = m; i < n && system.ok(); ++i) {
+    ros::Rate rate(Config::FPS);
+    for (size_t i = m; i != n && system.ok(); ++i) {
         string fullImgName = allImages[i].fileName;
-        float imgTime = allImages[i].timeStamp;
+        double imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
             cerr << "[main ] No image data for image " << fullImgName << endl;

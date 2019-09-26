@@ -115,6 +115,9 @@ public:
     bool isFinished();
 
 protected:
+    bool checkFinish();
+    void setFinish();
+
     Map *mpMap;
     LocalMapper *mpLocalMapper;
 
@@ -131,8 +134,6 @@ protected:
     std::condition_variable mcIsBusy;
     std::mutex mMutexBusy;
 
-    bool checkFinish();
-    void setFinish();
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;

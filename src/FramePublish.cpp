@@ -50,7 +50,7 @@ void FramePublish::run()
     while (nh.ok() && ros::ok()) {
         cerr << "[FramePb] mbIsLocalize = " << mbIsLocalize << endl;
         if (!mbIsLocalize) {
-            if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)) {
+            if (mpTrack->copyForPub(mImgRef, mImg, kpRef, kp, matches)) {
                 WorkTimer timer;
                 timer.start();
 
@@ -119,7 +119,7 @@ void FramePublish::run()
     }
 }
 
-// 可视化图左上角, 画当前帧的特征点和匹配关系
+//! 可视化图左上角, 画当前帧的特征点和匹配关系, 绿色为当前帧KP, 红色为参考帧KP
 cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, const Mat& trainImg,
                                           const vector<KeyPoint> trainKeys,
                                           const vector<int>& matches)
@@ -136,8 +136,8 @@ cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, cons
             ++nGoodMatchs;
             Point2f ptRef = queryKeys[i].pt;
             Point2f ptCurr = trainKeys[matches[i]].pt;
-            circle(out, ptCurr, 5, Scalar(0, 255, 0), 1);
-            circle(out, ptRef, 5, Scalar(0, 0, 255), 1);
+            circle(out, ptCurr, 3, Scalar(0, 255, 0), 1);
+            circle(out, ptRef, 3, Scalar(0, 0, 255), 1);
             line(out, ptRef, ptCurr, Scalar(0, 255, 0));
         }
     }
@@ -145,7 +145,7 @@ cv::Mat FramePublish::drawMatchesInOneImg(const vector<KeyPoint> queryKeys, cons
     return out.clone();
 }
 
-// 可视化图左下角, 画参考KF的特征点
+//! 可视化图左下角, 画参考KF的特征点. 没有匹配的为蓝色, 有匹配的为红色
 cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat& img, vector<int> matched)
 {
     Mat out = img.clone();
@@ -154,9 +154,9 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat& img, vect
     for (unsigned i = 0; i < matched.size(); ++i) {
         Point2f pt1 = keys[i].pt;
         if (matched[i] < 0) {
-            circle(out, pt1, 5, Scalar(255, 0, 0), 1);
+            circle(out, pt1, 3, Scalar(255, 0, 0), 1);
         } else {
-            circle(out, pt1, 5, Scalar(0, 0, 255), 1);
+            circle(out, pt1, 3, Scalar(0, 0, 255), 1);
         }
     }
     return out.clone();
@@ -165,10 +165,11 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat& img, vect
 cv::Mat FramePublish::drawFrame()
 {
     if (!mbIsLocalize) {
-        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)) {
+        if (mpTrack->copyForPub(mImgRef, mImg, kpRef, kp, matches)) {
             Mat imgCurr = drawMatchesInOneImg(kpRef, mImg, kp, matches);
             Mat imgRef = drawKeys(kpRef, mImgRef, matches);
             Mat imgMatch;
+
             mpGM->mImgMatch.copyTo(imgMatch);
             Size sizeImgCurr = imgCurr.size();
             Size sizeImgMatch = imgMatch.size();
@@ -223,7 +224,7 @@ cv::Mat FramePublish::drawMatch()
     if (mbIsLocalize)
         return Mat();
 
-    mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches);
+    mpTrack->copyForPub(mImgRef, mImg, kpRef, kp, matches);
 
     cv::Mat imgCurr, imgRef;
     mImg.copyTo(imgCurr);

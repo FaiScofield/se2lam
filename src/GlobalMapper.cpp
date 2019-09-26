@@ -114,6 +114,8 @@ void GlobalMapper::run()
 
         timer.stop();
         double t1 = timer.time;
+        printf("[Globa] #%ld(KF#%ld) [Map]UpdateFeatGraph() cost time: %fms\n",
+               mpKFCurr->id, mpKFCurr->mIdKF, t1);
         timer.start();
 
         //! Refresh BowVec for all KFs
@@ -121,6 +123,8 @@ void GlobalMapper::run()
 
         timer.stop();
         double t2 = timer.time;
+        printf("[Globa] #%ld(KF#%ld) ComputeBowVecAll() cost time: %fms\n",
+               mpKFCurr->id, mpKFCurr->mIdKF, t2);
         timer.start();
 
         //! Detect loop close
@@ -128,6 +132,8 @@ void GlobalMapper::run()
 
         timer.stop();
         double t3 = timer.time;
+        printf("[Globa] #%ld(KF#%ld) DetectLoopClose() cost time: %fms\n",
+               mpKFCurr->id, mpKFCurr->mIdKF, t3);
         timer.start();
 
         //! Verify loop close
@@ -146,6 +152,10 @@ void GlobalMapper::run()
 
         timer.stop();
         double t4 = timer.time;
+        if (bIfLoopCloseVerified)
+            printf("[Globa] #%ld(KF#%ld) VerifyLoopClose() passed! cost time: %fms\n",
+                   mpKFCurr->id, mpKFCurr->mIdKF, t4);
+
         timer.start();
 
         //! Do Global Correction if Needed
@@ -155,8 +165,8 @@ void GlobalMapper::run()
             GlobalBA(); // 更新KF和MP
 
             mbGlobalBALastLoop = true;
-            cout << "[Globa] Loop closed!"
-                 << " numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs() << endl;
+            printf("[Globa] #%ld(KF#%ld) Loop closed occured! numKFs = %ld, numMPs = %ld\n\n",
+                   mpKFCurr->id, mpKFCurr->mIdKF, mpMap->countKFs(), mpMap->countMPs());
         } else {
             mbGlobalBALastLoop = false;
         }
@@ -164,7 +174,7 @@ void GlobalMapper::run()
         timer.stop();
         double t5 = timer.time;
 
-        fprintf(stderr, "[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
+        printf("[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
                 mpKFCurr->id, mpKFCurr->mIdKF, t1 + t2 + t3 + t4 + t5,
                 mpMap->countKFs(), mpMap->countMPs());
 
@@ -186,6 +196,7 @@ void GlobalMapper::run()
  */
 void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>> &_vKFPairs)
 {
+    cout << "[ Map ] UpdataFeatGraph().... " << endl;
     int numPairKFs = _vKFPairs.size();
     for (int i = 0; i != numPairKFs; ++i) {
         pair<PtrKeyFrame, PtrKeyFrame> pairKF = _vKFPairs[i];
@@ -344,7 +355,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_m
 
 void GlobalMapper::GlobalBA()
 {
-
+    cout << "[ Map ] GlobalBA().... " << endl;
     mpLocalMapper->setGlobalBABegin(true);
 
 #ifdef PRE_REJECT_FTR_OUTLIER
@@ -363,7 +374,7 @@ void GlobalMapper::GlobalBA()
     int SE3OffsetParaId = 0;
     addParaSE3Offset(optimizer, g2o::Isometry3D::Identity(), SE3OffsetParaId);
 
-    int maxKFid = -1;
+    unsigned long maxKFid = 0;
 
     // Add all KFs
     map<int, PtrKeyFrame> mapId2pKF;
@@ -376,7 +387,7 @@ void GlobalMapper::GlobalBA()
             continue;
 
         Mat Twc = cvu::inv(pKF->getPose());
-        bool bIfFix = (pKF->mIdKF == 0);
+        bool bIfFix = (pKF->mIdKF == 1);
 
 //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior *pEdge = addVertexSE3PlaneMotion(

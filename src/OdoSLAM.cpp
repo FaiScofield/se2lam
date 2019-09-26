@@ -46,6 +46,8 @@ void OdoSLAM::setVocFileBin(const char* strVoc)
     cout << "[System] Loading ORB Vocabulary. This could take a while." << endl;
 
     // Init ORB BoW
+    WorkTimer timer;
+    timer.start();
     string strVocFile = strVoc;
     mpVocabulary = new ORBVocabulary();
     bool bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
@@ -53,12 +55,13 @@ void OdoSLAM::setVocFileBin(const char* strVoc)
         cerr << "[ERROR] Wrong path to vocabulary, Falied to open it." << endl;
         return;
     }
-    cout << "[System] Vocabulary loaded!" << endl << endl;
+    timer.stop();
+    cout << "[System] Vocabulary loaded! Cost time[ms]: " << timer.time << endl;
 }
 
 void OdoSLAM::setDataPath(const char* strDataPath)
 {
-    cout << "[System] Set Data Path to: " << strDataPath << endl;
+    cout << "[System] Set Data Path to: " << strDataPath << endl << endl;
     Config::readConfig(strDataPath);
 }
 
@@ -116,6 +119,7 @@ void OdoSLAM::start()
 
     mpMapPub->setFramePub(mpFramePub);
     mpMapPub->setLocalizer(mpLocalizer);
+    mpMapPub->setTracker(mpTrack);
 
     if (Config::UsePrevMap) {
         mpMapStorage->setFilePath(Config::MapFileStorePath, Config::ReadMapFileName);
@@ -147,12 +151,15 @@ void OdoSLAM::start()
         thread threadTracker(&Track::run, mpTrack);
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
         thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
-        thread threadMapPub(&MapPublish::run, mpMapPub);
+
+        if (Config::NeedVisulization) {
+            thread threadMapPub(&MapPublish::run, mpMapPub);
+            threadMapPub.detach();
+        }
 
         threadTracker.detach();
         threadLocalMapper.detach();
         threadGlobalMapper.detach();
-        threadMapPub.detach();
     }
 
     thread threadWait(&wait, this);

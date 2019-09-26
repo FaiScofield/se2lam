@@ -31,41 +31,40 @@ public:
     ~Track();
 
     void run();
-    Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, float& timeImg);
 
-    void setMap(Map* pMap);
-    void setLocalMapper(LocalMapper* pLocalMapper);
-    void setGlobalMapper(GlobalMapper* pGlobalMapper);
-    void setSensors(Sensors* pSensors);
+    void setMap(Map* pMap) { mpMap = pMap; }
+    void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
+    void setGlobalMapper(GlobalMapper* pGlobalMapper) { mpGlobalMapper = pGlobalMapper; }
+    void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
+
+    Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
+    Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, double& timeImg);
 
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
     static void calcSE3toXYZInfo(cv::Point3f xyz1, const cv::Mat& Tcw1, const cv::Mat& Tcw2,
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
-    // for frame publisher
-    int copyForPub(std::vector<cv::KeyPoint>& kp1, std::vector<cv::KeyPoint>& kp2, cv::Mat& img1,
-                   cv::Mat& img2, std::vector<int>& vMatches12);
+    // for visulization message publisher
+    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
+                      std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
+    void drawFrameForPub(cv::Mat& imgLeft);
+    void drawMatchesForPub(cv::Mat& imgMatch);
 
-    // for finishing
-    void requestFinish();
     bool isFinished();
-    bool checkFinish();
-    void setFinish();
+    void requestFinish();
 
 public:
     // Tracking states
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
 
-    std::vector<int> mMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
 
-    //! for debug print
-    int N1 = 0, N2 = 0, N3 = 0;
+    int N1 = 0, N2 = 0, N3 = 0;  // for debug print
 
 private:
-    void createFirstFrame(const cv::Mat& img, const float& imgTime, const Se2& odo);
-    void trackReferenceKF(const cv::Mat& img, const float& imgTime, const Se2& odo);
-    void relocalization(const cv::Mat& img, const float& imgTime, const Se2& odo);
+    void createFirstFrame(const cv::Mat& img, const double& imgTime, const Se2& odo);
+    void trackReferenceKF(const cv::Mat& img, const double& imgTime, const Se2& odo);
+    void relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo);
     void resetLocalTrack();
 
     void updateFramePose();
@@ -74,13 +73,16 @@ private:
     bool needNewKF(int nTrackedOldMP, int nMatched);
     int doTriangulate();
 
+    bool checkFinish();
+    void setFinish();
+
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
-    static bool mbPrint;
+    bool mbPrint;
 
     // only useful when odo time not sync with img time
-    float mTimeOdo;
-    float mTimeImg;
+//    double mTimeOdo;
+//    double mTimeImg;
 
     // set in OdoSLAM class
     Map* mpMap;
@@ -94,6 +96,7 @@ private:
     PtrKeyFrame mpReferenceKF;
     std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧KP的MP观测在相机坐标系下的坐标即Pc, 这和mViewMPs有啥关系??
+    std::vector<int> mMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
     std::set<PtrKeyFrame> mspKFLocal;
     std::set<PtrMapPoint> mspMPLocal;
     std::vector<bool> mvbGoodPrl;
@@ -107,6 +110,7 @@ private:
     PreSE2 preSE2;
     Se2 mLastOdom;
 
+    int nInliers;
     int nLostFrames;
 
     cv::Mat Homography;

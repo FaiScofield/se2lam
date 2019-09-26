@@ -26,11 +26,10 @@ using namespace Eigen;
 typedef unique_lock<mutex> locker;
 
 bool Track::mbUseOdometry = true;
-bool Track::mbPrint = Config::GlobalPrint;
 
 Track::Track()
-    : mState(cvu::NO_READY_YET), mLastState(cvu::NO_READY_YET), mnGoodPrl(0), nLostFrames(0),
-      mbFinishRequested(false), mbFinished(false)
+    : mState(cvu::NO_READY_YET), mLastState(cvu::NO_READY_YET), mnGoodPrl(0), nInliers(0),
+      nLostFrames(0), mbFinishRequested(false), mbFinished(false)
 {
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
 
@@ -42,31 +41,13 @@ Track::Track()
     mMaxDistance = 0.5 * Config::UpperDepth * 0.15;
 
     Homography = Mat::eye(3, 3, CV_64F);  // double
+
+    mbPrint = Config::GlobalPrint;
 }
 
 Track::~Track()
 {
     delete mpORBextractor;
-}
-
-void Track::setMap(Map* pMap)
-{
-    mpMap = pMap;
-}
-
-void Track::setLocalMapper(LocalMapper* pLocalMapper)
-{
-    mpLocalMapper = pLocalMapper;
-}
-
-void Track::setGlobalMapper(GlobalMapper* pGlobalMapper)
-{
-    mpGlobalMapper = pGlobalMapper;
-}
-
-void Track::setSensors(Sensors* pSensors)
-{
-    mpSensors = pSensors;
 }
 
 void Track::run()
@@ -77,7 +58,7 @@ void Track::run()
     if (mState == cvu::NO_READY_YET)
         mState = cvu::FIRST_FRAME;
 
-    float imgTime = 0;
+    double imgTime = 0;
     Mat img;
     Se2 odo;
     ros::Rate rate(Config::FPS * 5);
@@ -86,16 +67,15 @@ void Track::run()
         if (!sensorUpdated)
             continue;
 
+        mLastState = mState;
+        mpSensors->readData(odo, img, imgTime);
+        if (img.empty())
+            cerr << "[Track] Input empty image! " << endl;
+
         WorkTimer timer;
         timer.start();
 
-        mLastState = mState;
-
-        vector<Se2> dataOdoSeq;
-        mpSensors->readData(dataOdoSeq, img, imgTime);
-        odo = dataAlignment(dataOdoSeq, imgTime);
-
-        {
+        { // 计算位姿时不做可视化,防止数据竞争
             locker lock(mMutexForPub);
             if (mState == cvu::FIRST_FRAME) {
                 createFirstFrame(img, imgTime, odo);
@@ -105,12 +85,11 @@ void Track::run()
                 relocalization(img, imgTime, odo);
             }
         }
-        mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
+        mpMap->setCurrentFramePose(mCurrentFrame.getPose());
         mLastOdom = odo;
 
         timer.stop();
-        cout << "[Timer] #" << mCurrentFrame.id << " Tracking consuming time: " << timer.time
-             << "ms." << endl;
+        printf("[Track] #%ld Tracking consuming time: %fms\n", mCurrentFrame.id, timer.time);
 
         if (checkFinish())
             break;
@@ -124,7 +103,7 @@ void Track::run()
 }
 
 // 创建首帧
-void Track::createFirstFrame(const Mat& img, const float& imgTime, const Se2& odo)
+void Track::createFirstFrame(const Mat& img, const double& imgTime, const Se2& odo)
 {
     mCurrentFrame = Frame(img, imgTime, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
@@ -151,7 +130,7 @@ void Track::createFirstFrame(const Mat& img, const float& imgTime, const Se2& od
 }
 
 //! TODO 加入判断追踪失败的代码，加入时间戳保护机制，转重定位
-void Track::trackReferenceKF(const Mat& img, const float& imgTime, const Se2& odo)
+void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& odo)
 {
     mCurrentFrame = Frame(img, imgTime, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
@@ -170,27 +149,28 @@ void Track::trackReferenceKF(const Mat& img, const float& imgTime, const Se2& od
 
     //! 利用基础矩阵F计算匹配内点，内点数大于10才能继续
     //! 已改成利用单应矩阵H计算, 会更新H
-    int nInliers = removeOutliers();  // 内点数
+    nInliers = removeOutliers();  // 内点数
     int nTrackedOld = 0;              // 关联上的MP数量
     if (nInliers) {                   // 内点数大于10则三角化计算MP
         // Check parallax and do triangulation
         nTrackedOld = doTriangulate();
         if (mbPrint)
-            printf("[Track] #%ld ORBmatcher get trackedOld/inliers/matchedSum points = %d/%d/%d.\n",
+            printf("[Track] #%ld trackReferenceKF() Get trackedOld/inliers/matchedSum points = %d/%d/%d.\n",
                    mCurrentFrame.id, nTrackedOld, nInliers, nMatchedSum);
     } else {
         if (mbPrint)
-            fprintf(stderr, "[Track] #%ld ORBmatcher get ZERO inliers! matchedSum = %d.\n",
+            fprintf(stderr, "[Track] #%ld trackReferenceKF() Get ZERO inliers! matchedSum = %d.\n",
                     mCurrentFrame.id, nMatchedSum);
     }
 
     N1 += nTrackedOld;
     N2 += nInliers;
     N3 += nMatchedSum;
-    if (mbPrint && mCurrentFrame.id % 50 == 0)  // 每隔50帧输出一次平均匹配情况
-        printf("[Track] #%ld tracked/matched/matchedSum points average: %.2f/%.2f/%.2f .\n",
-               mCurrentFrame.id, N1 * 1.f / mCurrentFrame.id, N2 * 1.f / mCurrentFrame.id,
-               N3 * 1.f / mCurrentFrame.id);
+    if (mbPrint && mCurrentFrame.id % 5 == 0) { // 每隔50帧输出一次平均匹配情况
+        float sum = mCurrentFrame.id - 1.0;
+        printf("[Track] #%ld trackReferenceKF() tracked/matched/matchedSum points average: %.2f/%.2f/%.2f .\n",
+               mCurrentFrame.id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
+    }
 
     // Need new KeyFrame decision
     if (needNewKF(nTrackedOld, nInliers)) {
@@ -210,7 +190,8 @@ void Track::trackReferenceKF(const Mat& img, const float& imgTime, const Se2& od
         resetLocalTrack();
 
         if (mbPrint)
-            printf("[Track] Add new KF at #%ld(KF#%ld)\n", mCurrentFrame.id, pKF->mIdKF);
+            printf("[Track] #%ld trackReferenceKF() Add new KF at #%ld(KF#%ld)\n",
+                   mCurrentFrame.id, mCurrentFrame.id, pKF->mIdKF);
     }
 }
 
@@ -224,6 +205,7 @@ void Track::updateFramePose()
     // Tb1b2, 参考帧Body->当前帧Body, se2形式
     // mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;
     // Tb2b1, 当前帧Body->参考帧Body, se2形式
+    Se2 Trb = mCurrentFrame.odom - mpReferenceKF->odom;
     Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
     // Tc2c1, 当前帧Camera->参考帧Camera, Tc2c1 = Tcb * Tb2b1 * Tbc
     // mCurrentFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
@@ -232,8 +214,10 @@ void Track::updateFramePose()
     // Twb2, 当前帧World->Body，se2形式，故相加， Twb2 = Twb1 * Tb1b2
     // mCurrentFrame.Twb = mpReferenceKF->Twb + mCurrentFrame.Trb;
 
+
     Mat Tc2c1 = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     Mat Tc1w = mpReferenceKF->getPose();
+    mCurrentFrame.setTrb(Trb);
     mCurrentFrame.setTcr(Tc2c1);
     mCurrentFrame.setPose(Tc2c1 * Tc1w);
 
@@ -278,11 +262,14 @@ void Track::resetLocalTrack()
 }
 
 //! 可视化用，数据拷贝
-int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2, Mat& img1, Mat& img2,
-                      vector<int>& vMatches12)
+size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
+                         vector<int>& vMatches12)
 {
-
     locker lock(mMutexForPub);
+
+    if (mMatchIdx.empty())
+        return 0;
+
     mpReferenceKF->copyImgTo(img1);
     mCurrentFrame.copyImgTo(img2);
 
@@ -290,7 +277,99 @@ int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2, Mat& img1, M
     kp2 = mCurrentFrame.mvKeyPoints;
     vMatches12 = mMatchIdx;
 
-    return !mMatchIdx.empty();
+    return vMatches12.size();
+}
+
+void Track::drawFrameForPub(Mat& imgLeft)
+{
+    locker lock(mMutexForPub);
+
+    //! 画左侧两幅图
+    Mat imgUp = mCurrentFrame.mImage.clone();
+    Mat imgDown = mpReferenceKF->mImage.clone();
+    if (imgUp.channels() == 1)
+        cvtColor(imgUp, imgUp, CV_GRAY2BGR);
+    if (imgDown.channels() == 1)
+        cvtColor(imgDown, imgDown, CV_GRAY2BGR);
+
+    for (size_t i = 0, iend = mMatchIdx.size(); i != iend; ++i) {
+        Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
+        if (mMatchIdx[i] < 0) {
+            circle(imgDown, ptRef, 3, Scalar(255, 0, 0), 1);    // 未匹配上的为蓝色
+            continue;
+        } else {
+            circle(imgDown, ptRef, 3, Scalar(0, 255, 0), 1);    // 匹配上的为绿色
+
+            Point2f ptCurr = mCurrentFrame.mvKeyPoints[mMatchIdx[i]].pt;
+            circle(imgUp, ptCurr, 3, Scalar(0, 255, 0), 1); // 当前KP为绿色
+            circle(imgUp, ptRef, 3, Scalar(0, 0, 255), 1);  // 参考KP为红色
+            line(imgUp, ptRef, ptCurr, Scalar(0, 255, 0));
+        }
+    }
+    putText(imgUp, to_string(nInliers), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+    putText(imgDown, to_string(mpReferenceKF->mIdKF), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+    vconcat(imgUp, imgDown, imgLeft);
+}
+
+void Track::drawMatchesForPub(Mat &imgMatch)
+{
+    locker lock(mMutexForPub);
+
+    Mat imgL = mCurrentFrame.mImage.clone();
+    Mat imgR = mpReferenceKF->mImage.clone();
+    if (imgL.channels() == 1)
+        cvtColor(imgL, imgL, CV_GRAY2BGR);
+    if (imgR.channels() == 1)
+        cvtColor(imgR, imgR, CV_GRAY2BGR);
+
+    drawKeypoints(imgL, mCurrentFrame.mvKeyPoints, imgL, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgR, mpReferenceKF->mvKeyPoints, imgR, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+    Mat H21 = Homography.inv(DECOMP_SVD);
+    warpPerspective(imgL, imgL, H21, imgR.size());
+
+    double dt = abs(normalize_angle(mCurrentFrame.odom.theta - mpReferenceKF->odom.theta));
+    dt = dt * 180 / M_PI;
+    char dt_char[16];
+    std::sprintf(dt_char, "%.2f", dt);
+    string strTheta = "dt: " + string(dt_char) + "deg";
+    putText(imgL, strTheta, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+    putText(imgR, to_string(mpReferenceKF->mIdKF), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+    hconcat(imgL, imgR, imgMatch);
+
+
+//    for (size_t i = 0, iend = mCurrentFrame.mvKeyPoints.size(); i != iend; ++i)
+//        circle(imgL, mCurrentFrame.mvKeyPoints[i].pt, 2, Scalar(255, 0, 0), 1);
+
+    for (size_t i = 0, iend = mMatchIdx.size(); i != iend; ++i) {
+//        Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
+//        Point2f ptCur = mCurrentFrame.mvKeyPoints[mMatchIdx[i]].pt;
+
+//        Mat pt1 = (Mat_<double>(3,1) << ptCur.x, ptCur.y, 1);
+//        Mat pt2 = Homography * pt1;
+//        pt2 /= pt2.at<double>(2);
+//        Point2f pc(pt2.at<double>(0), pt2.at<double>(1));
+//        Point2f pr = ptRef + Point2f(imgL.cols, 0);
+
+        if (mMatchIdx[i] < 0) {
+//            circle(imgMatch, pc, 2, Scalar(255, 0, 0), 1);    // 未匹配上的为蓝色
+//            circle(imgMatch, pr, 2, Scalar(255, 0, 0), 1);
+            continue;
+        } else {
+            Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
+            Point2f ptCur = mCurrentFrame.mvKeyPoints[mMatchIdx[i]].pt;
+
+            Mat pt1 = (Mat_<double>(3,1) << ptCur.x, ptCur.y, 1);
+            Mat pt2 = Homography * pt1;
+            pt2 /= pt2.at<double>(2);
+            Point2f pc(pt2.at<double>(0), pt2.at<double>(1));
+            Point2f pr = ptRef + Point2f(imgL.cols, 0);
+
+            circle(imgMatch, pc, 3, Scalar(0, 255, 0)); // 匹配上的为绿色
+            circle(imgMatch, pr, 3, Scalar(0, 255, 0));
+            line(imgMatch, pc, pr, Scalar(255, 255, 0, 0.6));
+        }
+    }
 }
 
 //! 后端优化用，信息矩阵
@@ -401,7 +480,7 @@ int Track::removeOutliers()
         return 0;
 
     vector<unsigned char> mask;
-    //  findFundamentalMat(pt1, pt2, FM_RANSAC, 3, 0.99, mask);  // 默认RANSAC法计算F矩阵
+//  findFundamentalMat(pt1, pt2, FM_RANSAC, 3, 0.99, mask);  // 默认RANSAC法计算F矩阵
     Homography = findHomography(pt1, pt2, RANSAC, 3, mask);  // 朝天花板摄像头应该用H矩阵, F会退化
 
     int nInlier = 0;
@@ -470,9 +549,8 @@ int Track::doTriangulate()
 
     Mat Tcr = mCurrentFrame.getTcr();
     Mat Tc1c2 = cvu::inv(Tcr);
-    Point3f Ocam1 = Point3f(0, 0, 0);
+    Point3f Ocam1 = Point3f(0.f, 0.f, 0.f);
     Point3f Ocam2 = Point3f(Tc1c2.rowRange(0, 3).col(3));
-    int nTrackedOld = 0;
     mvbGoodPrl = vector<bool>(mpReferenceKF->N, false);
     mnGoodPrl = 0;
 
@@ -481,6 +559,7 @@ int Track::doTriangulate()
     cv::Mat Proj2 = Config::Kcam * Tcr.rowRange(0, 3);  // P2 = K * Tc2c1(3*4)
 
     // 1.遍历参考帧的KP
+    int nTrackedOld = 0, nGoodDepth = 0;
     for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         // 2.如果参考帧的KP与当前帧的KP有匹配
         if (mMatchIdx[i] < 0)
@@ -500,6 +579,7 @@ int Track::doTriangulate()
 
         // 3.如果深度计算符合预期，就将有深度的KP更新到LocalMPs里, 其中视差较好的会被标记
         if (Config::acceptDepth(Pc1.z)) {
+            nGoodDepth++;
             mLocalMPs[i] = Pc1;
             // 检查视差
             if (cvu::checkParallax(Ocam1, Ocam2, Pc1, 2)) {
@@ -510,8 +590,8 @@ int Track::doTriangulate()
             mMatchIdx[i] = -1;
         }
     }
-    printf("[Track] #%ld Generate %d points with good parallax through triangulation.\n",
-           mCurrentFrame.id, mnGoodPrl);
+    printf("[Track] #%ld doTriangulate() Generate %d points and %d with good parallax.\n",
+           mCurrentFrame.id, nGoodDepth, mnGoodPrl);
 
     return nTrackedOld;
 }
@@ -540,7 +620,7 @@ void Track::setFinish()
     mbFinished = true;
 }
 
-Se2 Track::dataAlignment(std::vector<Se2> &dataOdoSeq, float &timeImg)
+Se2 Track::dataAlignment(std::vector<Se2> &dataOdoSeq, double &timeImg)
 {
     Se2 res;
     size_t n = dataOdoSeq.size();
@@ -551,8 +631,8 @@ Se2 Track::dataAlignment(std::vector<Se2> &dataOdoSeq, float &timeImg)
 
     //! 计算单帧图像时间内的平均速度
     Se2 tranSum = dataOdoSeq[n - 1] - dataOdoSeq[0];
-    float dt = dataOdoSeq[n - 1].timeStamp - dataOdoSeq[0].timeStamp;
-    float r = (timeImg - dataOdoSeq[n - 1].timeStamp) / dt;
+    double dt = dataOdoSeq[n - 1].timeStamp - dataOdoSeq[0].timeStamp;
+    double r = (timeImg - dataOdoSeq[n - 1].timeStamp) / dt;
 
     assert(r >= 0.f);
 
@@ -563,7 +643,7 @@ Se2 Track::dataAlignment(std::vector<Se2> &dataOdoSeq, float &timeImg)
 }
 
 //! TODO 完成重定位功能
-void Track::relocalization(const Mat& img, const Se2& odo)
+void Track::relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo)
 {
 }
 

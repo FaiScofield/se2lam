@@ -34,17 +34,17 @@ public:
 
     void start();
 
-    inline void receiveOdoData(float x_, float y_, float z_, float time_ = 0.f)
+    inline void receiveOdoData(float x_, float y_, float z_, double time_ = 0.f)
     {
         mpSensors->updateOdo(x_, y_, z_, time_);
     }
 
-    inline void receiveOdoData(std::queue<Se2> &odoDeque_)
+    inline void receiveOdoData(std::vector<Se2> &odoDeque_)
     {
         mpSensors->updateOdo(odoDeque_);
     }
 
-    inline void receiveImgData(const cv::Mat &img_, float time_ = 0.f)
+    inline void receiveImgData(const cv::Mat &img_, double time_ = 0.f)
     {
         mpSensors->updateImg(img_, time_);
     }
