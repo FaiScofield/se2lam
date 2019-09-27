@@ -341,12 +341,13 @@ PtrMapPoint KeyFrame::getObservation(size_t idx)
     return mDualObservations[idx];
 }
 
-size_t KeyFrame::getFtrIdx(const PtrMapPoint &pMP)
+int KeyFrame::getFeatureIndex(const PtrMapPoint &pMP)
 {
     locker lock(mMutexObs);
-    if (mObservations.find(pMP) == mObservations.end())
+    if (mObservations.count(pMP))
+        return mObservations[pMP];
+    else
         return -1;
-    return mObservations[pMP];
 }
 
 }  // namespace se2lam

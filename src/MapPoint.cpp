@@ -20,9 +20,8 @@ typedef unique_lock<mutex> locker;
 unsigned long MapPoint::mNextId = 1;
 
 MapPoint::MapPoint()
-    : mMainKF(static_cast<PtrKeyFrame>(nullptr)), mMainOctave(0),
-      mLevelScaleFactor(Config::ScaleFactor), mId(0), mNormalVector(Point3f(0, 0, 0)),
-      mbNull(false), mbGoodParallax(false)
+    : mMainOctave(0), mLevelScaleFactor(Config::ScaleFactor), mId(0), mMainKF(nullptr),
+      mNormalVector(Point3f(0.f, 0.f, 0.f)), mbNull(false), mbGoodParallax(false)
 {
     mObservations.clear();
 
@@ -32,9 +31,8 @@ MapPoint::MapPoint()
 
 //! 构造后请立即为其添加观测
 MapPoint::MapPoint(Point3f pos, bool goodPrl)
-    : mMainKF(static_cast<PtrKeyFrame>(nullptr)), mMainOctave(0),
-      mLevelScaleFactor(Config::ScaleFactor), mPos(pos), mNormalVector(Point3f(0, 0, 0)),
-      mbNull(false), mbGoodParallax(goodPrl)
+    : mMainOctave(0), mLevelScaleFactor(Config::ScaleFactor), mPos(pos), mMainKF(nullptr),
+      mNormalVector(Point3f(0.f, 0.f, 0.f)), mbNull(false), mbGoodParallax(goodPrl)
 {
     mId = mNextId++;
     mObservations.clear();
@@ -44,16 +42,8 @@ MapPoint::MapPoint(Point3f pos, bool goodPrl)
 }
 
 MapPoint::~MapPoint()
-{}
-
-bool MapPoint::isNull()
 {
-    return mbNull;
-}
-
-bool MapPoint::isGoodPrl()
-{
-    return mbGoodParallax;
+    fprintf(stderr, "[MapPoint] A MP#%ld is decontructed!\n", mId);
 }
 
 void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
@@ -69,6 +59,9 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
     mObservations.clear();
     mMainDescriptor.release();
     mMainKF = nullptr;
+
+    fprintf(stderr, "[MapPoint] A MP#%ld is set to null. Count pointer = %ld\n", pThis->mId,
+            pThis.use_count());
 }
 
 //! Abandon a MP as an outlier, only for internal use. 注意不要加锁mMutexObs
@@ -98,10 +91,12 @@ bool MapPoint::hasObservation(const PtrKeyFrame& pKF)
     return (mObservations.find(pKF) != mObservations.end());
 }
 
-std::set<PtrKeyFrame> MapPoint::getObservations()
+//! 可以保证返回的KF都是有效的
+set<PtrKeyFrame> MapPoint::getObservations()
 {
     locker lock(mMutexObs);
-    std::set<PtrKeyFrame> pKFs;
+
+    set<PtrKeyFrame> pKFs;
     for (auto i = mObservations.begin(), iend = mObservations.end(); i != iend; ++i) {
         PtrKeyFrame pKF = i->first;
         if (!pKF)
@@ -113,34 +108,22 @@ std::set<PtrKeyFrame> MapPoint::getObservations()
     return pKFs;
 }
 
-/**
- * @brief 取消对KF的关联,在删减冗余KF时会用到
- * @param pKF   取消关联的KF对象
- */
 void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexObs);
 
-    if (mbNull)
-        return;
-
     mObservations.erase(pKF);
-
-    if (mObservations.size() == 0) {
+    if (mObservations.size() == 0)
         setNull();  // 这个函数不能加锁mMutexObs
-    } else {
+    else
         updateMainKFandDescriptor();
-    }
 }
 
-void MapPoint::eraseObservations(const std::vector<std::pair<PtrKeyFrame, size_t> > &obsCandidates)
+void MapPoint::eraseObservations(const map<PtrKeyFrame, size_t>& obsCandidates)
 {
     locker lock(mMutexObs);
 
-    if (mbNull)
-        return;
-
-    //! map.erase()足够安全不需要检查元素是否在字典里
+    //! map.erase()足够安全不需要提前检查元素是否在字典里
     for (auto& oc : obsCandidates)
         mObservations.erase(oc.first);
 
@@ -157,23 +140,18 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
     locker lock(mMutexObs);
 
     //! map.insert()会保证元素唯一性. operator[]返回引用,则会更新
-//    mObservations.insert(make_pair(pKF, idx));
-    mObservations[pKF] = idx;
+    mObservations.insert(make_pair(pKF, idx));
+//    mObservations[pKF] = idx;
 
     updateMainKFandDescriptor();
-
     updateParallax(pKF);
 
-    if (mbNull) {
+    if (mbNull)
         mbNull = false;
-    }
 }
 
-/**
- * @brief 多次观测一次性添加, 并更新相关变量, 防止多次计算
- * @param obsCandidates 待添加的多个观测
- */
-void MapPoint::addObservations(const vector<pair<PtrKeyFrame, size_t>>& obsCandidates)
+//! 多次观测一次性添加, 并更新相关变量, 防止多次计算
+void MapPoint::addObservations(const map<PtrKeyFrame, size_t>& obsCandidates)
 {
     locker lock(mMutexObs);
 
@@ -181,104 +159,17 @@ void MapPoint::addObservations(const vector<pair<PtrKeyFrame, size_t>>& obsCandi
         mObservations.insert(oc);
         updateParallax(oc.first);
     }
-
     updateMainKFandDescriptor();
 
-    if (mbNull) {
+    if (mbNull)
         mbNull = false;
-    }
 }
 
-/**
- * @brief 视差不好的MP增加新的观测后会更新视差
- * 一旦MP视差合格后就不会再更新, 如果连续6帧KF后视差仍不好, 会抛弃该MP
- * @param pKF   能观测到此MP的KF指针
- */
-void MapPoint::updateParallax(const PtrKeyFrame& pKF)
-{
-    if (mbGoodParallax || mObservations.size() <= 2)
-        return;
-
-    // Get the oldest KF in the last 6 KFs. 由从此KF往前的第6帧KF和此KF做三角化更新MP坐标
-    PtrKeyFrame pKF0 = mObservations.begin()->first;
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
-        PtrKeyFrame pKF_ = it->first;
-        if (!pKF_)
-            continue;
-        if (pKF->mIdKF - pKF_->mIdKF > 6)
-            continue;
-//        if (pKF_->mIdKF < pKF_->mIdKF) {  //! NOTE 这里写错了!
-        if (pKF_->mIdKF < pKF0->mIdKF) {  //! @Vance: 20190918修正
-            pKF0 = pKF_;
-        }
-    }
-
-    // Do triangulation
-    Mat Tcw0 = pKF0->getPose();
-    Mat Tcw = pKF->getPose();
-    Mat P0 = Config::Kcam * Tcw0.rowRange(0, 3);
-    Mat P1 = Config::Kcam * Tcw.rowRange(0, 3);
-    Point2f pt0 = pKF0->mvKeyPoints[mObservations[pKF0]].pt;
-    Point2f pt1 = pKF->mvKeyPoints[mObservations[pKF]].pt;
-    Point3f posW = cvu::triangulate(pt0, pt1, P0, P1);
-
-    Point3f pos0 = cvu::se3map(Tcw0, posW);
-    Point3f pos1 = cvu::se3map(Tcw, posW);
-    if (Config::acceptDepth(pos0.z) && Config::acceptDepth(pos1.z)) {
-        Point3f Ocam0 = Point3f(cvu::inv(Tcw0).rowRange(0, 3).col(3));
-        Point3f Ocam1 = Point3f(cvu::inv(Tcw).rowRange(0, 3).col(3));
-        //! 视差良好, 则更新此点的三维坐标
-        if (cvu::checkParallax(Ocam0, Ocam1, posW, 2)) {
-            {
-                locker lock(mMutexPos);
-                mPos = posW;
-                mbGoodParallax = true;
-                printf("[MapPoint] Parallax of MP %ld updated to good now!\n", mId);
-            }
-
-            // Update measurements in KFs. 更新约束和信息矩阵
-            Eigen::Matrix3d xyzinfo0, xyzinfo1;
-            Track::calcSE3toXYZInfo(pos0, Tcw0, Tcw, xyzinfo0, xyzinfo1);
-            pKF0->setViewMP(pos0, mObservations[pKF0], xyzinfo0);
-            pKF->setViewMP(pos1, mObservations[pKF], xyzinfo1);
-
-            Mat Rcw0 = Tcw0.rowRange(0, 3).colRange(0, 3);
-            Mat xyzinfoW = Rcw0.t() * toCvMat(xyzinfo0) * Rcw0;
-
-            // Update measurements in other KFs
-            for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
-                PtrKeyFrame pKF_k = it->first;
-                if (!pKF_k)
-                    continue;
-                if (pKF_k->mIdKF == pKF->mIdKF || pKF_k->mIdKF == pKF0->mIdKF) {
-                    continue;
-                }
-                Mat Tcw_k = pKF_k->getPose();
-                Point3f posk = cvu::se3map(Tcw_k, posW);
-                Mat Rcwk = Tcw_k.rowRange(0, 3).colRange(0, 3);
-                Mat xyzinfok = Rcwk * xyzinfoW * Rcwk.t();
-                pKF_k->setViewMP(posk, mObservations[pKF_k], toMatrix3d(xyzinfok));
-            }
-        }
-    }
-
-    // If no good parallax after more than 6 KFs, abandon this MP
-    if (pKF->mIdKF - pKF0->mIdKF >= 6 && !mbGoodParallax) {
-        setNull();
-    }
-}
-
-float MapPoint::getInvLevelSigma2(const PtrKeyFrame& pKF)
-{
-    int index = mObservations[pKF];
-    return pKF->mvInvLevelSigma2[index];
-}
-
-int MapPoint::getOctave(const PtrKeyFrame pKF)
-{
-    int index = mObservations[pKF];
-    return pKF->mvKeyPoints[index].octave;
-}
+// float MapPoint::getInvLevelSigma2(const PtrKeyFrame& pKF)
+//{
+//    int index = mObservations[pKF];
+//    return pKF->mvInvLevelSigma2[index];
+//}
 
 Point3f MapPoint::getPos()
 {
@@ -300,6 +191,8 @@ void MapPoint::setPos(const Point3f& pt3f)
  */
 bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
 {
+    locker lock(mMutexObs);
+
     float dist = cv::norm(posKF);
     float cosAngle = cv::norm(posKF.dot(mNormalVector)) / (dist * cv::norm(mNormalVector));
     bool c1 = std::abs(mMainKF->mvKeyPoints[mObservations[mMainKF]].octave - kp.octave) <= 2;
@@ -308,10 +201,18 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
     return c1 && c2 && c3;
 }
 
-
+Point3f MapPoint::getNormalVector()
+{
+    locker lock(mMutexObs);
+    return mNormalVector;
+}
 
 Point2f MapPoint::getMainMeasure()
 {
+    locker lock(mMutexObs);
+    if (!mMainKF) {
+        fprintf(stderr, "[MapPoint] Error for MainKF doesn't exist!\n");
+    }
     size_t idx = mObservations[mMainKF];
     return mMainKF->mvKeyPoints[idx].pt;
 }
@@ -321,18 +222,27 @@ Mat MapPoint::getDescriptor()
     locker lock(mMutexObs);
     return mMainDescriptor.clone();
 }
+
+PtrKeyFrame MapPoint::getMainKF()
+{
+    locker lock(mMutexObs);
+    return mMainKF;
+}
+
+
 /**
  * @brief 更新MP的mainKF,描述子以及平均观测方向mNormalVector
  * 在addObservation()和eraseObservation()后需要调用! 注意不要加锁mMutexObs
+ * mMainKF只有在这个函数里才更新!
  */
 void MapPoint::updateMainKFandDescriptor()
 {
+    if (mbNull || mObservations.empty())
+        return;
+
     Point3f pose;
     {
         locker lock1(mMutexPos);
-
-        if (mbNull || mObservations.empty())
-            return;
         pose = mPos;  // 3d点在世界坐标系中的位置
     }
 
@@ -353,14 +263,16 @@ void MapPoint::updateMainKFandDescriptor()
 
             Point3f Owi = pKF->getCameraCenter();
             Point3f normali = pose - Owi;
-            normal += normali / cv::norm(normali);  // 对所有关键帧对该点的观测方向归一化为单位向量进行求和
+            normal += normali / cv::norm(normali);  // 所有KF对该点的观测方向归一化为单位向量再求和
             n++;
         }
     }
 
-
-    if (vDes.empty())
+    if (vDes.empty()) {
+        fprintf(stderr, "[MapPoint] Set this MP#%ld to null because no desciptors in updateMainKFandDescriptor()\n", mId);
+        setNull();
         return;
+    }
 
     // Compute distances between them
     const size_t N = vDes.size();
@@ -387,13 +299,13 @@ void MapPoint::updateMainKFandDescriptor()
         }
     }
 
-    {
-        locker lock2(mMutexPos);
-        mNormalVector = normal / n;               // 获得平均的观测方向
-    }
-
-    mMainKF = vKFs[bestIdx];
+    mNormalVector = normal / n;  // 获得平均的观测方向
     mMainDescriptor = vDes[bestIdx].clone();
+
+    if (mMainKF != nullptr && mMainKF->mIdKF == vKFs[bestIdx]->mIdKF)
+        return;
+
+    mMainKF = vKFs[bestIdx];  //! mMainKF 只有在这里才更新
 
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
@@ -406,8 +318,92 @@ void MapPoint::updateMainKFandDescriptor()
 }
 
 /**
- * @brief MP在优化更新坐标后要更新其他KF对其的观测值. 在Map里调用
+ * @brief 视差不好的MP增加新的观测后会更新视差
+ * 一旦MP视差合格后就不会再更新, 如果连续6帧KF后视差仍不好, 会抛弃该MP
+ * @param pKF   能观测到此MP的KF指针
+ * TODO 待更新为深度滤波器
  */
+void MapPoint::updateParallax(const PtrKeyFrame& pKF)
+{
+    if (mbGoodParallax || mObservations.size() <= 2)
+        return;
+
+    // Get the oldest KF in the last 6 KFs. 由从此KF往前最多10帧KF和此KF做三角化更新MP坐标
+    PtrKeyFrame pKF0 = mObservations.rbegin()->first;
+    for (auto it = ++mObservations.rbegin(), iend = mObservations.rend(); it != iend; ++it) {
+        PtrKeyFrame pKFj = it->first;
+        if (!pKFj)
+            continue;
+        if (pKF->mIdKF - pKFj->mIdKF > 10)   // 6
+            break;
+        if (updateParallaxCheck(pKFj, pKF))
+            break;
+    }
+
+    // If still no good parallax after more than 10 KFs, abandon this MP
+    if (!mbGoodParallax && mObservations.size() > 10)
+        setNull();
+}
+
+//! Update measurements in KFs. 更新约束和信息矩阵
+bool MapPoint::updateParallaxCheck(const PtrKeyFrame &pKF1, const PtrKeyFrame &pKF2)
+{
+    if (pKF1->mIdKF == pKF2->mIdKF)
+        return false;
+
+    // Do triangulation
+    Mat Tc1w = pKF1->getPose();
+    Mat Tc2w = pKF2->getPose();
+    Mat Proj1 = Config::Kcam * Tc1w.rowRange(0, 3);
+    Mat Proj2 = Config::Kcam * Tc2w.rowRange(0, 3);
+    Point2f pt1 = pKF1->mvKeyPoints[mObservations[pKF1]].pt;
+    Point2f pt2 = pKF2->mvKeyPoints[mObservations[pKF2]].pt;
+    Point3f posW = cvu::triangulate(pt1, pt2, Proj1, Proj2);
+
+    Point3f Pc1 = cvu::se3map(Tc1w, posW);
+    Point3f Pc2 = cvu::se3map(Tc2w, posW);
+    if (!Config::acceptDepth(Pc1.z) || !Config::acceptDepth(Pc2.z))
+        return false;
+
+    Point3f Ocam1 = Point3f(cvu::inv(Tc1w).rowRange(0, 3).col(3));
+    Point3f Ocam2 = Point3f(cvu::inv(Tc2w).rowRange(0, 3).col(3));
+    if (!cvu::checkParallax(Ocam1, Ocam2, posW, 2))
+        return false;
+
+    // 视差良好, 则更新此点的三维坐标
+    {
+        locker lock(mMutexPos);
+        mPos = posW;
+        mbGoodParallax = true;
+        fprintf(stderr, "[MapPoint] Parallax of MP %ld updated to good now!\n", mId);
+    }
+
+    // Update measurements in KFs. 更新约束和信息矩阵
+    Eigen::Matrix3d xyzinfo1, xyzinfo2;
+    Track::calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
+    pKF1->setViewMP(Pc1, mObservations[pKF1], xyzinfo1);
+    pKF2->setViewMP(Pc2, mObservations[pKF2], xyzinfo2);
+
+    Mat Rc1w = Tc1w.rowRange(0, 3).colRange(0, 3);
+    Mat xyzinfoW = Rc1w.t() * toCvMat(xyzinfo1) * Rc1w;
+
+    // Update measurements in other KFs
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
+        PtrKeyFrame pKFi = it->first;
+        if (!pKFi)
+            continue;
+        if (pKFi->mIdKF == pKF2->mIdKF || pKFi->mIdKF == pKF1->mIdKF)
+            continue;
+        Mat Tciw = pKFi->getPose();
+        Point3f Pci = cvu::se3map(Tciw, posW);
+        Mat Rciw = Tciw.rowRange(0, 3).colRange(0, 3);
+        Mat xyzinfoi = Rciw * xyzinfoW * Rciw.t();
+        pKFi->setViewMP(Pci, mObservations[pKFi], toMatrix3d(xyzinfoi));
+    }
+    return true;
+}
+
+//! MP在优化更新坐标后要更新其他KF对其的观测值. 在Map里调用
 void MapPoint::updateMeasureInKFs()
 {
     locker lock(mMutexObs);
@@ -438,29 +434,32 @@ void MapPoint::mergedInto(const shared_ptr<MapPoint>& pMP)
         size_t idx = it->second;
         pKF->setObservation(pMP, idx);
         pMP->addObservation(pKF, idx);
+        mObservations.erase(pKF);
     }
-    //! 不用setNull吗?
-//     mbNull = true;
+    //! NOTE 不能直接setNull(), 此函数会删除mObservations里KF的观测, 观测已经更新, 不可删除
+    //! 故要在上面的循环体中先删除mObservations的元素
+    fprintf(stderr, "[MapPoint] A MP#%ld is merged by #%ld, now it's obervations count = %ld\n",
+           mId, pMP->mId, mObservations.size());
+    setNull();
 }
 
-size_t MapPoint::getFtrIdx(const PtrKeyFrame& pKF)
+int MapPoint::getOctave(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexObs);
-    return mObservations[pKF];
+    if (mObservations.count(pKF))
+        return pKF->mvKeyPoints[mObservations[pKF]].octave;
+    else
+        return -1;
 }
 
-void MapPoint::setGoodPrl(bool value)
+int MapPoint::getIndexInKF(const PtrKeyFrame& pKF)
 {
-    mbGoodParallax = value;
+    locker lock(mMutexObs);
+    if (mObservations.count(pKF))
+        return mObservations[pKF];
+    else
+        return -1;
 }
 
-
-
-
-Point3f MapPoint::getNormalVector()
-{
-    locker lock(mMutexPos);
-    return mNormalVector;
-}
 
 }  // namespace se2lam

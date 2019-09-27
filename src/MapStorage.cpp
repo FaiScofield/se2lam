@@ -218,7 +218,7 @@ void MapStorage::saveObservations() {
             PtrMapPoint pMP = mvMPs[j];
             if(pKF->hasObservation(pMP)) {
                 obs.at<int>(i,j) = 1;
-                Index.at<int>(i,j) = pMP->getFtrIdx(pKF);
+                Index.at<int>(i,j) = pMP->getIndexInKF(pKF);
             }
         }
     }

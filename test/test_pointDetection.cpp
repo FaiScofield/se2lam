@@ -217,7 +217,7 @@ int main(int argc, char** argv)
         clahe->apply(imgGray, imgClahe);
 
         //! ORB提取特征点
-        float imgTime;
+        double imgTime = 0.;
         frameCur = Frame(imgClahe, imgTime, Se2(), kpExtractor, K, D);
         imgWithFeatureCur = imgCur.clone();
         for (int i = 0, iend = frameCur.N; i < iend; ++i) {

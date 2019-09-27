@@ -25,7 +25,7 @@ typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
     : mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f), mScaleRatio(Config::MappubScaleRatio),
-      mbFinished(false), mbFinishRequested(false)
+      mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
 
@@ -219,7 +219,7 @@ MapPublish::~MapPublish()
 {
 }
 
-void MapPublish::PublishKeyFrames()
+void MapPublish::publishKeyFrames()
 {
     mErrorSum = 0.;
 
@@ -367,7 +367,7 @@ void MapPublish::PublishKeyFrames()
         // Visual Odometry Graph (estimate)
         PtrKeyFrame pKFOdoChild = pKFi->mOdoMeasureFrom.first;
         if (pKFOdoChild != nullptr && !mbIsLocalize) {
-            Mat Twb1 = cvu::inv(pKFOdoChild->getPose()) /* * Config::Tcb*/;
+            Mat Twb1 = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
             geometry_msgs::Point msgs_b2;
             msgs_b2.x = Twb1.at<float>(0, 3) / mScaleRatio;
             msgs_b2.y = Twb1.at<float>(1, 3) / mScaleRatio;
@@ -428,7 +428,7 @@ void MapPublish::PublishKeyFrames()
     publisher.publish(mVIGraph);
 }
 
-void MapPublish::PublishMapPoints()
+void MapPublish::publishMapPoints()
 {
     mMPsNeg.points.clear();
     mMPsAct.points.clear();
@@ -528,7 +528,7 @@ void MapPublish::PublishMapPoints()
     publisher.publish(mMPsNoGoodPrl);
 }
 
-void MapPublish::PublishCameraCurr(const cv::Mat& Twc)
+void MapPublish::publishCameraCurr(const cv::Mat& Twc)
 {
     mKFNow.points.clear();
 
@@ -610,7 +610,7 @@ void MapPublish::run()
     int nSaveId = 0;
     ros::Rate rate(Config::FPS /* / 3*/);
     while (nh.ok()) {
-        if (CheckFinish()) {
+        if (checkFinish()) {
             break;
         }
         if (mpMap->empty())
@@ -653,10 +653,10 @@ void MapPublish::run()
             Tcw = mpLocalizer->getKFCurr()->getPose();
         }
 
-        PublishCameraCurr(Tcw.inv());
-        PublishKeyFrames();
-        PublishMapPoints();
-        PublishOdomInformation();
+        publishCameraCurr(Tcw.inv());
+        publishKeyFrames();
+        publishMapPoints();
+        publishOdomInformation();
 
         rate.sleep();
         ros::spinOnce();
@@ -665,22 +665,22 @@ void MapPublish::run()
 
     nh.shutdown();
 
-    SetFinish();
+    setFinish();
 }
 
-void MapPublish::RequestFinish()
+void MapPublish::requestFinish()
 {
     locker lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
-bool MapPublish::CheckFinish()
+bool MapPublish::checkFinish()
 {
     locker lock(mMutexFinish);
     return mbFinishRequested;
 }
 
-void MapPublish::SetFinish()
+void MapPublish::setFinish()
 {
     locker lock(mMutexFinish);
     mbFinished = true;
@@ -693,7 +693,7 @@ bool MapPublish::isFinished()
 }
 
 //! 可视化原始odo的输入
-void MapPublish::PublishOdomInformation()
+void MapPublish::publishOdomInformation()
 {
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;

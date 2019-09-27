@@ -89,7 +89,7 @@ void Track::run()
         mLastOdom = odo;
 
         timer.stop();
-        printf("[Track] #%ld Tracking consuming time: %fms\n", mCurrentFrame.id, timer.time);
+        fprintf(stderr, "[Track] #%ld Tracking consuming time: %fms\n", mCurrentFrame.id, timer.time);
 
         if (checkFinish())
             break;

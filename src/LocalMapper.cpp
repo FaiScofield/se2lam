@@ -156,8 +156,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
         }
     }
 
-    //! 2.和局部地图匹配，关联局部地图里的MP, 其中已经和KF有管理的MP不会被匹配, 故不会重复关联
-    //! TODO 应该没有重复关联, 待排查
+    //! 2.和局部地图匹配，关联局部地图里的MP, 其中已经和参考KF有关联的MP不会被匹配, 故不会重复关联
     if (!bNoMP) {
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
@@ -178,7 +177,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             // mNewKF to the matched old MapPoint.
             Mat Tcw = mpNewKF->getPose();
             Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
-                                           Config::Kcam * pMP->mMainKF->getPose().rowRange(0, 3),
+                                           Config::Kcam * pMP->getMainKF()->getPose().rowRange(0, 3),
                                            Config::Kcam * Tcw.rowRange(0, 3));
             Point3f posNewKF = cvu::se3map(Tcw, x3d);
             if (posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
@@ -186,7 +185,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             if (!pMP->acceptNewObserve(posNewKF, mpNewKF->mvKeyPoints[i]))
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->mMainKF->getPose(), infoNew, infoOld);
+            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->getMainKF()->getPose(), infoNew, infoOld);
             mpNewKF->setViewMP(posNewKF, i, infoNew);
             mpNewKF->addObservation(pMP, i);
             pMP->addObservation(mpNewKF, i);
@@ -196,7 +195,8 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
     //! 3.根据匹配情况给新的KF添加MP
     //! 首帧没有处理到这，第二帧进来有了参考帧，但还没有MPS，就会直接执行到这，生成MPs，所以第二帧才有MP
     int nAddNewMP = 0;
-    for (int i = 0, iend = pPrefKF->N; i != iend; ++i) {
+    assert(pPrefKF->N == localMPs.size());
+    for (size_t i = 0, iend = localMPs.size(); i != iend; ++i) {
         // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
         if (vMatched12[i] >= 0 && !pPrefKF->hasObservation(i)) {
             if (mpNewKF->hasObservation(vMatched12[i])) {
@@ -215,12 +215,12 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
             }
 
-            Point3f posKF = cvu::se3map(mpNewKF->getTcr(), localMPs[i]);
+            Point3f Pc2 = cvu::se3map(mpNewKF->getTcr(), localMPs[i]);
             Eigen::Matrix3d xyzinfo1, xyzinfo2;
             Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->getPose(), mpNewKF->getPose(), xyzinfo1, xyzinfo2);
 
-            mpNewKF->setViewMP(posKF, vMatched12[i], xyzinfo2);
             pPrefKF->setViewMP(localMPs[i], i, xyzinfo1);
+            mpNewKF->setViewMP(Pc2, vMatched12[i], xyzinfo2);
             PtrMapPoint pMP = std::make_shared<MapPoint>(posW, vbGoodPrl[i]);
 
             pMP->addObservation(pPrefKF, i);
@@ -339,8 +339,7 @@ void LocalMapper::localBA()
 
     timer.stop();
     if (mbPrintDebugInfo) {
-        cerr << "[Local] LocalBA cost time " << timer.time << "ms, number of KFs: "
-             << mpMap->countLocalKFs() << ", number of MPs: " << mpMap->countLocalMPs() << endl;
+        fprintf(stderr, "[Local] LocalBA cost time = %fms, number of KFs = %ld, number of MPs =  %ld\n", timer.time, mpMap->countLocalKFs(), mpMap->countLocalMPs());
     }
 
     if (solver->currentLambda() > 100.0) {

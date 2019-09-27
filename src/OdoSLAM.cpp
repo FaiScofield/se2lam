@@ -213,6 +213,7 @@ void OdoSLAM::saveMap()
                     << Twb.at<float>(2, 3) << " " << euler(2) << endl;
         }
     }
+    towrite.close();
 }
 
 void OdoSLAM::requestFinish()
@@ -244,12 +245,12 @@ void OdoSLAM::sendRequestFinish()
 {
     if (Config::LocalizationOnly) {
         mpLocalizer->requestFinish();
-        mpMapPub->RequestFinish();
+        mpMapPub->requestFinish();
     } else {
         mpTrack->requestFinish();
         mpLocalMapper->requestFinish();
         mpGlobalMapper->requestFinish();
-        mpMapPub->RequestFinish();
+        mpMapPub->requestFinish();
     }
 }
 

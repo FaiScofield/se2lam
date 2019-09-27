@@ -28,42 +28,39 @@ public:
     MapPoint(cv::Point3f pos, bool goodPrl);
     ~MapPoint();
 
+    //! 观测属性
+    bool acceptNewObserve(cv::Point3f posKF, const cv::KeyPoint kp);
     std::set<PtrKeyFrame> getObservations();
     // Do pKF.setViewMP() before use this
     void addObservation(const PtrKeyFrame &pKF, size_t idx);
-    void addObservations(const std::vector<std::pair<PtrKeyFrame, size_t>>& obsCandidates);
+    void addObservations(const std::map<PtrKeyFrame, size_t>& obsCandidates);
     void eraseObservation(const PtrKeyFrame& pKF);
-    void eraseObservations(const std::vector<std::pair<PtrKeyFrame, size_t>>& obsCandidates);
+    void eraseObservations(const std::map<PtrKeyFrame, size_t>& obsCandidates);
     bool hasObservation(const PtrKeyFrame& pKF);
     size_t countObservation();
 
-    int getOctave(const PtrKeyFrame pKF);
-    size_t getFtrIdx(const PtrKeyFrame& pKF);
-
-    bool isGoodPrl();
-    void setGoodPrl(bool value);
-    void updateParallax(const PtrKeyFrame& pKF);
-
     cv::Point3f getNormalVector();
+    cv::Point2f getMainMeasure();
+    cv::Mat getDescriptor();
+    PtrKeyFrame getMainKF();
 
-    bool isNull();
+//    float getInvLevelSigma2(const PtrKeyFrame &pKF);
+
+    int getOctave(const PtrKeyFrame& pKF);
+    int getIndexInKF(const PtrKeyFrame& pKF);
+
+    void updateMeasureInKFs();
+
+    //! 自身属性
+    bool isGoodPrl() { return mbGoodParallax; }
+    void setGoodPrl(bool value) { mbGoodParallax = value; }
+
+    bool isNull() { return mbNull; }
     void setNull(const std::shared_ptr<MapPoint> &pThis);
 
     cv::Point3f getPos();
     void setPos(const cv::Point3f& pt3f);
 
-    float getInvLevelSigma2(const PtrKeyFrame &pKF);
-
-
-    cv::Point2f getMainMeasure();
-    void updateMeasureInKFs();
-
-    cv::Mat getDescriptor();
-    void updateMainKFandDescriptor(); // 更新mainKF,desccriptor,normalVector
-
-    bool acceptNewObserve(cv::Point3f posKF, const cv::KeyPoint kp);
-
-//    void increaseVisibleCount(int n = 1);
 
     struct IdLessThan{
         bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const{
@@ -74,29 +71,30 @@ public:
     // This MP would be replaced and abandoned later by
     void mergedInto(const std::shared_ptr<MapPoint>& pMP);
 
-
-
 public:
-    PtrKeyFrame mMainKF;
     int mMainOctave;
     float mLevelScaleFactor;
 
     unsigned long mId;
     static unsigned long mNextId;
 
-//! 以下成员变量需加锁访问
 protected:
+    //! 内部使用的成员函数, 不需要加锁, 因为调用它的函数已经加了锁
     void setNull();
+    void updateParallax(const PtrKeyFrame& pKF);
+    void updateMainKFandDescriptor(); // 更新mainKF,desccriptor,normalVector
+    bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
 
-    //! first = 观测到此MP的KF, second = 在其KP中的索引, 按KFid从小到大排序
+    //! 以下成员变量需加锁访问
+    cv::Point3f mPos;   // 三维空间坐标
+
+    // first = 观测到此MP的KF, second = 在其KP中的索引, 按KFid从小到大排序
 //    std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
     std::map<PtrKeyFrame, size_t, KeyFrame::IdLessThan> mObservations;
 
-    cv::Point3f mPos;   // 三维空间坐标
-    cv::Point3f mNormalVector;  // Mean view direction
-    cv::Mat mMainDescriptor;    // The descriptor with least median distance to the rest
-
-//    int mVisibleCount; // 被观测数
+    PtrKeyFrame mMainKF;
+    cv::Point3f mNormalVector;  // 平均观测方向
+    cv::Mat mMainDescriptor;    // 最优描述子, 到其他描述子平均距离最小
 
     bool mbNull;
     bool mbGoodParallax;

@@ -86,7 +86,7 @@ public:
     // Get an observed MP by an index. 从图像特征点id获取观测点MP
     PtrMapPoint getObservation(size_t id);
     // Get the corresponding index of an observed MP
-    size_t getFtrIdx(const PtrMapPoint& pMP);
+    int getFeatureIndex(const PtrMapPoint& pMP);
 
     // Set a new MP in location index (used in MP merge)
     void setObservation(const PtrMapPoint& pMP, size_t idx);

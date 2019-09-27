@@ -35,15 +35,15 @@ public:
     void setLocalMapper(LocalMapper* pLocal) { mpLocalMapper = pLocal; }
     void setLocalizer(Localizer* pLocalize) { mpLocalizer = pLocalize; }
 
-    void PublishMapPoints();
-    void PublishKeyFrames();
-    void PublishCameraCurr(const cv::Mat& Twc);
+    void publishMapPoints();
+    void publishKeyFrames();
+    void publishCameraCurr(const cv::Mat& Twc);
 
-    void PublishOdomInformation();
+    void publishOdomInformation();
     cv::Mat drawMatchesInOneImg();
 
     bool isFinished();
-    void RequestFinish();
+    void requestFinish();
 
 public:
     bool mbIsLocalize;
@@ -55,8 +55,8 @@ public:
     Track* mpTracker;
 
 private:
-    bool CheckFinish();
-    void SetFinish();
+    bool checkFinish();
+    void setFinish();
 
     ros::NodeHandle nh;
     ros::Publisher publisher;

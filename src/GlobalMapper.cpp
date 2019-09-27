@@ -39,21 +39,6 @@ void GlobalMapper::setUpdated(bool val)
     mpKFCurr = mpMap->getCurrentKF();
 }
 
-void GlobalMapper::setLocalMapper(LocalMapper *pLocalMapper)
-{
-    mpLocalMapper = pLocalMapper;
-}
-
-void GlobalMapper::setORBVoc(ORBVocabulary *pORBVoc)
-{
-    mpORBVoc = pORBVoc;
-}
-
-void GlobalMapper::setMap(Map *pMap)
-{
-    mpMap = pMap;
-}
-
 //! 检查Map里是不是来了最新的帧
 bool GlobalMapper::CheckGMReady()
 {
@@ -174,7 +159,7 @@ void GlobalMapper::run()
         timer.stop();
         double t5 = timer.time;
 
-        printf("[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
+        fprintf(stderr, "[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
                 mpKFCurr->id, mpKFCurr->mIdKF, t1 + t2 + t3 + t4 + t5,
                 mpMap->countKFs(), mpMap->countMPs());
 
@@ -353,6 +338,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_m
     return bVerified;
 }
 
+//! BUG 会崩溃 20190927
 void GlobalMapper::GlobalBA()
 {
     cout << "[ Map ] GlobalBA().... " << endl;
@@ -538,7 +524,7 @@ OptKFPair
             continue;
         }
 
-        PtrKeyFrame pKF = pMP->mMainKF;
+        PtrKeyFrame pKF = pMP->getMainKF();
         Mat Twc = pKF->getPose().inv();
         Mat Rwc = Twc.rowRange(0, 3).colRange(0, 3);
         Mat twc = Twc.rowRange(0, 3).colRange(3, 4);
@@ -547,7 +533,7 @@ OptKFPair
             continue;
         }
 
-        int idx = pKF->getFtrIdx(pMP);
+        int idx = pKF->getFeatureIndex(pMP);
 
         Point3f Pt3_MP_KF = pKF->mViewMPs[idx];
         Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
@@ -919,7 +905,7 @@ void GlobalMapper::OptKFPair(
                 continue;
             }
 
-            int idx = PtrKFi->getFtrIdx(PtrMPj);
+            int idx = PtrKFi->getFeatureIndex(PtrMPj);
 
             g2o::Vector3D meas = toVector3d(PtrKFi->mViewMPs[idx]);
             g2o::Matrix3D info = PtrKFi->mViewMPsInfo[idx];
@@ -1095,7 +1081,7 @@ void GlobalMapper::CreateVecMeasSE3XYZ(
                 continue;
             }
 
-            int idxMPinKF = PtrKFi->getFtrIdx(PtrMPj);
+            int idxMPinKF = PtrKFi->getFeatureIndex(PtrMPj);
 
             Meas_ij.z = toVector3d(PtrKFi->mViewMPs[idxMPinKF]);
             Meas_ij.info = PtrKFi->mViewMPsInfo[idxMPinKF];
