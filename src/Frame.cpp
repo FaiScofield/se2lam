@@ -25,10 +25,11 @@ bool Frame::bIsInitialComputations = true;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 
-
 Frame::Frame()
-{
-}
+{}
+
+Frame::~Frame()
+{}
 
 Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const Mat& K,
              const Mat& distCoef) : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
@@ -392,8 +393,5 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
 
     return vIndices;
 }
-
-Frame::~Frame()
-{}
 
 }  // namespace se2lam

@@ -130,7 +130,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
     printf("[Local] #%ld(#KF%ld) findCorrespd() Count MPs: %ld\n",
            mpNewKF->id, mpNewKF->mIdKF, mpMap->countMPs());
     printf("[Local] #%ld(#KF%ld) findCorrespd() Count observations of last KF: %ld\n",
-           mpNewKF->id, mpNewKF->mIdKF, pPrefKF->getSizeObsMP());
+           mpNewKF->id, mpNewKF->mIdKF, pPrefKF->countObservation());
 
     //! 1.如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP
     if (!bNoMP) {

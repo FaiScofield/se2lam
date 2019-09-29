@@ -262,17 +262,15 @@ bool Map::pruneRedundantKF()
                     double theshl = 10000;                 // 10m
                     double thesht = 45 * 3.1415926 / 180;  // 45 degree to rad
 
-                    double dl1 =
-                        sqrt(dOdoLastThis.x * dOdoLastThis.x + dOdoLastThis.y * dOdoLastThis.y);
+                    double dl1 = sqrt(dOdoLastThis.x * dOdoLastThis.x + dOdoLastThis.y * dOdoLastThis.y);
                     double dt1 = abs(dOdoLastThis.theta);
-                    double dl2 =
-                        sqrt(dOdoThisNext.x * dOdoThisNext.x + dOdoThisNext.y * dOdoThisNext.y);
+                    double dl2 = sqrt(dOdoThisNext.x * dOdoThisNext.x + dOdoThisNext.y * dOdoThisNext.y);
                     double dt2 = abs(dOdoThisNext.theta);
 
                     //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
-                        printf("[ Map ] #%ld(KF#%ld) Prune KF#%ld\n", mCurrentKF->id,
-                               mCurrentKF->mIdKF, thisKF->mIdKF);
+                        printf("[ Map ] A KF#%ld is set to null in pruneRedundantKF(), Count pointer = %ld\n",
+                               thisKF->mIdKF, thisKF.use_count());
 
                         mKFs.erase(thisKF);
                         thisKF->setNull(thisKF);  // 该帧MP暂时不会删掉，只会与其取消关联
@@ -350,6 +348,7 @@ void Map::updateLocalGraph()
 {
     printf("[ Map ] #%ld(KF#%ld) [Local]updateLocalGraph()....\n", mCurrentKF->id,
            mCurrentKF->mIdKF);
+
     locker lock(mMutexLocalGraph);
 
     mLocalGraphKFs.clear();
@@ -465,7 +464,7 @@ Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2,
         }
     }
 
-    return Point2f(1.f * nSameMP / pKF1->getSizeObsMP(), 1.f * nSameMP / pKF2->getSizeObsMP());
+    return Point2f(1.f * nSameMP / pKF1->countObservation(), 1.f * nSameMP / pKF2->countObservation());
 }
 
 /**
@@ -800,6 +799,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
  * 在LocalMapper::removeOutlierChi2()中调用，
  * @param vnOutlierIdxAll   所有离群MP的索引
  * @return  小于2帧观测数的离群MP数量
+ * FIXME 最后对MP的setNull()并不会让MP析构, 需要查找原因
  */
 int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
 {
@@ -849,6 +849,8 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
         }
 
         if (pMP->countObservation() < 2) {
+            fprintf(stderr, "[ Map ] A MP#%ld is set to null in removeLocalOutlierMP(), countObservation = %ld\n",
+                    pMP->mId, pMP->countObservation());
             mMPs.erase(pMP);
             pMP->setNull(pMP);
             nBadMP++;
@@ -902,7 +904,7 @@ void Map::updateCovisibility(PtrKeyFrame& pNewKF)
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKFi = *i;
         compareViewMPs(pNewKF, pKFi, spMPs);
-        if (spMPs.size() > 0.3f * pNewKF->getSizeObsMP()) {
+        if (spMPs.size() > 0.3f * pNewKF->countObservation()) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
         }

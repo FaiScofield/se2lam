@@ -64,7 +64,9 @@ KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbN
 }
 
 KeyFrame::~KeyFrame()
-{}
+{
+    fprintf(stderr, "[KeyFrame] A KF#%ld(#%ld) is decontructed!\n", mIdKF, id);
+}
 
 // Please handle odometry based constraints after calling this function
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
@@ -76,41 +78,57 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     if (mIdKF == 1)
         return;
 
-    mbNull = true;
-    mpORBExtractor = nullptr;
-    mIdKF = 0;
     mImage.release();
     mDescriptors.release();
     mvKeyPoints.clear();
 
     // Handle Feature based constraints
+    fprintf(stderr, "[KeyFrame] KF#%ld before Handling constraints, Count pointer = %ld\n",
+           mIdKF, pThis.use_count());
     for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; ++it) {
         it->first->mFtrMeasureTo.erase(pThis);
     }
     for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; ++it) {
         it->first->mFtrMeasureFrom.erase(pThis);
     }
+    fprintf(stderr, "[KeyFrame] KF#%ld after Handling constraints, Count pointer = %ld\n",
+           mIdKF, pThis.use_count());
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
+    fprintf(stderr, "[KeyFrame] KF#%ld before Handling MP observations(%ld), Count pointer = %ld\n",
+           mIdKF, mObservations.size(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
+    fprintf(stderr, "[KeyFrame] KF#%ld after Handling MP observations, Count pointer = %ld\n",
+           mIdKF, pThis.use_count());
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
+    fprintf(stderr, "[KeyFrame] KF#%ld before Handling Covisibility(%ld), Count pointer = %ld\n",
+           mIdKF, mCovisibleKFs.size(), pThis.use_count());
     for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
+    fprintf(stderr, "[KeyFrame] KF#%ld after Handling Covisibility, Count pointer = %ld\n",
+           mIdKF, pThis.use_count());
+
     mObservations.clear();
     mDualObservations.clear();
     mCovisibleKFs.clear();
     mViewMPs.clear();
     mViewMPsInfo.clear();
+
+    fprintf(stderr, "[KeyFrame] A KF#%ld is set to null, Count pointer = %ld\n",
+           mIdKF, pThis.use_count());
+
+    mbNull = true;
+    mpORBExtractor = nullptr;
 }
 
-size_t KeyFrame::getSizeObsMP()
+size_t KeyFrame::countObservation()
 {
     locker lock(mMutexObs);
     return mObservations.size();

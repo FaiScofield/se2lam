@@ -76,7 +76,7 @@ public:
     void eraseObservation(const PtrMapPoint pMP);
     void eraseObservation(size_t idx);
 
-    size_t getSizeObsMP();  // Count how many observed MP
+    size_t countObservation();  // Count how many observed MP
 
     // Whether a MP is observed by this KF.
     bool hasObservation(const PtrMapPoint& pMP);

@@ -46,16 +46,23 @@ MapPoint::~MapPoint()
     fprintf(stderr, "[MapPoint] A MP#%ld is decontructed!\n", mId);
 }
 
+//! FIXME Count pointer = 4 时无法析构, Count pointer = 2时正常析构
 void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
 {
     locker lock(mMutexObs);
     mbNull = true;
     mbGoodParallax = false;
+
+    fprintf(stderr, "[MapPoint] MP#%ld before handling observations. Count Observations = %ld, Count pointer = %ld\n",
+            mId, countObservation(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
     }
+    fprintf(stderr, "[MapPoint] MP#%ld after handling observations. Count Observations = %ld, Count pointer = %ld\n",
+            mId, countObservation(), pThis.use_count());
+
     mObservations.clear();
     mMainDescriptor.release();
     mMainKF = nullptr;
@@ -113,8 +120,10 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
     locker lock(mMutexObs);
 
     mObservations.erase(pKF);
-    if (mObservations.size() == 0)
+    if (mObservations.size() == 0) {
+        fprintf(stderr, "[MapPoint] A MP#%ld is set to null in eraseObservation()\n", mId);
         setNull();  // 这个函数不能加锁mMutexObs
+    }
     else
         updateMainKFandDescriptor();
 }

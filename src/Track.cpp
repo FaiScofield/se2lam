@@ -504,7 +504,7 @@ int Track::removeOutliers()
 
 bool Track::needNewKF(int nTrackedOldMP, int nInliers)
 {
-    int nMPObs = mpReferenceKF->getSizeObsMP();
+    int nMPObs = mpReferenceKF->countObservation();
     bool c0 = mCurrentFrame.id - mpReferenceKF->id >= nMinFrames;  // 1.间隔首先要足够大
     bool c1 = (float)nTrackedOldMP <= nMPObs * 0.5f;  // 2.关联MP数不能太多(要小于50%)
     bool c2 = mnGoodPrl < 20;  // 3.1没匹配上的KP中拥有良好视差的点数小于20
