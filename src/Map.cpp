@@ -269,7 +269,7 @@ bool Map::pruneRedundantKF()
 
                     //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
-                        printf("[ Map ] A KF#%ld is set to null in pruneRedundantKF(), Count pointer = %ld\n",
+                        fprintf(stderr, "[ Map ] A KF#%ld is set to null in pruneRedundantKF(), Count pointer = %ld\n",
                                thisKF->mIdKF, thisKF.use_count());
 
                         mKFs.erase(thisKF);

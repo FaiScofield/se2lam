@@ -69,6 +69,7 @@ KeyFrame::~KeyFrame()
 }
 
 // Please handle odometry based constraints after calling this function
+//! FIXME KF在setNull()后仍然有6-8个引用计数!!!无法析构!
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 {
     locker lckPose(mMutexPose);

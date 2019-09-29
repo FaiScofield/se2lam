@@ -53,15 +53,15 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
     mbNull = true;
     mbGoodParallax = false;
 
-    fprintf(stderr, "[MapPoint] MP#%ld before handling observations. Count Observations = %ld, Count pointer = %ld\n",
-            mId, countObservation(), pThis.use_count());
+    fprintf(stderr, "[MapPoint] MP#%ld before handling observations(%ld), Count pointer = %ld\n",
+            mId, mObservations.size(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
     }
-    fprintf(stderr, "[MapPoint] MP#%ld after handling observations. Count Observations = %ld, Count pointer = %ld\n",
-            mId, countObservation(), pThis.use_count());
+    fprintf(stderr, "[MapPoint] MP#%ld after handling observations(%ld), Count pointer = %ld\n",
+            mId, mObservations.size(), pThis.use_count());
 
     mObservations.clear();
     mMainDescriptor.release();
