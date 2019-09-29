@@ -735,7 +735,7 @@ while (nCandidates > 0 && !bMatch) {
                         vvpMapPointMatches[i][j];
                     sFound.insert(vvpMapPointMatches[i][j]);
                 } else
-                    mCurrentFrame.mvpMapPoints[j] = NULL;
+                    mCurrentFrame.mvpMapPoints[j] = nullptr;
             }
 
             // 步骤5：通过PoseOptimization对姿态进行优化求解
@@ -747,7 +747,7 @@ while (nCandidates > 0 && !bMatch) {
             for (int io = 0; io < mCurrentFrame.N; io++)
                 if (mCurrentFrame.mvbOutlier[io])
                     mCurrentFrame.mvpMapPoints[io] =
-                        static_cast<MapPoint *>(NULL);
+                        static_cast<MapPoint *>(nullptr);
 
             // If few inliers, search by projection in a coarse window and
             // optimize again
@@ -780,7 +780,7 @@ while (nCandidates > 0 && !bMatch) {
 
                             for (int io = 0; io < mCurrentFrame.N; io++)
                                 if (mCurrentFrame.mvbOutlier[io])
-                                    mCurrentFrame.mvpMapPoints[io] = NULL;
+                                    mCurrentFrame.mvpMapPoints[io] = nullptr;
                         }
                     }
                 }

@@ -195,10 +195,10 @@ int ORBmatcher::DescriptorDistance(const cv::Mat& a, const cv::Mat& b)
  * 对属于同一node的特征点通过描述子距离进行匹配 \n
  * 根据匹配，更新vpMatches12 \n
  * 通过距离阈值、比例阈值和角度投票进行剔除误匹配
- * @param  pKF1         KeyFrame1
- * @param  pKF2         KeyFrame2
+ * @param  pKF1         KeyFrame current
+ * @param  pKF2         KeyFrame loop
  * @param  vpMatches12  pKF2中与pKF1匹配的MapPoint，null表示没有匹配
- * @PARAM  bIfMPOnly    是否考虑MP, 默认为true, Localizer下为false
+ * @PARAM  bIfMPOnly    是否仅在有MP的KP中进行匹配, 默认为true, Localizer下为false
  * @return              成功匹配的数量
  */
 int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& mapMatches12,
@@ -206,7 +206,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 {
     mapMatches12.clear();
 
-    if (pKF1 == NULL || pKF1->isNull() || pKF2 == NULL || pKF2->isNull()) {
+    if (pKF1 == nullptr || pKF1->isNull() || pKF2 == nullptr || pKF2->isNull()) {
         return 0;
     }
 
@@ -219,7 +219,6 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
     DBoW2::FeatureVector vFeatVec2 = pKF2->GetFeatureVector();
     vector<PtrMapPoint> vpMapPoints2 = pKF2->GetMapPointMatches();  // Localizer下无MP
     cv::Mat Descriptors2 = pKF2->mDescriptors;
-
 
     vector<bool> vbMatched2(vpMapPoints2.size(), false);
 
@@ -272,7 +271,6 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
                         if (pMP2->isNull())
                             continue;
                     }
-
 
                     if (vbMatched2[idx2])
                         continue;

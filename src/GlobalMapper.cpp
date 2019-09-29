@@ -218,7 +218,7 @@ bool GlobalMapper::DetectLoopClose()
     double minScoreBest = Config::MinScoreBest;    // 0.005
 
     PtrKeyFrame pKFCurr = mpMap->getCurrentKF();
-    if (pKFCurr == NULL) {
+    if (pKFCurr == nullptr) {
         return bDetected;
     }
     if (mpLastKFLoopDetect == pKFCurr) {
@@ -251,7 +251,7 @@ bool GlobalMapper::DetectLoopClose()
     }
 
     // Loop CLosing Threshold ...
-    if (pKFBest != NULL && scoreBest > minScoreBest) {
+    if (pKFBest != nullptr && scoreBest > minScoreBest) {
         mpKFLoop = pKFBest;
         bDetected = true;
     } else {
@@ -262,7 +262,7 @@ bool GlobalMapper::DetectLoopClose()
 }
 
 /**
- * @brief GlobalMapper::VerifyLoopClose 回环验证
+ * @brief   回环验证
  * @param _mapMatchMP
  * @param _mapMatchGood 良好匹配点对
  * @param _mapMatchRaw  原始匹配点对
@@ -271,7 +271,7 @@ bool GlobalMapper::DetectLoopClose()
 bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_mapMatchGood,
                                    map<int, int> &_mapMatchRaw)
 {
-    assert (mpKFCurr != NULL && mpKFLoop != NULL);
+    assert (mpKFCurr != nullptr && mpKFLoop != nullptr);
 
     _mapMatchMP.clear();
     _mapMatchGood.clear();
@@ -394,7 +394,7 @@ void GlobalMapper::GlobalBA()
         PtrKeyFrame pKF = (*it);
         if (pKF->isNull())
             continue;
-        if (pKF->mOdoMeasureFrom.first == NULL)
+        if (pKF->mOdoMeasureFrom.first == nullptr)
             continue;
 
         g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
@@ -811,7 +811,7 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
 
         int idxMPin1 = iter->first;
-        //        PtrMapPoint pMPin1 = _pKFFrom->mDualObservations[idxMPin1];
+//        PtrMapPoint pMPin1 = _pKFFrom->mDualObservations[idxMPin1];
         MeasSE3XYZ Meas1;
         Meas1.idKF = 0;
         Meas1.idMP = count;
@@ -819,7 +819,7 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         Meas1.info = _pKFFrom->mViewMPsInfo[idxMPin1];
 
         int idxMPin2 = iter->second;
-        //        PtrMapPoint pMPin2 = _pKFTo->mDualObservations[idxMPin2];
+//        PtrMapPoint pMPin2 = _pKFTo->mDualObservations[idxMPin2];
         MeasSE3XYZ Meas2;
         Meas2.idKF = 1;
         Meas2.idMP = count;
@@ -827,7 +827,7 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         Meas2.info = _pKFTo->mViewMPsInfo[idxMPin2];
 
 
-        // DEBUG ON NAN
+        //! TODO to delete. DEBUG ON NAN
         double d = Meas1.info(0, 0);
         if (std::isnan(d)) {
             cerr << "ERROR!!!" << endl;
@@ -1109,13 +1109,13 @@ void GlobalMapper::ComputeBowVecAll()
 void GlobalMapper::DrawMatch(const map<int, int> &mapMatch)
 {
     //! Renew images
-    if (mpKFCurr == NULL || mpKFCurr->isNull()) {
+    if (mpKFCurr == nullptr || mpKFCurr->isNull()) {
         return;
     }
 
     mpKFCurr->copyImgTo(mImgCurr);
 
-    if (mpKFLoop == NULL || mpKFLoop->isNull()) {
+    if (mpKFLoop == nullptr || mpKFLoop->isNull()) {
         mImgLoop.setTo(cv::Scalar(0));
         return;
     } else {
@@ -1299,12 +1299,12 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF,
 
     // 加入与之相连的后一帧
     PtrKeyFrame pKFOdoChild = _pKF->mOdoMeasureFrom.first;
-    if (pKFOdoChild != NULL) {
+    if (pKFOdoChild != nullptr) {
         sKFConnected.insert(pKFOdoChild);
     }
     // 加入与之相连的前一帧
     PtrKeyFrame pKFOdoParent = _pKF->mOdoMeasureTo.first;
-    if (pKFOdoParent != NULL) {
+    if (pKFOdoParent != nullptr) {
         sKFConnected.insert(pKFOdoParent);
     }
 

@@ -43,9 +43,6 @@ Localizer::~Localizer()
     mpORBextractor = nullptr;
 }
 
-
-//! BUG 跑时经常出现SegFault, 有内存泄露/或访问越界！需要检查！
-//! 在Release模式和Debug模式下均会出现, 在起始位置离建图时的起始位置比较接近时出现频率较高
 void Localizer::run()
 {
     //! Init
@@ -180,7 +177,7 @@ void Localizer::run()
 
 void Localizer::WriteTrajFile(ofstream& file)
 {
-    if (mpKFCurrRefined == NULL || mpKFCurrRefined->isNull()) {
+    if (mpKFCurrRefined == nullptr || mpKFCurrRefined->isNull()) {
         return;
     }
 
@@ -441,7 +438,7 @@ bool Localizer::DetectLoopClose()
     double minScoreBest = 0.05;
 
     PtrKeyFrame pKFCurr = mpKFCurr;
-    if (pKFCurr == NULL) {
+    if (pKFCurr == nullptr) {
         return false;
     }
 
@@ -473,7 +470,7 @@ bool Localizer::DetectLoopClose()
 
     //! TODO 提升判定条件
     // Loop CLosing Threshold ...
-    if (pKFBest != NULL && scoreBest > minScoreBest) {
+    if (pKFBest != nullptr && scoreBest > minScoreBest) {
         mpKFLoop = pKFBest;
         bDetected = true;
     } else {
@@ -494,7 +491,7 @@ bool Localizer::DetectLoopClose()
 bool Localizer::VerifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMatchGood,
                                 map<int, int>& mapMatchRaw)
 {
-    if (mpKFCurr == NULL || mpKFLoop == NULL) {
+    if (mpKFCurr == nullptr || mpKFLoop == nullptr) {
         return false;
     }
 
@@ -544,7 +541,7 @@ void Localizer::DrawImgCurr()
 {
     locker lockImg(mMutexImg);
 
-    if (mpKFCurr == NULL)
+    if (mpKFCurr == nullptr)
         return;
 
     mpKFCurr->copyImgTo(mImgCurr);
@@ -572,12 +569,12 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     locker lockImg(mMutexImg);
 
     //! Renew images
-    if (mpKFCurr == NULL || mpKFLoop == NULL) {
+    if (mpKFCurr == nullptr || mpKFLoop == nullptr) {
         return;
     }
     cv::Mat curr = mImgCurr.clone();
     cv::Mat loop = mImgLoop.clone();
-    if (mpKFLoop != NULL) {
+    if (mpKFLoop != nullptr) {
         mpKFLoop->copyImgTo(mImgLoop);
     } else {
         mImgCurr.copyTo(mImgLoop);
@@ -770,7 +767,7 @@ void Localizer::UpdateLocalMap(int searchLevel)
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
-        set<PtrMapPoint> spMP = pKF->getAllObsMPs();
+        set<PtrMapPoint> spMP = pKF->getAllObsMPs();    // MP要有良好视差
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
 //    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;

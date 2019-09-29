@@ -20,7 +20,6 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
 # c++ 11 support for g2o, multi-thread and shared_ptr
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g") #-Werror -g -O
-
 find_package(Eigen REQUIRED)
 #set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
 find_package(OpenCV 3.3 REQUIRED)

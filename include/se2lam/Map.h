@@ -44,21 +44,19 @@ public:
     size_t countLocalKFs();
     size_t countLocalMPs();
 
-    void clear();
-    bool empty();
-
     void setCurrentKF(const PtrKeyFrame& pKF);
     PtrKeyFrame getCurrentKF();
-
     void setCurrentFramePose(const cv::Mat& pose);
     cv::Mat getCurrentFramePose();
+
+    void clear();
+    bool empty() { return isEmpty; }
 
     static cv::Point2f compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2,
                                       std::set<PtrMapPoint>& spMPs);
     static float compareViewMPs(const PtrKeyFrame& pKF, const set<PtrKeyFrame>& spKFs,
                                  std::set<PtrMapPoint>& spMPs, int k = 2);
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
-
 
     //! For LocalMapper
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
@@ -108,7 +106,7 @@ protected:
     std::set<PtrKeyFrame, KeyFrame::IdLessThan> mKFs;  // 全局关键帧集合，以id升序排序
 
     //! Local Map
-    //! updateLocalGraph()和pruneRedundantKF()会更新此变量, 都是LocalMapper在调用
+    //! updateLocalGraph()和pruneRedundantKF()会更新此变量, 都是LocalMapper在调用. 根据id升序排序
     std::vector<PtrMapPoint> mLocalGraphMPs;
     std::vector<PtrKeyFrame> mLocalGraphKFs;
     std::vector<PtrKeyFrame> mRefKFs;

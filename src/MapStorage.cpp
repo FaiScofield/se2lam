@@ -262,7 +262,7 @@ void MapStorage::saveOdoGraph() {
         PtrKeyFrame pKF = mvKFs[i];
         PtrKeyFrame nextKF = pKF->mOdoMeasureFrom.first;
 
-        if(nextKF != NULL) {
+        if(nextKF != nullptr) {
             mOdoNextId[i] = nextKF->mIdKF;
         }
     }

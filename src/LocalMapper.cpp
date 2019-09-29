@@ -50,7 +50,7 @@ void LocalMapper::setGlobalMapper(GlobalMapper *pGlobalMapper)
 }
 
 /**
- * @brief LocalMapper::addNewKF 添加KF,更新共视关系,然后插入到Map里
+ * @brief   添加KF,更新共视关系,然后插入到Map里
  * @param pKF           待添加的KF
  * @param localMPs      在Tracker里计算出来的MP候选，根据参考帧的观测得到的
  * @param vMatched12    参考帧里KP匹配上当前帧KP的索引
@@ -63,9 +63,6 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
         locker lock(mMutexNewKFs);
         mpNewKF = pKF;
     }
-
-    // TODO 用BOW加速匹配
-//    mNewKF->ComputeBoW(mpORBVoc);
 
     WorkTimer timer;
     timer.start();

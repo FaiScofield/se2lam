@@ -290,24 +290,17 @@ DBoW2::BowVector KeyFrame::GetBowVector()
     return mBowVec;
 }
 
-/**
- * @brief KeyFrame::GetMapPointMatches 找到特征点对应的MPs，关键函数，后续应该有一个观测更新的函数需要被调用
- * @return
- */
+//! 找到特征点对应的MPs，关键函数，后续应该有一个观测更新的函数需要被调用
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
-    vector<PtrMapPoint> ret;
     size_t N = mvKeyPoints.size();
+    vector<PtrMapPoint> ret(N, nullptr);
+
     std::map<size_t, PtrMapPoint>::iterator iter;
     for (size_t i = 0; i != N; ++i) {
-        PtrMapPoint pMP = static_cast<PtrMapPoint>(nullptr);
         iter = mDualObservations.find(i);
-        if (iter == mDualObservations.end()) {
-            ret.push_back(pMP);  //!@Vance: 此特征点没有match上的MP
-        } else {
-            pMP = iter->second;
-            ret.push_back(pMP);
-        }
+        if (iter != mDualObservations.end())
+            ret[i] = iter->second;
     }
 
     return ret;

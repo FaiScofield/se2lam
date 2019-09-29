@@ -28,8 +28,7 @@ Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 }
 
 Map::~Map()
-{
-}
+{}
 
 void Map::insertKF(const PtrKeyFrame& pkf)
 {
@@ -45,27 +44,40 @@ void Map::insertMP(const PtrMapPoint& pmp)
     mMPs.insert(pmp);
 }
 
+//! 未使用函数
 void Map::eraseKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
     mKFs.erase(pKF);
+
+//    locker lock(mMutexLocalGraph);;
+//    auto iter = find(mLocalGraphKFs.begin(), mLocalGraphKFs.end(), pKF);
+//    if (iter != mLocalGraphKFs.end())
+//        mLocalGraphKFs.erase(iter);
 }
 
+//! 未使用函数
 void Map::eraseMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
     mMPs.erase(pMP);
+
+//    locker lock(mMutexLocalGraph);
+//    auto iter = find(mLocalGraphMPs.begin(), mLocalGraphMPs.end(), pKF);
+//    if (iter != mLocalGraphMPs.end())
+//        mLocalGraphMPs.erase(iter);
 }
 
 /**
  * @brief 回环检测成功后的地图点合并
  * FIXME 这里代码是两个KF只要能同时观测到两个MP中的一个就退出, 不能同时观测到就去merge, 感觉写反了？
  * 循环里面的renturn感觉应该改成break？
- * 代码暂时没有执行到这里,待验证!
+ * TODO 代码暂时没有执行到这里, 待验证!
  */
 void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
 {
-    //
+    fprintf(stderr, "[ Map ] Merging MP between #%ld(keep) and #%ld(delete) MP.\n",
+            toKeep->mId, toDelete->mId);
     std::set<PtrKeyFrame> pKFs = toKeep->getObservations();
     for (auto it = pKFs.begin(), itend = pKFs.end(); it != itend; ++it) {
         PtrKeyFrame pKF = *it;
@@ -158,15 +170,11 @@ void Map::clear()
     mLocalGraphMPs.clear();
     mRefKFs.clear();
     isEmpty = true;
-    KeyFrame::mNextIdKF = 0;
-    MapPoint::mNextId = 0;
+    KeyFrame::mNextIdKF = 1;
+    MapPoint::mNextId = 1;
 }
 
-bool Map::empty()
-{
-    return isEmpty;
-}
-
+//! 没用到
 void Map::setCurrentKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexCurrentKF);
@@ -192,11 +200,10 @@ Mat Map::getCurrentFramePose()
 }
 
 /**
- * @brief  修剪冗余的KF
- * 此函数在LocalMapper线程调用
+ * @brief  修剪冗余的KF, 如果LocalKFs ≤ 3帧，就不会修剪
+ * 此函数在LocalMapper::pruneRedundantKFinMap()函数中调用
  * 在共视KF中观测到本KF中MP两次以上的比例大于80%则视此KF为冗余的
- * 一次只会修剪掉1帧，LocalMapper会循环调用此函数，一次job最多去5帧
- * 如果LocalKFs ≤ 3帧，就不会修剪
+ * LocalKFs和LocalMPs可以保证按id升序排序
  *
  * @return 返回是否有经过修剪的标志
  */
@@ -204,15 +211,15 @@ bool Map::pruneRedundantKF()
 {
     printf("[ Map ] #%ld(KF#%ld) [Local]pruneRedundantKFinMap() - pruneRedundantKF()...\n",
            mCurrentKF->id, mCurrentKF->mIdKF);
+
     locker lock1(mMutexLocalGraph);
     locker lock2(mMutexGlobalGraph);
 
+    if (mLocalGraphKFs.size() <= 3)
+        return false;
+
     bool pruned = false;
     int prunedIdxLocalKF = -1;
-
-    if (mLocalGraphKFs.size() <= 3) {
-        return pruned;
-    }
 
     vector<int> goodIdxLocalKF;
     vector<int> goodIdxLocalMP;
@@ -225,8 +232,8 @@ bool Map::pruneRedundantKF()
         if (!pruned) {  //! FIXME 这使得一次只会去除1帧
             PtrKeyFrame thisKF = mLocalGraphKFs[i];
 
-            // The first and the current KF should not be pruned. 首帧和当前帧不能被修剪
-            if (thisKF->isNull() || mCurrentKF->mIdKF == thisKF->mIdKF || thisKF->mIdKF <= 1)
+            // 首帧和当前帧不能被修剪
+            if (thisKF->isNull() || mCurrentKF->mIdKF == thisKF->mIdKF || thisKF->mIdKF == 1)
                 continue;
 
             // Count MPs in thisKF observed by covKFs 2 times
@@ -268,11 +275,11 @@ bool Map::pruneRedundantKF()
                                mCurrentKF->mIdKF, thisKF->mIdKF);
 
                         mKFs.erase(thisKF);
-                        thisKF->setNull(thisKF);  // 该帧MP暂时不会删掉，只会取消关联
-                                                  //                        if (thisKF) {
-                        //                            std::cerr << "[ Map ] use_count after
-                        //                            setNull:" << thisKF.use_count() << std::endl;
-                        //                        }
+                        thisKF->setNull(thisKF);  // 该帧MP暂时不会删掉，只会与其取消关联
+//                        if (thisKF) {
+//                            std::cerr << "[ Map ] use_count after
+//                            setNull:" << thisKF.use_count() << std::endl;
+//                        }
 
                         // 给前后帧之间添加共视关联和约束
                         Mat measure;
@@ -298,7 +305,7 @@ bool Map::pruneRedundantKF()
     }
 
     //! Remove useless MP. 去除无用的MP(标记了null)
-    //! NOTE 对KF的修剪好像不会影响到MP？？？待确认！
+    //! NOTE 对KF的修剪基本不会影响到MP, 只是取消了对冗余KF的关联. 但MP观测数为0时会被置为null.
     if (pruned) {
         for (int i = 0, iend = mLocalGraphMPs.size(); i != iend; ++i) {
             PtrMapPoint pMP = mLocalGraphMPs[i];
@@ -336,8 +343,8 @@ bool Map::pruneRedundantKF()
 }
 
 /**
- * @brief 更新局部地图与KF
- * 此函数在LocalMapper线程调用
+ * @brief 更新局部地图的KFs与MPs, 以及参考KFs
+ * 此函数在LocalMapper::run()函数中调用, mLocalGraphKFs, mRefKFs, mLocalGraphMPs在此更新
  */
 void Map::updateLocalGraph()
 {
@@ -362,7 +369,7 @@ void Map::updateLocalGraph()
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size());
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
-    int searchLevel = 1;  // 3
+    int searchLevel = 2;  // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; ++i) {
@@ -408,8 +415,8 @@ void Map::updateLocalGraph()
 }
 
 /**
- * @brief   将回环的两个关键帧的MP数据融合
- *  此函数在GlobalMapper线程调用
+ * @brief   回环验证通过后, 将回环的两个关键帧的MP数据融合, 保留旧的MP
+ *  此函数在GlobalMapper::VerifyLoopClose()中调用
  * @param mapMatchMP    回环两帧间匹配的MP点对，通过BoW匹配、RANSACN剔除误匹配得到
  * @param pKFCurr       当前KF
  * @param pKFLoop       与当前KF形成回环的KF
@@ -426,8 +433,8 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
     fprintf(stderr, "[ Map ] Merge loop close between KF#%ld and KF#%ld\n", pKFCurr->mIdKF,
             pKFLoop->mIdKF);
     for (auto iter = mapMatchMP.begin(), itend = mapMatchMP.end(); iter != itend; iter++) {
-        int idKPCurr = iter->first;
-        int idKPLoop = iter->second;
+        size_t idKPCurr = iter->first;
+        size_t idKPLoop = iter->second;
 
         if (pKFCurr->hasObservation(idKPCurr) && pKFLoop->hasObservation(idKPLoop)) {
             PtrMapPoint pMPCurr = pKFCurr->getObservation(idKPCurr);
@@ -533,7 +540,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
     for (int i = 0; i != nLocalKFs; ++i) {
         PtrKeyFrame pKF = mLocalGraphKFs[i];
 
-        //! FIXME 如果下面情况发生，vertexIdKF不就不连续了？出现空的Vertex？
+        //! TODO 如果下面情况发生，vertexIdKF不就不连续了？出现空的Vertex？
         if (pKF->isNull()) {
             fprintf(stderr, "节点ID不连续，因为第%d个LocalKF是null!\n", i);
             continue;
@@ -809,7 +816,7 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
         PtrMapPoint pMP = mLocalGraphMPs[i];
 
         for (int j = 0, jend = vnOutlierIdxAll[i].size(); j < jend; ++j) {
-            PtrKeyFrame pKF = NULL;
+            PtrKeyFrame pKF = nullptr;
             int idxKF = vnOutlierIdxAll[i][j];
 
             if (idxKF < nLocalKFs) {
@@ -818,7 +825,7 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
                 pKF = mRefKFs[idxKF - nLocalKFs];
             }
 
-            if (pKF == NULL) {
+            if (pKF == nullptr) {
                 printf("!! ERR MP: KF In Outlier Edge Not In LocalKF or RefKF! at line number %d "
                        "in file %s\n",
                        __LINE__, __FILE__);
@@ -863,7 +870,7 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
     const int nLocalKFs = mLocalGraphKFs.size();
     const int nRefKFs = mRefKFs.size();
     const int N = mLocalGraphMPs.size();
-    const int maxKFid = nLocalKFs + nRefKFs;  //! FIXME +1问题
+    const int maxKFid = nLocalKFs + nRefKFs;
 
     for (int i = 0; i != nLocalKFs; ++i) {
         PtrKeyFrame pKF = mLocalGraphKFs[i];
@@ -1182,7 +1189,7 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>
     Mat pose = cvu::inv(getCurrentKF()->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) / 1000.f, pose.at<float>(1, 3) / 1000.f,
                                 pose.at<float>(2, 3) / 1000.f};
-    int size = std::min(vKFsAll.size(), static_cast<size_t>(4));  // 最近的4个KF
+    int size = std::min(static_cast<int>(vKFsAll.size()), 5);  // 最近的5个KF
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());

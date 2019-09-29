@@ -200,8 +200,11 @@ void OdoSLAM::saveMap()
     }
 
     // Save keyframe trajectory
-    cerr << "\n[System] Saving keyframe trajectory ..." << endl;
-    ofstream towrite(Config::MapFileStorePath + Config::WriteTrajFileName);
+    string trajFile = Config::MapFileStorePath + Config::WriteTrajFileName;
+    cerr << "\n[System] Saving keyframe trajectory to " << trajFile << endl;
+    ofstream towrite(trajFile);
+    if (!towrite.is_open())
+        cerr << "[System] Save trajectory error! Please check the trajectory file correct." << endl;
     towrite << "#format: id x y z theta" << endl;
     vector<PtrKeyFrame> vct = mpMap->getAllKF();
     for (size_t i = 0, iend = vct.size(); i != iend; ++i) {
