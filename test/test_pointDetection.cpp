@@ -162,7 +162,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "Usage: lineDetection <rk_dataPath> [number_frames_to_process]");
         return -1;
     }
-    int num = 999999;
+    int num = INT_MAX;
     if (argc == 3) {
         num = atoi(argv[2]);
         cout << " - set number_frames_to_process = " << num << endl << endl;
@@ -198,10 +198,9 @@ int main(int argc, char** argv)
     vector<vector<int>> vvInliners(deltaKF);
 
     Frame frameCur, frameRef;
-//    vector<MapPoint *> mapPoints;
     Mat imgColor, imgGray, imgCur, imgRef, imgWithFeatureCur, imgWithFeatureRef;
     Mat outImgORBMatch, outImgWarp, outImgAffine, imgCurAffine;
-    num = min(num, (int)imgFiles.size());
+    num = std::min(num, static_cast<int>(imgFiles.size()));
     int skipFrames = 100;
     Mat H12 = Mat::eye(3, 3, CV_64F);
     for (int i = skipFrames; i < num + skipFrames; ++i) {

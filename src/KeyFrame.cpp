@@ -312,7 +312,7 @@ DBoW2::BowVector KeyFrame::GetBowVector()
 //! 找到特征点对应的MPs，关键函数，后续应该有一个观测更新的函数需要被调用
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
-    size_t N = mvKeyPoints.size();
+//    size_t N = mvKeyPoints.size();
     vector<PtrMapPoint> ret(N, nullptr);
 
     std::map<size_t, PtrMapPoint>::iterator iter;

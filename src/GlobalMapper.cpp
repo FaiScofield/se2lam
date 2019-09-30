@@ -20,6 +20,8 @@ using namespace cv;
 using namespace std;
 using namespace g2o;
 
+typedef std::unique_lock<std::mutex> locker;
+
 GlobalMapper::GlobalMapper()
 {
     mdeqPairKFs.clear();
@@ -124,7 +126,7 @@ void GlobalMapper::run()
         //! Verify loop close
         map<int, int> mapMatchMP, mapMatchGood, mapMatchRaw;
         if (bIfLoopCloseDetected) {
-            std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
+            locker lock(mpLocalMapper->mutexMapper);
             // 验证回环,如果通过了会对其进行Merge
             bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
         }
@@ -145,7 +147,7 @@ void GlobalMapper::run()
 
         //! Do Global Correction if Needed
         if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed)) {
-            std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
+            locker lock(mpLocalMapper->mutexMapper);
 
             GlobalBA(); // 更新KF和MP
 
@@ -300,7 +302,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int> &_mapMatchMP, map<int, int> &_m
     int numGoodMPMatch = mapMatch.size();   // MP匹配数
 
     //! Show Match Info
-    std::set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
+    set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
     int numMPsCurrent = spMPsCurrent.size();        // 当前KF的可观测MP数
     int numKPsCurrent = mpKFCurr->mvKeyPoints.size(); // 当前KF提取的KP数
 
@@ -349,7 +351,7 @@ void GlobalMapper::GlobalBA()
     double threshFeatEdgeChi2Pre = 1000.0;
 #endif
 
-    std::vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
+    vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
 
     SlamOptimizer optimizer;
     SlamLinearSolver *linearSolver = new SlamLinearSolver();
@@ -363,7 +365,7 @@ void GlobalMapper::GlobalBA()
     unsigned long maxKFid = 0;
 
     // Add all KFs
-    map<int, PtrKeyFrame> mapId2pKF;
+    map<unsigned long, PtrKeyFrame> mapId2pKF;
     vector<g2o::EdgeSE3Prior *> vpEdgePlane;
 
     for (auto it = vecKFs.begin(); it != vecKFs.end(); ++it) {
@@ -765,11 +767,11 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
     }
 
     // Local BA with only 2 KFs and the co-observed MPs
-    std::vector<PtrKeyFrame> vPtrKFs;
+    vector<PtrKeyFrame> vPtrKFs;
     vPtrKFs.push_back(_pKFFrom);
     vPtrKFs.push_back(_pKFTo);
 
-    std::vector<PtrMapPoint> vPtrMPs;
+    vector<PtrMapPoint> vPtrMPs;
     for (auto iter = spMPs.begin(); iter != spMPs.end(); iter++) {
         vPtrMPs.push_back(*iter);
     }
@@ -1287,7 +1289,7 @@ void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
 
 // Return all connected KFs from a given KF
 /**
- * @brief GlobalMapper::GetAllConnectedKFs 获得和KF特征图上相连的所有KFs
+ * @brief   获得和KF特征图上相连的所有KFs
  * @param _pKF          输入KF,搜索起点
  * @param _sKFSelected  已经被选上的KFs集合
  * @return
@@ -1325,7 +1327,7 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF,
 }
 
 /**
- * @brief GlobalMapper::GetAllConnectedKFs_nLayers 获得和KF特征图上相连的所有KFs(多层)
+ * @brief   获得和KF特征图上相连的所有KFs(多层)
  * @param _pKF          当前帧KF
  * @param numLayers     层数,本程序里为5
  * @param _sKFSelected  已经被选上的KFs集合
@@ -1373,7 +1375,6 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::SelectKFPairFeat(const PtrK
     set<PtrKeyFrame> sKFLocal = GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
 
     for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {
-
         PtrKeyFrame _pKFCand = *iter;
         if (sKFLocal.count(_pKFCand) == 0) {
             sKFSelected.insert(*iter);
@@ -1393,7 +1394,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::SelectKFPairFeat(const PtrK
 
 void GlobalMapper::setBusy(bool v)
 {
-    std::unique_lock<std::mutex> lock(mMutexBusy);
+    locker lock(mMutexBusy);
     mbIsBusy = v;
     if (!v) {
         mcIsBusy.notify_one();
@@ -1403,7 +1404,7 @@ void GlobalMapper::setBusy(bool v)
 
 void GlobalMapper::waitIfBusy()
 {
-    std::unique_lock<std::mutex> lock(mMutexBusy);
+    locker lock(mMutexBusy);
     while (mbIsBusy) {
         mcIsBusy.wait(lock);
     }
@@ -1411,26 +1412,26 @@ void GlobalMapper::waitIfBusy()
 
 void GlobalMapper::requestFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
 //! checkFinish()成功后break跳出主循环,然后就会调用setFinish()结束线程
 bool GlobalMapper::checkFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinishRequested;
 }
 
 bool GlobalMapper::isFinished()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     return mbFinished;
 }
 
 void GlobalMapper::setFinish()
 {
-    unique_lock<mutex> lock(mMutexFinish);
+    locker lock(mMutexFinish);
     mbFinished = true;
 }
 

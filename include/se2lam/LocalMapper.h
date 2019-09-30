@@ -62,7 +62,6 @@ protected:
     GlobalMapper* mpGlobalMapper;
     ORBVocabulary* mpORBVoc;
 
-    //    std::list<PtrKeyFrame> mlNewKFs;
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
 

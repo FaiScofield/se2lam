@@ -23,7 +23,7 @@ using namespace std;
 using namespace cv;
 using namespace g2o;
 
-typedef unique_lock<mutex> locker;
+typedef std::unique_lock<std::mutex> locker;
 
 LocalMapper::LocalMapper()
 {

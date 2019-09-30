@@ -89,8 +89,7 @@ protected:
     cv::Point3f mPos;   // 三维空间坐标
 
     // first = 观测到此MP的KF, second = 在其KP中的索引, 按KFid从小到大排序
-//    std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
-    std::map<PtrKeyFrame, size_t, KeyFrame::IdLessThan> mObservations;
+    std::map<PtrKeyFrame, size_t, KeyFrame::IdLessThan> mObservations;  // 最重要的成员变量
 
     PtrKeyFrame mMainKF;
     cv::Point3f mNormalVector;  // 平均观测方向

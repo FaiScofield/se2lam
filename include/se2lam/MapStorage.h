@@ -82,13 +82,10 @@ protected:
     string mMapFile;
 
     vector<PtrKeyFrame> mvKFs;
-
     vector<PtrMapPoint> mvMPs;
 
     cv::Mat_<int> mObservations;
-
     cv::Mat_<int> mCovisibilityGraph;
-
     vector<int> mOdoNextId;
 
 };

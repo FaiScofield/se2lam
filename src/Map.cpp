@@ -893,18 +893,18 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
     }
 }
 
-//! 新添的KF在关联MP和生成新的MP之后，如果与Local
-//! KFs的共同MP观测数超过自身观测总数的30%，则为他们之间添加共视关系
+//! 新添的KF在关联MP和生成新的MP之后，如果与Local KFs的共同MP观测数超过自身观测总数的30%，则为他们之间添加共视关系
 void Map::updateCovisibility(PtrKeyFrame& pNewKF)
 {
     locker lock1(mMutexLocalGraph);
     locker lock2(mMutexGlobalGraph);
 
+    size_t thresholdMPs = 0.3 * pNewKF->countObservation();
     for (auto i = mLocalGraphKFs.begin(), iend = mLocalGraphKFs.end(); i != iend; ++i) {
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKFi = *i;
         compareViewMPs(pNewKF, pKFi, spMPs);
-        if (spMPs.size() > 0.3f * pNewKF->countObservation()) {
+        if (spMPs.size() > thresholdMPs) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
         }
