@@ -39,8 +39,9 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        gridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
-        gridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
+        assert(maxXUn != minXUn && maxYUn != minYUn);
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
 
         bIsInitialComputations = false;
     }
@@ -110,8 +111,8 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        gridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (maxXUn - minXUn);
-        gridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (maxYUn - minYUn);
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
 
         bIsInitialComputations = false;
     }
@@ -298,6 +299,7 @@ void Frame::computeBoundUn(const Mat& K, const Mat& D)
 {
     float x = static_cast<float>(Config::ImgSize.width);
     float y = static_cast<float>(Config::ImgSize.height);
+    assert(x > 0 && y > 0);
     if (D.at<float>(0) == 0.) {
         minXUn = 0.f;
         minYUn = 0.f;

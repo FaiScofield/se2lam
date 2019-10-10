@@ -34,6 +34,7 @@ public:
     GlobalMapper();
 
     void run();
+
     void setMap(Map* pMap) { mpMap = pMap; }
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void setUpdated(bool val);
@@ -115,8 +116,6 @@ public:
     cv::Mat mImgCurr;
     cv::Mat mImgMatch;
 
-    bool mbExit;  //! 这个flag其实没作用,值又不会变
-
 protected:
     bool checkFinish();
     void setFinish();
@@ -128,19 +127,20 @@ protected:
     PtrKeyFrame mpKFLoop;
     std::deque<std::pair<PtrKeyFrame, PtrKeyFrame>> mdeqPairKFs;
 
-    bool mbUpdated;
+    bool mbUpdated; //! 没用
     bool mbNewKF;
 
     bool mbGlobalBALastLoop;
 
-    bool mbIsBusy;
     std::condition_variable mcIsBusy;
-    bool mbFinishRequested;
+    bool mbIsBusy;
     bool mbFinished;
+    bool mbFinishRequested;
 
     std::mutex mMutexBusy;
     std::mutex mMutexFinish;
 };
-}
+
+}  // namespace se2lam
 
 #endif  // GLOBALMAPPER_H

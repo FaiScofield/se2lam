@@ -109,8 +109,8 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
     fprintf(stderr, "[KeyFrame] KF#%ld before Handling Covisibility(%ld), Count pointer = %ld\n",
-           mIdKF, mCovisibleKFs.size(), pThis.use_count());
-    for (auto it = mCovisibleKFs.begin(), iend = mCovisibleKFs.end(); it != iend; ++it) {
+           mIdKF, mspCovisibleKFs.size(), pThis.use_count());
+    for (auto it = mspCovisibleKFs.begin(), iend = mspCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
     fprintf(stderr, "[KeyFrame] KF#%ld after Handling Covisibility, Count pointer = %ld\n",
@@ -118,7 +118,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 
     mObservations.clear();
     mDualObservations.clear();
-    mCovisibleKFs.clear();
+    mspCovisibleKFs.clear();
     mViewMPs.clear();
     mViewMPsInfo.clear();
 
@@ -145,19 +145,19 @@ void KeyFrame::setViewMP(Point3f pt3f, int idx, Eigen::Matrix3d info)
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame> pKF)
 {
     locker lock(mMutexCovis);
-    mCovisibleKFs.erase(pKF);
+    mspCovisibleKFs.erase(pKF);
 }
 
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame> pKF)
 {
     locker lock(mMutexCovis);
-    mCovisibleKFs.insert(pKF);
+    mspCovisibleKFs.insert(pKF);
 }
 
 set<PtrKeyFrame> KeyFrame::getAllCovisibleKFs()
 {
     locker lock(mMutexCovis);
-    return mCovisibleKFs;
+    return mspCovisibleKFs;
 }
 
 /**

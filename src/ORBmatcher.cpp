@@ -628,7 +628,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
 
 
 /**
- * @brief   利用仿射变换(透视变换H矩阵)增加先验
+ * @brief 利用仿射变换(透视变换H矩阵)增加先验
  * 注意内点数较少时H12不可用
  * @param frame1        参考帧F1
  * @param frame2        当前帧F2
@@ -664,6 +664,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
         Mat pt2 = H12 * pt1;
         pt2 /= pt2.at<double>(2);
+        Point3d p(pt2.at<double>(0), pt2.at<double>(1), pt2.at<double>(2));
         vector<size_t> vIndices2 =
             frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())

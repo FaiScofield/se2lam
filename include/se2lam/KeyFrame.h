@@ -138,7 +138,7 @@ protected:
     std::map<PtrMapPoint, size_t> mObservations;  // size_t为MP在此KF中对应的特征点的索引
     std::map<size_t, PtrMapPoint> mDualObservations;
 
-    std::set<std::shared_ptr<KeyFrame>> mCovisibleKFs;
+    std::set<std::shared_ptr<KeyFrame>, KeyFrame::IdLessThan> mspCovisibleKFs;
 
 //    std::mutex mMutexImg; // 这两个在Frame里已经有了
 //    std::mutex mMutexPose;

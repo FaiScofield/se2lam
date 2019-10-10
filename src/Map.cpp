@@ -938,8 +938,8 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
 
     set<PtrKeyFrame> sKFSelected;
     set<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
-    set<PtrKeyFrame> sKFLocal =
-        GlobalMapper::GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+    set<PtrKeyFrame> sKFLocal = GlobalMapper::GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist,
+                                                                         sKFSelected);
 
     // 共视图里的KF如果在特征图里,就加入到sKFSelected里,然后会更新特征图
     for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {

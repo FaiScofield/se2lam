@@ -75,7 +75,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
            mpNewKF->id, mpNewKF->mIdKF, timer.time);
 
     timer.start();
-    //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mCovisibleKFs
+    //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     mpMap->updateCovisibility(mpNewKF);
     timer.stop();
     printf("[Local] #%ld(#KF%ld) updateCovisibility() cost time: %fms\n",
@@ -206,6 +206,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
 
             //! TODO to delete, for debug. 这个应该很可能会出现
             //! 照理说 localMPs[i] 有一个正常的值的话, 那么就应该有观测出现啊???
+            //! 有匹配点对的情况下不会出现! 可以删了. 20191010
             if (localMPs[i].z < 0.f) {
                 cerr << "[LocalMap] localMPs[i].z < 0. 这个可能会出现, Pc1的深度有负的情况, 代表此点没有观测" << endl;
                 cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << localMPs[i] << endl;

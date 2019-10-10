@@ -331,7 +331,7 @@ void Track::drawMatchesForPub(Mat &imgMatch)
     double dt = abs(normalize_angle(mCurrentFrame.odom.theta - mpReferenceKF->odom.theta));
     dt = dt * 180 / M_PI;
     char dt_char[16];
-    std::sprintf(dt_char, "%.2f", dt);
+    std::snprintf(dt_char, 16, "%.2f", dt);
     string strTheta = "dt: " + string(dt_char) + "deg";
     putText(imgL, strTheta, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
     putText(imgR, to_string(mpReferenceKF->mIdKF), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);

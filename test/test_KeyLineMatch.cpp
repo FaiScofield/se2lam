@@ -1,22 +1,12 @@
 //#include <ros/ros.h>
 //#include <image_transport/image_transport.h>
-#include "cvutil.h"
 
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/features2d.hpp>
-#include <opencv2/highgui.hpp>
+#include "test_functions.hpp"
+
 #include <opencv2/line_descriptor.hpp>
 
-#include <iostream>
-#include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string_regex.hpp>
-
-using namespace std;
-using namespace cv;
 using namespace line_descriptor;
-namespace bf =  boost::filesystem;
+
 
 struct RK_IMAGE
 {
