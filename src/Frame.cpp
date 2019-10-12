@@ -70,7 +70,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
     //    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
-    mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
+    mnScaleLevels = mpORBExtractor->GetLevels();       // default 1
     mfScaleFactor = mpORBExtractor->GetScaleFactor();  // default 1.2
 
     //! 计算金字塔每层尺度和高斯噪声
@@ -337,12 +337,15 @@ bool Frame::PosInGrid(cv::KeyPoint& kp, int& posX, int& posY)
 
 /**
  * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
+ * @return 返回区域内特征点在KF里的索引
  */
 vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const float& r,
                                         int minLevel, int maxLevel) const
 {
+    assert(r > 0);
+
     vector<size_t> vIndices;
-    vIndices.reserve(mvKeyPoints.size());
+    vIndices.reserve(N);
 
     //! floor向下取整
     int nMinCellX = floor((x - minXUn - r) * gridElementWidthInv);
@@ -351,7 +354,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
         return vIndices;
 
     //! ceil向上取整
-    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv);
+    int nMaxCellX = ceil((x + minXUn + r) * gridElementWidthInv); // FIXME + ?
     nMaxCellX = min(FRAME_GRID_COLS - 1, nMaxCellX);
     if (nMaxCellX < 0)
         return vIndices;
@@ -361,7 +364,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     if (nMinCellY >= FRAME_GRID_ROWS)
         return vIndices;
 
-    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv);
+    int nMaxCellY = ceil((y + minYUn + r) * gridElementHeightInv); // FIXME + ?
     nMaxCellY = min(FRAME_GRID_ROWS - 1, nMaxCellY);
     if (nMaxCellY < 0)
         return vIndices;

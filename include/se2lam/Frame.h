@@ -9,7 +9,6 @@
 #define FRAME_H
 
 #include "Config.h"
-//#include "MapPoint.h"
 #include "ORBextractor.h"
 #include <memory>
 #include <mutex>
@@ -26,8 +25,8 @@ public:
     double cov[9];  // 3*3, RowMajor
 };
 
-const int FRAME_GRID_ROWS = 36;  // default 48 for 480
-const int FRAME_GRID_COLS = 48;  // default 64 for 640
+const int FRAME_GRID_ROWS = 23;  // default 48 for 480
+const int FRAME_GRID_COLS = 31;  // default 64 for 640
 
 class Frame
 {

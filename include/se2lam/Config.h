@@ -15,6 +15,22 @@
 namespace se2lam
 {
 
+inline double normalize_angle(double theta)
+{
+    if (theta >= -M_PI && theta < M_PI)
+        return theta;
+
+    double multiplier = floor(theta / (2 * M_PI));
+    theta = theta - multiplier * 2 * M_PI;
+    if (theta >= M_PI)
+        theta -= 2 * M_PI;
+    if (theta < -M_PI)
+        theta += 2 * M_PI;
+
+    return theta;
+}
+
+
 struct Se2 {
     float x;
     float y;
@@ -39,20 +55,6 @@ struct Se2 {
     }
 };
 
-inline double normalize_angle(double theta)
-{
-    if (theta >= -M_PI && theta < M_PI)
-        return theta;
-
-    double multiplier = floor(theta / (2 * M_PI));
-    theta = theta - multiplier * 2 * M_PI;
-    if (theta >= M_PI)
-        theta -= 2 * M_PI;
-    if (theta < -M_PI)
-        theta += 2 * M_PI;
-
-    return theta;
-}
 
 class WorkTimer
 {
@@ -60,7 +62,7 @@ private:
     int64 tickBegin, tickEnd;
 
 public:
-    WorkTimer() {}
+    WorkTimer() { start(); }
     ~WorkTimer() {}
     double time;
 
@@ -69,6 +71,12 @@ public:
     {
         tickEnd = cv::getTickCount();
         time = (tickEnd - tickBegin) * 1000. / cv::getTickFrequency(); // [mm]
+    }
+
+    double count()
+    {
+        stop();
+        return time;
     }
 };
 

@@ -55,6 +55,7 @@ add_executable(test_MapPointManager
     test_MapPointManager.cpp
     test_functions.hpp
     TestTrack.hpp
+    TestViewer.hpp
 )
 target_link_libraries(test_MapPointManager
     se2lam

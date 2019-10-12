@@ -7,14 +7,22 @@
 #include "KeyFrame.h"
 #include "Frame.h"
 #include "MapPoint.h"
+#include "Map.h"
 #include "cvutil.h"
 
 namespace se2lam
 {
+
 using namespace cv;
 using namespace std;
-
 typedef unique_lock<mutex> locker;
+
+
+//bool KFIdLessThan::operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs) const
+//{
+//    return lhs->mIdKF < rhs->mIdKF;
+//}
+
 
 unsigned long KeyFrame::mNextIdKF = 1;    //! F,KF和MP的编号都是从1开始
 
@@ -49,8 +57,8 @@ KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mbNull(false)
 KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbNull(false)
 {
     size_t n = frame.N;
-    mViewMPs = vector<Point3f>(n, Point3f(-1.f, -1.f, -1.f));
-    mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>(
+    mvViewMPs = vector<Point3f>(n, Point3f(-1.f, -1.f, -1.f));
+    mvViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>(
         n, Eigen::Matrix3d::Identity() * -1);
 
     mIdKF = mNextIdKF++;
@@ -78,6 +86,9 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 
     if (mIdKF == 1)
         return;
+
+    mbNull = true;
+    mpORBExtractor = nullptr;
 
     mImage.release();
     mDescriptors.release();
@@ -119,14 +130,13 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mObservations.clear();
     mDualObservations.clear();
     mspCovisibleKFs.clear();
-    mViewMPs.clear();
-    mViewMPsInfo.clear();
+    mvViewMPs.clear();
+    mvViewMPsInfo.clear();
+
+    mpMap->eraseKF(pThis);
 
     fprintf(stderr, "[KeyFrame] A KF#%ld is set to null, Count pointer = %ld\n",
            mIdKF, pThis.use_count());
-
-    mbNull = true;
-    mpORBExtractor = nullptr;
 }
 
 size_t KeyFrame::countObservation()
@@ -138,8 +148,8 @@ size_t KeyFrame::countObservation()
 void KeyFrame::setViewMP(Point3f pt3f, int idx, Eigen::Matrix3d info)
 {
     locker lock(mMutexObs);
-    mViewMPs[idx] = pt3f;
-    mViewMPsInfo[idx] = info;
+    mvViewMPs[idx] = pt3f;
+    mvViewMPsInfo[idx] = info;
 }
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame> pKF)
@@ -312,7 +322,6 @@ DBoW2::BowVector KeyFrame::GetBowVector()
 //! 找到特征点对应的MPs，关键函数，后续应该有一个观测更新的函数需要被调用
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
-//    size_t N = mvKeyPoints.size();
     vector<PtrMapPoint> ret(N, nullptr);
 
     std::map<size_t, PtrMapPoint>::iterator iter;

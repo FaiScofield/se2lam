@@ -5,9 +5,9 @@
 #include "Frame.h"
 #include "KeyFrame.h"
 #include "Map.h"
+#include "MapPoint.h"
 #include "ORBmatcher.h"
 #include "cvutil.h"
-#include "utility.h"
 
 using namespace cv;
 using namespace std;
@@ -66,6 +66,7 @@ public:
     PtrKeyFrame mpReferenceKF, mpCurrentKF;
 
     //    std::vector<PtrMapPoint> mvpLocalMPs;
+//    std::map<int, int> mMatchIdx;
     std::vector<int> mvMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
@@ -100,6 +101,7 @@ TestTrack::TestTrack()
 
 void TestTrack::createFirstFrame(const Mat& img, const double& imgTime, const Se2& odo)
 {
+    locker lock(mMutexForPub);
     mCurrentFrame = Frame(img, imgTime, odo, mpORBextractor, K, D);
 
     if (mCurrentFrame.mvKeyPoints.size() > 200) {
@@ -111,6 +113,7 @@ void TestTrack::createFirstFrame(const Mat& img, const double& imgTime, const Se
         mCurrentFrame.setPose(Se2(0, 0, 0));
         mpCurrentKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpCurrentKF);  // 首帧的KF直接给Map,没有给LocalMapper
+        mpMap->updateLocalGraph();     // 首帧添加到LocalMap里
 
         resetLocalTrack();
 
@@ -126,32 +129,32 @@ void TestTrack::createFirstFrame(const Mat& img, const double& imgTime, const Se
 
 void TestTrack::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& odo)
 {
+    locker lock(mMutexForPub);
     mCurrentFrame = Frame(img, imgTime, odo, mpORBextractor, K, D);
     updateFramePose();
 
     ORBmatcher matcher(0.8);
     mnMatchSum = matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, Homography, mvMatchIdx, 20);
+//    mnMatchSum = matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, Homography, mMatchIdx, 20);
+    mnInliers = removeOutliers();  // H在此更新, 内点数小于10时清除所有匹配点对
 
-    mnInliers = removeOutliers();
     int nTrackedOld = 0;
-    if (mnInliers) {
-        nTrackedOld = doTriangulate();
-        if (mbPrint)
-            printf("[Track] #%ld Get trackedOld/inliers/matchedSum points = %d/%d/%d.\n",
-                   mCurrentFrame.id, nTrackedOld, mnInliers, mnMatchSum);
+    if (mnInliers) { // 内点数大于10进行三角化
+        nTrackedOld = doTriangulate();  // 更新viewMPs
+        printf("[Track] #%ld Get trackedOld/inliers/matchedSum points = %d/%d/%d\n",
+                mCurrentFrame.id, nTrackedOld, mnInliers, mnMatchSum);
     } else {
-        if (mbPrint)
-            fprintf(stderr, "[Track] #%ld Get ZERO inliers! matchedSum = %d.\n",
-                    mCurrentFrame.id, mnMatchSum);
+        fprintf(stderr, "[Track] #%ld Get ZERO inliers! matchedSum = %d.\n",
+                mCurrentFrame.id, mnMatchSum);
     }
 
     N1 += nTrackedOld;
     N2 += mnInliers;
     N3 += mnMatchSum;
-    if (mbPrint && mCurrentFrame.id % 10 == 0) {  // 每隔10帧输出一次平均匹配情况
-        float sum = mCurrentFrame.id - 1.0;
-        printf("[Track] #%ld tracked/matched/matchedSum points average: %.2f/%.2f/%.2f .\n",
-               mCurrentFrame.id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
+    if (mCurrentFrame.id % 10 == 0) {  // 每隔10帧输出一次平均匹配情况
+        float nFrames = mCurrentFrame.id * 1.f;
+        printf("[Track] #%ld tracked/inliers/matchedSum points average: %.2f/%.2f/%.2f .\n",
+               mCurrentFrame.id, N1 * 1.f / nFrames, N2 * 1.f / nFrames, N3 * 1.f / nFrames);
     }
 
     if (needNewKF(nTrackedOld, mnInliers)) {
@@ -160,12 +163,9 @@ void TestTrack::trackReferenceKF(const Mat& img, const double& imgTime, const Se
 
         addNewKF(pKF);
         mpMap->insertKF(mpCurrentKF);
+        mpMap->updateLocalGraph();
 
         resetLocalTrack();
-
-        if (mbPrint)
-            printf("[Track] #%ld Add new KF at #%ld(KF#%ld)\n", mCurrentFrame.id,
-                   mCurrentFrame.id, pKF->mIdKF);
     }
 }
 
@@ -177,41 +177,33 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
     bool bNoMP = (mpMap->countMPs() == 0);
 
     // TODO to delete, for debug.
-    printf("#KF%ld findCorrespd() Count MPs: %ld\n", mpCurrentKF->mIdKF, mpMap->countMPs());
-    printf("#KF%ld findCorrespd() Count observations of reference KF: %ld\n",
-           mpCurrentKF->mIdKF, mpReferenceKF->countObservation());
+    printf("[Track] #%ld 正在添加新的KF, 参考帧的MP观测数量: %ld, 已有MP数量: %ld\n",
+           mpCurrentKF->id, mpReferenceKF->countObservation(), mpMap->countMPs());
 
-
+    vector<unsigned long> vCrosMPsWithRefKF, vCrosMPsWithLocalMPs, vGeneratedMPs;
     if (!bNoMP) {
         // 1.如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP
         for (int i = 0, iend = mpReferenceKF->N; i != iend; ++i) {
             if (mvMatchIdx[i] >= 0 && mpReferenceKF->hasObservation(i)) {
                 PtrMapPoint pMP = mpReferenceKF->getObservation(i);
-                if (!pMP) {
-                    //! TODO to delete, for debug.
-                    cerr << "[LocalMap] This is NULL. 这不应该发生啊！！！" << endl;
+                if (pMP->isNull())
                     continue;
-                }
                 mpCurrentKF->addObservation(pMP, mvMatchIdx[i]);
                 pMP->addObservation(mpCurrentKF, mvMatchIdx[i]);
+                vCrosMPsWithRefKF.push_back(pMP->mId);
             }
         }
 
         // 2.和局部地图匹配，关联局部地图里的MP, 其中已经和参考KF有关联的MP不会被匹配, 故不会重复关联
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
-        vector<int> vMatchedIdxMPs;
+        vector<int> vMatchedIdxMPs; // matched index of LocalMPs
         ORBmatcher matcher;
-        matcher.MatchByProjection(mpCurrentKF, vLocalMPs, 20, 2, vMatchedIdxMPs);   // 15
+        matcher.MatchByProjection(mpCurrentKF, vLocalMPs, 20, 0, vMatchedIdxMPs);   // 15
         for (int i = 0, iend = mpCurrentKF->N; i != iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
-            PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
 
-            if (mpCurrentKF->hasObservation(pMP)) {
-                //! TODO to delete, for debug. 这个应该不会出现,
-                cerr << "[LocalMap] 重复关联了!! 这不应该出现! pMP->id: " << pMP->mId << endl;
-                continue;
-            }
+            PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
@@ -224,81 +216,48 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
                 continue;
             if (!pMP->acceptNewObserve(posNewKF, mpCurrentKF->mvKeyPoints[i]))
                 continue;
-            Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->getMainKF()->getPose(), infoNew, infoOld);
-            mpCurrentKF->setViewMP(posNewKF, i, infoNew);
+
             mpCurrentKF->addObservation(pMP, i);
             pMP->addObservation(mpCurrentKF, i);
-        }
-    }
-
-
-    if (!bNoMP) {
-        vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
-        vector<int> vMatchedIdxMPs;
-        ORBmatcher matcher;
-        matcher.MatchByProjection(mpCurrentKF, vLocalMPs, 20, 2, vMatchedIdxMPs);   // 15
-        for (int i = 0, iend = mpCurrentKF->N; i != iend; ++i) {
-            if (vMatchedIdxMPs[i] < 0)
-                continue;
-            PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
-
-            if (mpCurrentKF->hasObservation(pMP)) {
-                //! TODO to delete, for debug. 这个应该不会出现,
-                cerr << "[LocalMap] 重复关联了!! 这不应该出现! pMP->id: " << pMP->mId << endl;
-                continue;
-            }
-
-            // We do triangulation here because we need to produce constraint of
-            // mNewKF to the matched old MapPoint.
-            Mat Tcw = mpCurrentKF->getPose();
-            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpCurrentKF->mvKeyPoints[i].pt,
-                                           Config::Kcam * pMP->getMainKF()->getPose().rowRange(0, 3),
-                                           Config::Kcam * Tcw.rowRange(0, 3));
-            Point3f posNewKF = cvu::se3map(Tcw, x3d);
-            if (posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
-                continue;
-            if (!pMP->acceptNewObserve(posNewKF, mpCurrentKF->mvKeyPoints[i]))
-                continue;
-            Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->getMainKF()->getPose(), infoNew, infoOld);
-            mpCurrentKF->setViewMP(posNewKF, i, infoNew);
-            mpCurrentKF->addObservation(pMP, i);
-            pMP->addObservation(mpCurrentKF, i);
+            vCrosMPsWithLocalMPs.push_back(pMP->mId);
+            printf("[Track] #%ld 局部MP#%ld通过投影与当前帧进行了关联!\n", mpCurrentKF->id, pMP->mId);
         }
     }
 
     // 3.根据匹配情况给新的KF添加MP
     // 首帧没有处理到这，第二帧进来有了参考帧，但还没有MPS，就会直接执行到这，生成MPs，所以第二帧才有MP
-    int nAddNewMP = 0;
-    assert(mpReferenceKF->N == localMPs.size());
-    for (size_t i = 0, iend = localMPs.size(); i != iend; ++i) {
+    for (size_t i = 0, iend = mpReferenceKF->N; i != iend; ++i) {
         // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
         if (mvMatchIdx[i] >= 0 && !mpReferenceKF->hasObservation(i)) {
-            if (mpCurrentKF->hasObservation(mvMatchIdx[i])) {
-                //! TODO to delete, for debug. 这个应该很可能会出现,是否需要给参考帧关联MP?
-                cerr << "[LocalMap] 这个可能会出现, 参考帧KP1无观测但当前帧KP2有观测! 是否需要给参考帧关联MP?" << endl;
+            if (pKF->hasObservation(mvMatchIdx[i])) {
+                //! TODO to delete, for debug.
+                //! 这个应该很可能会出现, 局部MPs投影到当前KF上可能会关联上.
+                //! 如果出现了这种情况, 应该要给参考帧也关联上此MP.
+                PtrMapPoint pMP = pKF->getObservation(mvMatchIdx[i]);
+                fprintf(stderr, "[LocalMap] 这个可能会出现, 局部MPs投影到当前#KF%ld上可能会关联上.! 如果出现了这种情况, 应该要给参考帧也关联上此MP%ld.\n",
+                        pKF->mIdKF, pMP->mId);
+
+                pMP->addObservation(mpReferenceKF, i);
+                mpReferenceKF->addObservation(pMP, i);
+
                 continue;
             }
 
-            Point3f posW = cvu::se3map(cvu::inv(mpReferenceKF->getPose()), localMPs[i]);
+            Point3f posW = cvu::se3map(cvu::inv(mpReferenceKF->getPose()), mpReferenceKF->mvViewMPs[i]);
 
-            //! TODO to delete, for debug. 这个应该很可能会出现
-            //! 照理说 localMPs[i] 有一个正常的值的话, 那么就应该有观测出现啊???
-            //! 有匹配点对的情况下不会出现! 可以删了. 20191010
-            if (localMPs[i].z < 0.f) {
-                cerr << "[LocalMap] localMPs[i].z < 0. 这个可能会出现, Pc1的深度有负的情况, 代表此点没有观测" << endl;
-                cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << localMPs[i] << endl;
+            //! TODO to delete, for debug.
+            //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新, 故这里不能生成MP
+            if (posW.z < 0.f) {
+                fprintf(stderr, "[LocalMap] #KF%ld的mvViewMPs[%d].z < 0. \n", mpReferenceKF->mIdKF, i);
+                cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << mpReferenceKF->mvViewMPs[i] << endl;
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
+                continue;
             }
 
-            Point3f Pc2 = cvu::se3map(mpCurrentKF->getTcr(), localMPs[i]);
-            Eigen::Matrix3d xyzinfo1, xyzinfo2;
-            Track::calcSE3toXYZInfo(localMPs[i], mpReferenceKF->getPose(), mpCurrentKF->getPose(), xyzinfo1, xyzinfo2);
+            Point3f Pc2 = cvu::se3map(mpCurrentKF->getTcr(), mpReferenceKF->mvViewMPs[i]);
+            mpCurrentKF->mvViewMPs[mvMatchIdx[i]] = Pc2;
 
-            mpReferenceKF->setViewMP(localMPs[i], i, xyzinfo1);
-            mpCurrentKF->setViewMP(Pc2, mvMatchIdx[i], xyzinfo2);
-            PtrMapPoint pMP = std::make_shared<MapPoint>(posW, vbGoodPrl[i]);
+            PtrMapPoint pMP = std::make_shared<MapPoint>(posW, mvbGoodPrl[i]);
 
             pMP->addObservation(mpReferenceKF, i);
             pMP->addObservation(mpCurrentKF, mvMatchIdx[i]);
@@ -306,23 +265,25 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
             mpCurrentKF->addObservation(pMP, mvMatchIdx[i]);
 
             mpMap->insertMP(pMP);
-            nAddNewMP++;
+            vGeneratedMPs.push_back(pMP->mId);
         }
     }
-    printf("[Local] #%ld(#KF%ld) findCorrespd() Add new MPs: %d, now tatal MPs = %ld\n",
-           mpCurrentKF->id, mpCurrentKF->mIdKF, nAddNewMP, mpMap->countMPs());
+    printf("[Track] #%ld 关联了%ld个MPs, 和局部地图匹配了%ld个MPs, 新生成了%ld个MPs\n", mpCurrentKF->id,
+           vCrosMPsWithRefKF.size(), vCrosMPsWithLocalMPs.size(), vGeneratedMPs.size());
+    printf("[Track] #%ld 当前帧共有%ld个MP观测, 目前MP总数为: %ld\n",
+           mpCurrentKF->id, mpCurrentKF->countObservation(), mpMap->countMPs());
 
     mpMap->updateCovisibility(mpCurrentKF);
 }
 
 void TestTrack::updateFramePose()
 {
-    Se2 Trb = mCurrentFrame.odom - mpReferenceKF->odom;
-    Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
-    Mat Tc2c1 = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
+    Se2 Tb1b2 = mCurrentFrame.odom - mpReferenceKF->odom;
+    Se2 Tb2b1 = mpReferenceKF->odom - mCurrentFrame.odom;
+    Mat Tc2c1 = Config::Tcb * Tb2b1.toCvSE3() * Config::Tbc;
     Mat Tc1w = mpReferenceKF->getPose();
 
-    mCurrentFrame.setTrb(Trb);
+    mCurrentFrame.setTrb(Tb1b2);
     mCurrentFrame.setTcr(Tc2c1);
     mCurrentFrame.setPose(Tc2c1 * Tc1w);
 }
@@ -403,15 +364,12 @@ void TestTrack::drawMatchesForPub(Mat& imgMatch)
 
     Mat H21 = Homography.inv(DECOMP_SVD);
     warpPerspective(imgL, imgL, H21, imgR.size());
-
-    double dt = abs(normalize_angle(mCurrentFrame.odom.theta - mpReferenceKF->odom.theta));
-    dt = dt * 180 / M_PI;
-    char dt_char[16];
-    std::snprintf(dt_char, 16, "%.2f", dt);
-    string strTheta = "dt: " + string(dt_char) + "deg";
-    putText(imgL, strTheta, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-    putText(imgR, to_string(mpReferenceKF->mIdKF), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
     hconcat(imgL, imgR, imgMatch);
+
+    char strMatches[64];
+    std::snprintf(strMatches, 64, "F: %ld-%ld, M: %d/%d", mpReferenceKF->id,
+                  mCurrentFrame.id, mnInliers, mnMatchSum);
+    putText(imgMatch, strMatches, Point(50, 15), 1, 1, Scalar(0, 0, 255), 2);
 
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
         if (mvMatchIdx[i] < 0) {
@@ -437,17 +395,20 @@ bool TestTrack::needNewKF(int nTrackedOldMP, int nInliers)
 {
     int nMPObs = mpReferenceKF->countObservation();
     bool c1 = (float)nTrackedOldMP <= nMPObs * 0.5f;
-    bool c2 = nInliers < 10;
-    bool bNeedNewKF = c1 && c2;
+    bool c2 = nInliers < 0.1 * Config::MaxFtrNumber;
+    bool c3 = mnGoodPrl < 20;
+    bool bNeedNewKF = c1 && (c2 /*|| c3*/);
+    if (c2)
+        printf("[Track] #%ld 增加一个KF, 因为内点数不足10%%! (MP关联数%d)\n", mCurrentFrame.id, nTrackedOldMP);
+//    else if (c3)
+//        printf("[Track] #%ld 增加一个KF, 因为视差不好! (MP关联数%d)\n", mCurrentFrame.id, nTrackedOldMP);
+
 
     return bNeedNewKF;
 }
 
 int TestTrack::doTriangulate()
 {
-    if (mCurrentFrame.id == mpReferenceKF->id)
-        return 0;
-
     Mat Tcr = mCurrentFrame.getTcr();
     Mat Tc1c2 = cvu::inv(Tcr);
     Point3f Ocam1 = Point3f(0.f, 0.f, 0.f);
@@ -468,6 +429,9 @@ int TestTrack::doTriangulate()
         // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则局部地图点更新为此MP
         if (mpReferenceKF->hasObservation(i)) {
 //            mLocalMPs[i] = mpReferenceKF->mViewMPs[i];
+            Point3f Pw = mpReferenceKF->getObservation(i)->getPos();
+            Point3f Pc = cvu::se3map(mpReferenceKF->getPose(), Pw);
+            mpReferenceKF->mvViewMPs[i] = Pc;
             nTrackedOld++;
             continue;
         }
@@ -477,10 +441,11 @@ int TestTrack::doTriangulate()
         Point2f pt2 = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
         Point3f Pc1 = cvu::triangulate(pt1, pt2, Proj1, Proj2);
 
-        // 3.如果深度计算符合预期，就将有深度的KP更新到LocalMPs里, 其中视差较好的会被标记
+        // 3.如果深度计算符合预期，就将有深度的KP更新到ViewMPs里, 其中视差较好的会被标记
         if (Config::acceptDepth(Pc1.z)) {
             nGoodDepth++;
-            //            mLocalMPs[i] = Pc1;
+            mpReferenceKF->mvViewMPs[i] = Pc1;
+//            mLocalMPs[i] = Pc1;
             // 检查视差
             if (cvu::checkParallax(Ocam1, Ocam2, Pc1, 2)) {
                 mnGoodPrl++;
@@ -490,8 +455,8 @@ int TestTrack::doTriangulate()
             mvMatchIdx[i] = -1;
         }
     }
-    printf("[Track] #%ld Generate %d points and %d with good parallax.\n",
-           mCurrentFrame.id, nGoodDepth, mnGoodPrl);
+    printf("[Track] #%ld Generate MPs with good parallax/depth: %d/%d\n",
+           mCurrentFrame.id, mnGoodPrl, nGoodDepth);
 
     return nTrackedOld;
 }

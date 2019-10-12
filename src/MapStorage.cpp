@@ -149,18 +149,18 @@ void MapStorage::saveKeyFrames() {
 
         file << "Descriptor" << pKF->mDescriptors;
 
-        if (pKF->mViewMPs.size() != pKF->mvKeyPoints.size())
+        if (pKF->mvViewMPs.size() != pKF->mvKeyPoints.size())
             cout << "Wrong size of KP in saving" << endl;
 
         file << "ViewMPs" << "[";
-        for (int j = 0, jend = pKF->mViewMPs.size(); j < jend; ++j) {
-            file << pKF->mViewMPs[j];
+        for (int j = 0, jend = pKF->mvViewMPs.size(); j < jend; ++j) {
+            file << pKF->mvViewMPs[j];
         }
         file << "]";
 
         file << "ViewMPInfo" << "[";
-        for (int j = 0, jend = pKF->mViewMPsInfo.size(); j < jend; ++j) {
-            file << toCvMat( pKF->mViewMPsInfo[j] );
+        for (int j = 0, jend = pKF->mvViewMPsInfo.size(); j < jend; ++j) {
+            file << toCvMat( pKF->mvViewMPsInfo[j] );
         }
         file << "]";
 
@@ -354,7 +354,7 @@ void MapStorage::loadKeyFrames() {
 
         nodeKF["Descriptor"] >> pKF->mDescriptors;
 
-        pKF->mViewMPs.clear();
+        pKF->mvViewMPs.clear();
         FileNode nodeViewMP = nodeKF["ViewMPs"];
         if (nodeKP.size() != nodeViewMP.size())
             cout << "Wrong KP size in loading " << endl;
@@ -367,12 +367,12 @@ void MapStorage::loadKeyFrames() {
                 (*itMP) >> pos;
                 vPos.push_back(pos);
             }
-            pKF->mViewMPs = vPos;
+            pKF->mvViewMPs = vPos;
         }
-        if (pKF->mvKeyPoints.size() != pKF->mViewMPs.size())
+        if (pKF->mvKeyPoints.size() != pKF->mvViewMPs.size())
             cout << "Wrong KP size after loading " << endl;
 
-        pKF->mViewMPsInfo.clear();
+        pKF->mvViewMPsInfo.clear();
         FileNode nodeMPInfo = nodeKF["ViewMPInfo"];
         {
             vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d> > vInfo;
@@ -382,7 +382,7 @@ void MapStorage::loadKeyFrames() {
                 (*itInfo) >> info;
                 vInfo.push_back( toMatrix3d(info) );
             }
-            pKF->mViewMPsInfo = (vInfo);
+            pKF->mvViewMPsInfo = (vInfo);
         }
 
         Mat pose;

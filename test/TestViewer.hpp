@@ -1,29 +1,72 @@
-/**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG
-* (github.com/hbtang)
-*/
+#ifndef TESTVIEWER_HPP
+#define TESTVIEWER_HPP
 
-#include "MapPublish.h"
-#include "FramePublish.h"
-#include "Map.h"
-#include "converter.h"
-#include <cstdio>
+#include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
+#include <visualization_msgs/Marker.h>
+#include <sensor_msgs/Image.h>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
-#include <opencv2/highgui/highgui.hpp>
-#include <sensor_msgs/Image.h>
 
-namespace se2lam
+#include "TestTrack.hpp"
+
+
+class TestViewer
 {
+public:
+    TestViewer() {}
+    TestViewer(Map* pMap);
+    ~TestViewer() {};
 
-using namespace cv;
-using namespace std;
+    void run();
 
-typedef unique_lock<mutex> locker;
+    void setMap(Map* pMap) { mpMap = pMap; }
+    void setTracker(TestTrack* pTrack) { mpTracker = pTrack; }
+    void setLocalMapper(LocalMapper* pLocal) { mpLocalMapper = pLocal; }
 
-MapPublish::MapPublish(Map* pMap)
+    void publishCameraCurr(const cv::Mat& Twc);
+    void publishKeyFrames();
+    void publishMapPoints();
+    void publishOdomInformation();
+
+    void requestFinish() { mbFinishRequested = true; }
+public:
+    Map* mpMap;
+    LocalMapper* mpLocalMapper;
+    TestTrack* mpTracker;
+
+private:
+    bool checkFinish() { return mbFinishRequested; }
+    void setFinish() { mbFinished = true; }
+
+    ros::NodeHandle nh;
+    ros::Publisher publisher;
+    tf::TransformBroadcaster tfb;
+
+    visualization_msgs::Marker mMPsNeg;
+    visualization_msgs::Marker mMPsAct;
+    visualization_msgs::Marker mMPsNow;
+    visualization_msgs::Marker mMPsNoGoodPrl;
+
+    visualization_msgs::Marker mKFsNeg;
+    visualization_msgs::Marker mKFsAct;
+    visualization_msgs::Marker mKFNow;
+
+    visualization_msgs::Marker mCovisGraph;
+    visualization_msgs::Marker mFeatGraph;
+
+    visualization_msgs::Marker mVIGraph;
+    visualization_msgs::Marker mOdomRawGraph;
+
+    float mPointSize;
+    float mCameraSize;
+    float mScaleRatio;
+
+    bool mbFinishRequested;
+    bool mbFinished;
+};
+
+TestViewer::TestViewer(Map* pMap)
     : mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f), mScaleRatio(Config::MappubScaleRatio),
       mbFinishRequested(false), mbFinished(false)
 {
@@ -100,8 +143,8 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNow.ns = "MapPointsNow";
     mMPsNow.id = 5;
     mMPsNow.type = visualization_msgs::Marker::POINTS;
-    mMPsNow.scale.x = mPointSize;
-    mMPsNow.scale.y = mPointSize;
+    mMPsNow.scale.x = mPointSize * 2.f;
+    mMPsNow.scale.y = mPointSize * 2.f;
     mMPsNow.pose.orientation.w = 1.0;
     mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.color.r = 1.0;
@@ -137,25 +180,13 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.color.b = 1.0;
     mFeatGraph.color.a = 1.0;
 
-    // Configure KeyFrames Spanning Tree
-    //    mMST.header.frame_id = MAP_FRAME_ID;
-    //    mMST.ns = GRAPH_NAMESPACE;
-    //    mMST.id = 8;
-    //    mMST.type = visualization_msgs::Marker::LINE_LIST;
-    //    mMST.scale.x = 0.005;
-    //    mMST.pose.orientation.w = 1.0;
-    //    mMST.action = visualization_msgs::Marker::ADD;
-    //    mMST.color.b = 1.0f;
-    //    mMST.color.g = 1.0f;
-    //    mMST.color.a = 1.0;
-
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
     mVIGraph.ns = "VIGraph";
-    mVIGraph.id = 9;
+    mVIGraph.id = 8;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mVIGraph.scale.x = 0.05;
-    mVIGraph.scale.y = 0.05;
+    mVIGraph.scale.x = 0.1;
+    mVIGraph.scale.y = 0.1;
     mVIGraph.pose.orientation.w = 1.0;
     mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.color.r = 0.0;
@@ -166,11 +197,11 @@ MapPublish::MapPublish(Map* pMap)
     // Configure Odometry Raw Graph, light red
     mOdomRawGraph.header.frame_id = MAP_FRAME_ID;
     mOdomRawGraph.ns = "OdomRawGraph";
-    mOdomRawGraph.id = 10;
+    mOdomRawGraph.id = 9;
     mOdomRawGraph.type = visualization_msgs::Marker::LINE_LIST;
     mOdomRawGraph.action = visualization_msgs::Marker::ADD;
-    mOdomRawGraph.scale.x = 0.03;
-    mOdomRawGraph.scale.y = 0.03;
+    mOdomRawGraph.scale.x = 0.07;
+    mOdomRawGraph.scale.y = 0.07;
     mOdomRawGraph.pose.orientation.w = 1.0;
     mOdomRawGraph.color.r = 0.95;
     mOdomRawGraph.color.g = 0.0;
@@ -180,7 +211,7 @@ MapPublish::MapPublish(Map* pMap)
     // Cofigure MPs with no good Parallax, purple
     mMPsNoGoodPrl.header.frame_id = MAP_FRAME_ID;
     mMPsNoGoodPrl.ns = "MapPointsNoGoodParallax";
-    mMPsNoGoodPrl.id = 11;
+    mMPsNoGoodPrl.id = 10;
     mMPsNoGoodPrl.type = visualization_msgs::Marker::POINTS;
     mMPsNoGoodPrl.scale.x = 0.08;
     mMPsNoGoodPrl.scale.y = 0.08;
@@ -193,8 +224,7 @@ MapPublish::MapPublish(Map* pMap)
 
     tf::Transform tfT;
     tfT.setIdentity();
-    tfb.sendTransform(
-        tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
+    tfb.sendTransform(tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
 
     publisher = nh.advertise<visualization_msgs::Marker>("se2lam/Map", 10);
 
@@ -209,28 +239,128 @@ MapPublish::MapPublish(Map* pMap)
 
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
-    //    publisher.publish(mMST);
 
     publisher.publish(mVIGraph);
     publisher.publish(mOdomRawGraph);
 }
 
-MapPublish::~MapPublish()
+void TestViewer::run()
 {
+    image_transport::ImageTransport it(nh);
+    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
+
+    ros::Rate rate(Config::FPS/2);
+    while (nh.ok()) {
+        if (checkFinish())
+            break;
+
+        if (mpMap->empty())
+            continue;
+
+        Mat imgMatch;
+        mpTracker->drawMatchesForPub(imgMatch);
+        if (imgMatch.empty())
+            continue;
+
+        sensor_msgs::ImagePtr msgMatch =
+            cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
+        pubImgMatches.publish(msgMatch);
+
+        cv::Mat Tcw = mpMap->getCurrentFramePose();
+        publishCameraCurr(cvu::inv(Tcw));
+        publishKeyFrames();
+        publishMapPoints();
+        publishOdomInformation();
+
+        rate.sleep();
+        ros::spinOnce();
+    }
+    cout << "[Viewe] Exiting TestViewer .." << endl;
+
+    nh.shutdown();
+    setFinish();
 }
 
-void MapPublish::publishKeyFrames()
+void TestViewer::publishCameraCurr(const cv::Mat& Twc)
 {
-    mErrorSum = 0.;
+    mKFNow.points.clear();
 
+    tf::Matrix3x3 R(Twc.at<float>(0, 0), Twc.at<float>(0, 1), Twc.at<float>(0, 2),
+                    Twc.at<float>(1, 0), Twc.at<float>(1, 1), Twc.at<float>(1, 2),
+                    Twc.at<float>(2, 0), Twc.at<float>(2, 1), Twc.at<float>(2, 2));
+    tf::Vector3 t(Twc.at<float>(0, 3) / mScaleRatio, Twc.at<float>(1, 3) / mScaleRatio,
+                  Twc.at<float>(2, 3) / mScaleRatio);
+    tf::Transform tfwTc(R, t);
+    tfb.sendTransform(
+        tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
+
+    float d = mCameraSize;
+
+    // Camera is a pyramid. Define in camera coordinate system
+    cv::Mat o = (cv::Mat_<float>(4, 1) << 0, 0, 0, 1);
+    cv::Mat p1 = (cv::Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
+    cv::Mat p2 = (cv::Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
+    cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
+    cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
+
+    cv::Mat T = Twc.clone();
+    T.at<float>(0, 3) = T.at<float>(0, 3) / mScaleRatio;
+    T.at<float>(1, 3) = T.at<float>(1, 3) / mScaleRatio;
+    T.at<float>(2, 3) = T.at<float>(2, 3) / mScaleRatio;
+    cv::Mat ow = T * o;
+    cv::Mat p1w = T * p1;
+    cv::Mat p2w = T * p2;
+    cv::Mat p3w = T * p3;
+    cv::Mat p4w = T * p4;
+
+    geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
+    msgs_o.x = ow.at<float>(0);
+    msgs_o.y = ow.at<float>(1);
+    msgs_o.z = ow.at<float>(2);
+    msgs_p1.x = p1w.at<float>(0);
+    msgs_p1.y = p1w.at<float>(1);
+    msgs_p1.z = p1w.at<float>(2);
+    msgs_p2.x = p2w.at<float>(0);
+    msgs_p2.y = p2w.at<float>(1);
+    msgs_p2.z = p2w.at<float>(2);
+    msgs_p3.x = p3w.at<float>(0);
+    msgs_p3.y = p3w.at<float>(1);
+    msgs_p3.z = p3w.at<float>(2);
+    msgs_p4.x = p4w.at<float>(0);
+    msgs_p4.y = p4w.at<float>(1);
+    msgs_p4.z = p4w.at<float>(2);
+
+    mKFNow.points.push_back(msgs_o);
+    mKFNow.points.push_back(msgs_p1);
+    mKFNow.points.push_back(msgs_o);
+    mKFNow.points.push_back(msgs_p2);
+    mKFNow.points.push_back(msgs_o);
+    mKFNow.points.push_back(msgs_p3);
+    mKFNow.points.push_back(msgs_o);
+    mKFNow.points.push_back(msgs_p4);
+    mKFNow.points.push_back(msgs_p1);
+    mKFNow.points.push_back(msgs_p2);
+    mKFNow.points.push_back(msgs_p2);
+    mKFNow.points.push_back(msgs_p3);
+    mKFNow.points.push_back(msgs_p3);
+    mKFNow.points.push_back(msgs_p4);
+    mKFNow.points.push_back(msgs_p4);
+    mKFNow.points.push_back(msgs_p1);
+
+    mKFNow.header.stamp = ros::Time::now();
+
+    publisher.publish(mKFNow);
+}
+
+void TestViewer::publishKeyFrames()
+{
     mKFsNeg.points.clear();
     mKFsAct.points.clear();
 
     mCovisGraph.points.clear();
     mFeatGraph.points.clear();
 
-    if (!mbIsLocalize)
-        mVIGraph.points.clear();
+    mVIGraph.points.clear();
 
     // Camera is a pyramid. Define in camera coordinate system
     float d = mCameraSize;
@@ -241,18 +371,12 @@ void MapPublish::publishKeyFrames()
     cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
     vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
-    if (vKFsAll.empty()) {
+    if (vKFsAll.empty())
         return;
-    }
 
     vector<PtrKeyFrame> vKFsAct;
-    if (mbIsLocalize) {
-        vKFsAct = mpLocalizer->GetLocalKFs();
-    } else {
-        vKFsAct = mpMap->getLocalKFs();
-    }
+    vKFsAct = mpMap->getLocalKFs();
 
-    //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
     for (int i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         PtrKeyFrame pKFi = vKFsAll[i];
         if (pKFi->isNull())
@@ -352,8 +476,7 @@ void MapPublish::publishKeyFrames()
         }
 
         // Feature Graph
-        for (auto iter = pKFi->mFtrMeasureFrom.begin(); iter != pKFi->mFtrMeasureFrom.end();
-             iter++) {
+        for (auto iter = pKFi->mFtrMeasureFrom.begin(); iter != pKFi->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
             Mat Twb = cvu::inv(pKF2->getPose()) /* * Config::Tcb*/;
             geometry_msgs::Point msgs_o2;
@@ -366,7 +489,7 @@ void MapPublish::publishKeyFrames()
 
         // Visual Odometry Graph (estimate)
         PtrKeyFrame pKFOdoChild = pKFi->mOdoMeasureFrom.first;
-        if (pKFOdoChild != nullptr && !mbIsLocalize) {
+        if (pKFOdoChild != nullptr) {
             Mat Twb1 = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
             geometry_msgs::Point msgs_b2;
             msgs_b2.x = Twb1.at<float>(0, 3) / mScaleRatio;
@@ -377,86 +500,41 @@ void MapPublish::publishKeyFrames()
         }
     }
 
-    //! Visual Odometry Graph for Localize only case
-    //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
-    if (mbIsLocalize) {
-        static geometry_msgs::Point
-            msgsLast;  // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
-        geometry_msgs::Point msgsCurr;
-
-        auto currState = mpLocalizer->getTrackingState();
-        auto lastState = mpLocalizer->getLastTrackingState();
-        auto id = mpLocalizer->getKFCurr()->mIdKF;
-
-        if (currState == cvu::OK || currState == cvu::LOST) {
-            static bool firstLocatied = true;
-            Se2 Twb = mpLocalizer->getCurrKFPose();  // 带锁访问
-            msgsCurr.x = Twb.x / mScaleRatio;
-            msgsCurr.y = Twb.y / mScaleRatio;
-
-            if (currState == cvu::OK && lastState == cvu::LOST) {
-                firstLocatied = true;
-                fprintf(stderr, "[MapPublis] #%ld lastState = LOST and currentState = OK\n", id);
-            }
-            if (firstLocatied) {
-                firstLocatied = false;
-                msgsLast = msgsCurr;
-            }
-
-            mVIGraph.points.push_back(msgsLast);
-            mVIGraph.points.push_back(msgsCurr);
-            //            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
-            //            Twb: [%.4f, %.4f]\n",
-            //                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
-            //                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
-            //                   Twb.x/1000., Twb.y/1000.);
-
-            msgsLast = msgsCurr;
-        }
-    }
-
     mKFsNeg.header.stamp = ros::Time::now();
+    mKFsAct.header.stamp = ros::Time::now();
     mCovisGraph.header.stamp = ros::Time::now();
     mFeatGraph.header.stamp = ros::Time::now();
     mVIGraph.header.stamp = ros::Time::now();
 
     publisher.publish(mKFsNeg);
     publisher.publish(mKFsAct);
-
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
 }
 
-void MapPublish::publishMapPoints()
+void TestViewer::publishMapPoints()
 {
     mMPsNeg.points.clear();
     mMPsAct.points.clear();
     mMPsNow.points.clear();
     mMPsNoGoodPrl.points.clear();
 
-    set<PtrMapPoint> spMPNow;
-    vector<PtrMapPoint> vpMPAct;
-    if (mbIsLocalize) {
-        locker lock(mpLocalizer->mMutexLocalMap);
-        vpMPAct = mpLocalizer->GetLocalMPs();
-        spMPNow = mpLocalizer->mpKFCurr->getAllObsMPs();
-    } else {
-        vpMPAct = mpMap->getLocalMPs();
-        spMPNow = mpMap->getCurrentKF()->getAllObsMPs();
-    }
+    PtrKeyFrame pKFCur = mpMap->getCurrentKF();
+    vector<PtrMapPoint> vpMPAll = mpMap->getAllMP();
+    vector<PtrMapPoint> vpMPAct = mpMap->getLocalMPs();
+    set<PtrMapPoint> spMPNow= mpMap->getCurrentKF()->getAllObsMPs();
+    vector<PtrMapPoint> vpMPNeg;
+    fprintf(stdout, "[Viewe] #%ld(#KF%ld) MPsAll = %ld, MPsLocal = %ld, MPsObs = %ld\n",
+            pKFCur->id, pKFCur->mIdKF, vpMPAll.size(), vpMPAct.size(), spMPNow.size());
 
-    vector<PtrMapPoint> vpMPNeg = mpMap->getAllMP();
-
-    // AllMPs 包含了 MPsNeg 和 MPsAct
-    vector<PtrMapPoint> vpMPNegGood;
-    for (auto iter = vpMPNeg.begin(); iter != vpMPNeg.end(); iter++) {
+    // MPsAll 包含了 MPsNeg 和 MPsAct
+    for (auto iter = vpMPAll.begin(); iter != vpMPAll.end(); iter++) {
         PtrMapPoint pMPtemp = *iter;
         int count = std::count(vpMPAct.begin(), vpMPAct.end(), pMPtemp);
         if (count == 0)
-            vpMPNegGood.push_back(pMPtemp);
+            vpMPNeg.push_back(pMPtemp);
     }
-    vpMPNeg.swap(vpMPNegGood);
 
     // MPsAct 包含了 MPsNow
     vector<PtrMapPoint> vpMPActGood;
@@ -466,12 +544,18 @@ void MapPublish::publishMapPoints()
         if (count == 0)
             vpMPActGood.push_back(pMPtemp);
     }
-    vpMPAct.swap(vpMPActGood);
+    vpMPAct.swap(vpMPActGood); // MPsAct 去掉 MPsNow
+
+    fprintf(stdout, "[Viewe] #%ld(#KF%ld) MPsAll = %ld, MPsNeg = %ld, MPsAct = %ld, MPsNow = %ld\n",
+            pKFCur->id, pKFCur->mIdKF, vpMPAll.size(), vpMPNeg.size(), vpMPAct.size(), spMPNow.size());
 
     mMPsNeg.points.reserve(vpMPNeg.size());
     for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
-        if (vpMPNeg[i]->isNull())
+        if (vpMPNeg[i]->isNull()) {
+            fprintf(stdout, "[Viewe] #%ld(#KF%ld) Negtive MPs里面有坏点(id%ld)没有析构!\n",
+                    pKFCur->id, pKFCur->mIdKF, vpMPNeg[i]->mId);
             continue;
+        }
 
         geometry_msgs::Point msg_p;
         msg_p.x = vpMPNeg[i]->getPos().x / mScaleRatio;
@@ -486,34 +570,40 @@ void MapPublish::publishMapPoints()
 
     mMPsAct.points.reserve(vpMPAct.size());
     for (int i = 0, iend = vpMPAct.size(); i != iend; ++i) {
-        if (vpMPAct[i]->isNull())
+        if (vpMPAct[i]->isNull()) {
+            fprintf(stderr, "[Viewe] #%ld(#KF%ld) Active MPs里面有坏点(id%ld)没有析构!\n",
+                    pKFCur->id, pKFCur->mIdKF, vpMPAct[i]->mId);
             continue;
+        }
 
         geometry_msgs::Point msg_p;
         msg_p.x = vpMPAct[i]->getPos().x / mScaleRatio;
         msg_p.y = vpMPAct[i]->getPos().y / mScaleRatio;
         msg_p.z = vpMPAct[i]->getPos().z / mScaleRatio;
 
-        if (!vpMPAct[i]->isGoodPrl())
-            mMPsNoGoodPrl.points.push_back(msg_p);
-        else
+//        if (!vpMPAct[i]->isGoodPrl())
+//            mMPsNoGoodPrl.points.push_back(msg_p);
+//        else
             mMPsAct.points.push_back(msg_p);
     }
 
     mMPsNow.points.reserve(spMPNow.size());
     for (auto iter = spMPNow.begin(); iter != spMPNow.end(); iter++) {
         PtrMapPoint pMPtmp = *iter;
-        if (pMPtmp->isNull())
+        if (pMPtmp->isNull()) {
+            fprintf(stderr, "[Viewe] #%ld(#KF%ld) Now MPs里面有坏点(id%ld)没有析构!\n",
+                    pKFCur->id, pKFCur->mIdKF, pMPtmp->mId);
             continue;
+        }
 
         geometry_msgs::Point msg_p;
         msg_p.x = pMPtmp->getPos().x / mScaleRatio;
         msg_p.y = pMPtmp->getPos().y / mScaleRatio;
         msg_p.z = pMPtmp->getPos().z / mScaleRatio;
 
-        if (!pMPtmp->isGoodPrl())
-            mMPsNoGoodPrl.points.push_back(msg_p);
-        else
+//        if (!pMPtmp->isGoodPrl())
+//            mMPsNoGoodPrl.points.push_back(msg_p);
+//        else
             mMPsNow.points.push_back(msg_p);
     }
 
@@ -522,220 +612,28 @@ void MapPublish::publishMapPoints()
     mMPsNow.header.stamp = ros::Time::now();
     mMPsNoGoodPrl.header.stamp = ros::Time::now();
 
+//    fprintf("[Viewe] 当前观测MP/局部MP/总MP数量为: %ld/%ld/%ld\n", mMPsNow.points.size(),
+//            mMPsAct.points.size(), mMPsNeg.points.size());
     publisher.publish(mMPsNeg);
     publisher.publish(mMPsAct);
     publisher.publish(mMPsNow);
     publisher.publish(mMPsNoGoodPrl);
 }
 
-void MapPublish::publishCameraCurr(const cv::Mat& Twc)
-{
-    mKFNow.points.clear();
-
-    tf::Matrix3x3 R(Twc.at<float>(0, 0), Twc.at<float>(0, 1), Twc.at<float>(0, 2),
-                    Twc.at<float>(1, 0), Twc.at<float>(1, 1), Twc.at<float>(1, 2),
-                    Twc.at<float>(2, 0), Twc.at<float>(2, 1), Twc.at<float>(2, 2));
-    tf::Vector3 t(Twc.at<float>(0, 3) / mScaleRatio, Twc.at<float>(1, 3) / mScaleRatio,
-                  Twc.at<float>(2, 3) / mScaleRatio);
-    tf::Transform tfwTc(R, t);
-    tfb.sendTransform(
-        tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
-
-    float d = mCameraSize;
-
-    // Camera is a pyramid. Define in camera coordinate system
-    cv::Mat o = (cv::Mat_<float>(4, 1) << 0, 0, 0, 1);
-    cv::Mat p1 = (cv::Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
-    cv::Mat p2 = (cv::Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
-
-    cv::Mat T = Twc.clone();
-    T.at<float>(0, 3) = T.at<float>(0, 3) / mScaleRatio;
-    T.at<float>(1, 3) = T.at<float>(1, 3) / mScaleRatio;
-    T.at<float>(2, 3) = T.at<float>(2, 3) / mScaleRatio;
-    cv::Mat ow = T * o;
-    cv::Mat p1w = T * p1;
-    cv::Mat p2w = T * p2;
-    cv::Mat p3w = T * p3;
-    cv::Mat p4w = T * p4;
-
-    geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
-    msgs_o.x = ow.at<float>(0);
-    msgs_o.y = ow.at<float>(1);
-    msgs_o.z = ow.at<float>(2);
-    msgs_p1.x = p1w.at<float>(0);
-    msgs_p1.y = p1w.at<float>(1);
-    msgs_p1.z = p1w.at<float>(2);
-    msgs_p2.x = p2w.at<float>(0);
-    msgs_p2.y = p2w.at<float>(1);
-    msgs_p2.z = p2w.at<float>(2);
-    msgs_p3.x = p3w.at<float>(0);
-    msgs_p3.y = p3w.at<float>(1);
-    msgs_p3.z = p3w.at<float>(2);
-    msgs_p4.x = p4w.at<float>(0);
-    msgs_p4.y = p4w.at<float>(1);
-    msgs_p4.z = p4w.at<float>(2);
-
-    mKFNow.points.push_back(msgs_o);
-    mKFNow.points.push_back(msgs_p1);
-    mKFNow.points.push_back(msgs_o);
-    mKFNow.points.push_back(msgs_p2);
-    mKFNow.points.push_back(msgs_o);
-    mKFNow.points.push_back(msgs_p3);
-    mKFNow.points.push_back(msgs_o);
-    mKFNow.points.push_back(msgs_p4);
-    mKFNow.points.push_back(msgs_p1);
-    mKFNow.points.push_back(msgs_p2);
-    mKFNow.points.push_back(msgs_p2);
-    mKFNow.points.push_back(msgs_p3);
-    mKFNow.points.push_back(msgs_p3);
-    mKFNow.points.push_back(msgs_p4);
-    mKFNow.points.push_back(msgs_p4);
-    mKFNow.points.push_back(msgs_p1);
-
-    mKFNow.header.stamp = ros::Time::now();
-
-    publisher.publish(mKFNow);
-}
-
-void MapPublish::run()
-{
-    mbIsLocalize = Config::LocalizationOnly;
-
-    image_transport::ImageTransport it(nh);
-    image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
-    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
-
-    int nSaveId = 0;
-    ros::Rate rate(Config::FPS /* / 3*/);
-    while (nh.ok()) {
-        if (checkFinish()) {
-            break;
-        }
-        if (mpMap->empty())
-            continue;
-
-//        cv::Mat img = mpFramePub->drawFrame();
-//        if (img.empty())
-//            continue;
-
-//        // 给参考帧标注KFid号
-        PtrKeyFrame pKP = mpMap->getCurrentKF();
-//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
-
-//        sensor_msgs::ImagePtr msg =
-//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-//        pub.publish(msg);
-
-        // draw image matches
-        cv::Mat Tcw;
-        if (!mbIsLocalize) {
-            Mat imgMatch;
-            mpTracker->drawMatchesForPub(imgMatch);
-
-            sensor_msgs::ImagePtr msgMatch =
-                cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
-            pubImgMatches.publish(msgMatch);
-
-            // debug 存下match图片
-            if (Config::SaveMatchImage) {
-                string text = to_string(nSaveId++) + "-KF" + to_string(pKP->mIdKF);
-                string fileName = Config::MatchImageStorePath + text + ".jpg";
-                cv::imwrite(fileName, imgMatch);
-            }
-
-            Tcw = mpMap->getCurrentFramePose();
-        } else {
-            if (mpLocalizer->getKFCurr() == nullptr || mpLocalizer->getKFCurr()->isNull())
-                continue;
-
-            Tcw = mpLocalizer->getKFCurr()->getPose();
-        }
-
-        publishCameraCurr(cvu::inv(Tcw));
-        publishKeyFrames();
-        publishMapPoints();
-        publishOdomInformation();
-
-        rate.sleep();
-        ros::spinOnce();
-    }
-    cout << "[MapPublis] Exiting Mappublish .." << endl;
-
-    nh.shutdown();
-
-    setFinish();
-}
-
-void MapPublish::requestFinish()
-{
-    locker lock(mMutexFinish);
-    mbFinishRequested = true;
-}
-
-bool MapPublish::checkFinish()
-{
-    locker lock(mMutexFinish);
-    return mbFinishRequested;
-}
-
-void MapPublish::setFinish()
-{
-    locker lock(mMutexFinish);
-    mbFinished = true;
-}
-
-bool MapPublish::isFinished()
-{
-    locker lock(mMutexFinish);
-    return mbFinished;
-}
-
-//! 可视化原始odo的输入
-void MapPublish::publishOdomInformation()
+void TestViewer::publishOdomInformation()
 {
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    if (!mbIsLocalize) {
-        //! 这里要对齐到首帧的Odom, 位姿从原点开始
-        static Se2 firstOdom = mpMap->getCurrentKF()->odom;
-        static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
+    //! 这里要对齐到首帧的Odom, 位姿从原点开始
+    static Se2 firstOdom = mpMap->getCurrentKF()->odom;
+    static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
 
-        Se2 currOdom = mpMap->getCurrentKF()->odom;
-        Mat Twbi = currOdom.toCvSE3();
-        Mat Tb0bi = (Tb0w * Twbi).col(3);
-        msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
-        msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
-    } else {
-        //! 这里要对齐到首帧的Pose, 位姿不一定从原点开始
-        auto currState = mpLocalizer->getTrackingState();
-        auto lastState = mpLocalizer->getLastTrackingState();
-
-        if (currState == cvu::OK) {
-            PtrKeyFrame pKF = mpLocalizer->getKFCurr();
-
-            static bool isFirstFrame = true;
-            static Mat Twc_b = mpLocalizer->getCurrKFPose().toCvSE3();
-            static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
-
-            Mat Twbi = (pKF->odom).toCvSE3();
-            Mat Tb0bi = Tb0w * Twbi;              // 先变换到首帧的odom坐标系原点下
-            Mat Twc_bi = (Twc_b * Tb0bi).col(3);  // 再变换到首帧的pose坐标系原点下
-            msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
-            msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
-            if (currState == cvu::OK && lastState == cvu::LOST)
-                isFirstFrame = true;
-            if (isFirstFrame) {
-                msgsLast = msgsCurr;
-                isFirstFrame = false;
-                ;
-            }
-        } else {
-            return;
-        }
-    }
+    Se2 currOdom = mpMap->getCurrentKF()->odom;
+    Mat Twbi = currOdom.toCvSE3();
+    Mat Tb0bi = (Tb0w * Twbi).col(3);
+    msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
+    msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
 
     mOdomRawGraph.points.push_back(msgsLast);
     mOdomRawGraph.points.push_back(msgsCurr);
@@ -745,4 +643,5 @@ void MapPublish::publishOdomInformation()
     publisher.publish(mOdomRawGraph);
 }
 
-}  // namespace se2lam
+#endif // TESTVIEWER_HPP
+

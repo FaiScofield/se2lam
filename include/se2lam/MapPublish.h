@@ -73,10 +73,11 @@ private:
 
     visualization_msgs::Marker mCovisGraph;
     visualization_msgs::Marker mFeatGraph;
-    visualization_msgs::Marker mVIGraph;
-    visualization_msgs::Marker mMST;
 
+    visualization_msgs::Marker mVIGraph;
     visualization_msgs::Marker mOdomRawGraph;
+
+    visualization_msgs::Marker mMST;
 
     float mPointSize;
     float mCameraSize;

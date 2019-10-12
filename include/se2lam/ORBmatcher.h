@@ -83,6 +83,8 @@ public:
                       const int minLevel = 0, const int maxLevel = 8);
     int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H,
                           std::vector<int>& vnMatches12, const int winSize);
+    int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H12,
+                          std::map<int, int>& matches12, const int winSize);
 
     int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
                           const int winSize, const int levelOffset,

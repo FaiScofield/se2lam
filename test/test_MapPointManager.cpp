@@ -1,5 +1,7 @@
 #include "test_functions.hpp"
 #include "TestTrack.hpp"
+#include "TestViewer.hpp"
+#include "MapPublish.h"
 
 
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
@@ -45,16 +47,22 @@ int main(int argc, char** argv)
     ORBVocabulary *pVocabulary = new ORBVocabulary();
     bool bVocLoad = pVocabulary->loadFromBinaryFile(g_orbVocFile);
     if(!bVocLoad) {
-        cerr << "Wrong path to vocabulary. " << endl;
-        cerr << "Falied to open at: " << g_orbVocFile << endl;
+        cerr << "[Track] Wrong path to vocabulary. " << endl;
+        cerr << "[Track] Falied to open at: " << g_orbVocFile << endl;
         exit(-1);
     }
-    cout << "Vocabulary loaded!" << endl << endl;
+    cout << "[Track] Vocabulary loaded!" << endl << endl;
 
 
     //! main loop
     TestTrack tt;
     tt.setMap(pMap);
+
+    TestViewer tv(pMap);
+    tv.setTracker(&tt);
+
+    thread threadMapPub(&TestViewer::run, &tv);
+    threadMapPub.detach();
 
     int skipFrames = 30;
     num = std::min(num, static_cast<int>(allImages.size()));
@@ -81,21 +89,17 @@ int main(int argc, char** argv)
         tt.mpMap->setCurrentFramePose(tt.mCurrentFrame.getPose());
 
         timer.stop();
-        fprintf(stderr, "[Track] #%ld Tracking consuming time: %fms\n", tt.mCurrentFrame.id, timer.time);
+        fprintf(stdout, "[Track] #%ld Tracking consuming time: %fms\n", tt.mCurrentFrame.id, timer.time);
 
         //! 匹配情况可视化
-        Mat outImgWarp;
-        tt.drawMatchesForPub(outImgWarp);
-
-        char strMatches[64];
-        std::snprintf(strMatches, 64, "F: %ld-%ld, M: %d/%d", tt.mpReferenceKF->id,
-                      tt.mCurrentFrame.id, tt.mnInliers, tt.mnMatchSum);
-        putText(outImgWarp, strMatches, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        imshow("Image Warp Match", outImgWarp);
-        waitKey(100);
+//        Mat outImgWarp;
+//        tt.drawMatchesForPub(outImgWarp);
+//        imshow("Image Warp Match", outImgWarp);
+        waitKey(120);
 
         rate.sleep();
     }
+    tv.requestFinish();
 
     delete kpMatcher;
     delete pVocabulary;

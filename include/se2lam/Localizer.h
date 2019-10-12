@@ -14,6 +14,7 @@
 #include "Map.h"
 #include "Sensors.h"
 #include "cvutil.h"
+#include "ORBVocabulary.h"
 
 namespace se2lam
 {

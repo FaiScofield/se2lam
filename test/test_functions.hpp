@@ -12,7 +12,6 @@
 #include "GlobalMapper.h"
 #include "converter.h"
 #include "cvutil.h"
-#include "utility.h"
 
 #include <ros/ros.h>
 

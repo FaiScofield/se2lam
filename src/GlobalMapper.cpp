@@ -532,7 +532,7 @@ void GlobalMapper::GlobalBA()
 
         int idx = pKF->getFeatureIndex(pMP);
 
-        Point3f Pt3_MP_KF = pKF->mViewMPs[idx];
+        Point3f Pt3_MP_KF = pKF->mvViewMPs[idx];
         Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
         Mat t3_MP_w = Rwc * t3_MP_KF + twc;
         Point3f Pt3_MP_w(t3_MP_w);
@@ -812,16 +812,16 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         MeasSE3XYZ Meas1;
         Meas1.idKF = 0;
         Meas1.idMP = count;
-        Meas1.z = toVector3d(_pKFFrom->mViewMPs[idxMPin1]);
-        Meas1.info = _pKFFrom->mViewMPsInfo[idxMPin1];
+        Meas1.z = toVector3d(_pKFFrom->mvViewMPs[idxMPin1]);
+        Meas1.info = _pKFFrom->mvViewMPsInfo[idxMPin1];
 
         int idxMPin2 = iter->second;
         //        PtrMapPoint pMPin2 = _pKFTo->mDualObservations[idxMPin2];
         MeasSE3XYZ Meas2;
         Meas2.idKF = 1;
         Meas2.idMP = count;
-        Meas2.z = toVector3d(_pKFTo->mViewMPs[idxMPin2]);
-        Meas2.info = _pKFTo->mViewMPsInfo[idxMPin2];
+        Meas2.z = toVector3d(_pKFTo->mvViewMPs[idxMPin2]);
+        Meas2.info = _pKFTo->mvViewMPsInfo[idxMPin2];
 
 
         //! TODO to delete. DEBUG ON NAN
@@ -904,8 +904,8 @@ void GlobalMapper::OptKFPair(
 
             int idx = PtrKFi->getFeatureIndex(PtrMPj);
 
-            g2o::Vector3D meas = toVector3d(PtrKFi->mViewMPs[idx]);
-            g2o::Matrix3D info = PtrKFi->mViewMPsInfo[idx];
+            g2o::Vector3D meas = toVector3d(PtrKFi->mvViewMPs[idx]);
+            g2o::Matrix3D info = PtrKFi->mvViewMPsInfo[idx];
 
             addEdgeSE3XYZ(optimizer, meas, vertexIdKF, vertexIdMP, 0, info, 5.99);
         }
@@ -980,12 +980,12 @@ void GlobalMapper::OptKFPairMatch(
         g2o::Vector3D Pt3MP = toVector3d(pMPin1->getPos());
         addVertexXYZ(optimizer, Pt3MP, vertexId, true);
 
-        g2o::Vector3D meas1 = toVector3d(_pKF1->mViewMPs[idMPin1]);
-        g2o::Matrix3D info1 = _pKF1->mViewMPsInfo[idMPin1];
+        g2o::Vector3D meas1 = toVector3d(_pKF1->mvViewMPs[idMPin1]);
+        g2o::Matrix3D info1 = _pKF1->mvViewMPsInfo[idMPin1];
         addEdgeSE3XYZ(optimizer, meas1, 0, vertexId, 0, info1, 5.99);
 
-        g2o::Vector3D meas2 = toVector3d(_pKF2->mViewMPs[idMPin2]);
-        g2o::Matrix3D info2 = _pKF2->mViewMPsInfo[idMPin2];
+        g2o::Vector3D meas2 = toVector3d(_pKF2->mvViewMPs[idMPin2]);
+        g2o::Matrix3D info2 = _pKF2->mvViewMPsInfo[idMPin2];
         addEdgeSE3XYZ(optimizer, meas2, 1, vertexId, 0, info2, 5.99);
 
         vertexId++;
@@ -1080,8 +1080,8 @@ void GlobalMapper::CreateVecMeasSE3XYZ(
 
             int idxMPinKF = PtrKFi->getFeatureIndex(PtrMPj);
 
-            Meas_ij.z = toVector3d(PtrKFi->mViewMPs[idxMPinKF]);
-            Meas_ij.info = PtrKFi->mViewMPsInfo[idxMPinKF];
+            Meas_ij.z = toVector3d(PtrKFi->mvViewMPs[idxMPinKF]);
+            Meas_ij.info = PtrKFi->mvViewMPsInfo[idxMPinKF];
 
             vMeas.push_back(Meas_ij);
         }

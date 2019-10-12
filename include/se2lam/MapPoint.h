@@ -8,7 +8,6 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
-#include "KeyFrame.h"
 #include <mutex>
 #include <map>
 #include <memory>
@@ -19,9 +18,10 @@
 namespace se2lam{
 
 class KeyFrame;
+class Map;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
-class MapPoint
+class MapPoint : public std::enable_shared_from_this<MapPoint>
 {
 public:
     MapPoint();
@@ -56,20 +56,20 @@ public:
     void setGoodPrl(bool value) { mbGoodParallax = value; }
 
     bool isNull() { return mbNull; }
-    void setNull(const std::shared_ptr<MapPoint> &pThis);
+    void setNull(std::shared_ptr<MapPoint> &pThis);
 
     cv::Point3f getPos();
     void setPos(const cv::Point3f& pt3f);
 
-
-    struct IdLessThan{
-        bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const{
+    struct IdLessThan {
+        bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const {
             return lhs->mId < rhs->mId;
         }
     };
 
     // This MP would be replaced and abandoned later by
     void mergedInto(const std::shared_ptr<MapPoint>& pMP);
+    void setMap(Map* pMap) { mpMap = pMap; }
 
 public:
     int mMainOctave;
@@ -85,11 +85,13 @@ protected:
     void updateMainKFandDescriptor(); // 更新mainKF,desccriptor,normalVector
     bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
 
+    Map* mpMap;
+
     //! 以下成员变量需加锁访问
     cv::Point3f mPos;   // 三维空间坐标
 
     // first = 观测到此MP的KF, second = 在其KP中的索引, 按KFid从小到大排序
-    std::map<PtrKeyFrame, size_t, KeyFrame::IdLessThan> mObservations;  // 最重要的成员变量
+    std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
 
     PtrKeyFrame mMainKF;
     cv::Point3f mNormalVector;  // 平均观测方向

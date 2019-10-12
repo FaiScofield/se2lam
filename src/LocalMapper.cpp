@@ -50,11 +50,11 @@ void LocalMapper::setGlobalMapper(GlobalMapper *pGlobalMapper)
 }
 
 /**
- * @brief   添加KF,更新共视关系,然后插入到Map里
- * @param pKF           待添加的KF
- * @param localMPs      在Tracker里计算出来的MP候选，根据参考帧的观测得到的
- * @param vMatched12    参考帧里KP匹配上当前帧KP的索引
- * @param vbGoodPrl     参考帧里KP匹配上但没有MP对应的点对里，视差比较好的flag
+ * @brief 添加KF,更新共视关系,然后插入到Map里
+ * @param pKF         待添加的KF
+ * @param localMPs    在Tracker里计算出来的MP候选，根据参考帧的观测得到的
+ * @param vMatched12  参考帧里KP匹配上当前帧KP的索引
+ * @param vbGoodPrl   参考帧里KP匹配上但没有MP对应的点对里，视差比较好的flag
  */
 void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
                            const vector<int> &vMatched12, const vector<bool> &vbGoodPrl)
@@ -112,7 +112,7 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKF, const vector<Point3f> &localMPs,
 }
 
 /**
- * @brief   根据和参考帧和局部地图的匹配关系关联MP，会生成新的MP并插入到Map里
+ * @brief 根据和参考帧和局部地图的匹配关系关联MP，会生成新的MP并插入到Map里
  * 能关联上的MP都关联上，不能关联上MP但和参考帧有匹配的KP，则三角化生成新的MP, 最后都会更新两KF的mViewMPs。
  * @param vMatched12    参考帧到当前帧的KP匹配情况
  * @param localMPs      参考帧对应观测MP的坐标值, 即Pc1
@@ -144,9 +144,9 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                 }
                 Eigen::Matrix3d xyzinfo1, xyzinfo2;
                 Mat Tcr = mpNewKF->getTcr();
-                Track::calcSE3toXYZInfo(pPrefKF->mViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1),
+                Track::calcSE3toXYZInfo(pPrefKF->mvViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1),
                                         Tcr, xyzinfo1, xyzinfo2);
-                mpNewKF->setViewMP(cvu::se3map(Tcr, pPrefKF->mViewMPs[i]), vMatched12[i], xyzinfo2);
+                mpNewKF->setViewMP(cvu::se3map(Tcr, pPrefKF->mvViewMPs[i]), vMatched12[i], xyzinfo2);
                 mpNewKF->addObservation(pMP, vMatched12[i]);
                 pMP->addObservation(mpNewKF, vMatched12[i]);
             }
@@ -162,13 +162,8 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
         for (int i = 0, iend = mpNewKF->N; i != iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
-            PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
 
-            if (mpNewKF->hasObservation(pMP)) {
-                //! TODO to delete, for debug. 这个应该不会出现,
-                cerr << "[LocalMap] 重复关联了!! 这不应该出现! pMP->id: " << pMP->mId << endl;
-                continue;
-            }
+            PtrMapPoint pMP = vLocalMPs[vMatchedIdxMPs[i]];
 
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
@@ -197,20 +192,27 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
         // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
         if (vMatched12[i] >= 0 && !pPrefKF->hasObservation(i)) {
             if (mpNewKF->hasObservation(vMatched12[i])) {
-                //! TODO to delete, for debug. 这个应该很可能会出现,是否需要给参考帧关联MP?
-                cerr << "[LocalMap] 这个可能会出现, 参考帧KP1无观测但当前帧KP2有观测! 是否需要给参考帧关联MP?" << endl;
+                //! TODO to delete, for debug.
+                //! 这个应该很可能会出现, 局部MPs投影到当前KF上可能会关联上.
+                //! 如果出现了这种情况, 应该要给参考帧也关联上此MP. 目前在等待这种情况出现
+                PtrMapPoint pMP = mpNewKF->getObservation(vMatched12[i]);
+                fprintf(stderr, "[LocalMap] 这个可能会出现, 局部MPs投影到当前#KF%ld上可能会关联上.! 如果出现了这种情况, 应该要给参考帧也关联上此MP%ld.\n", mpNewKF->mIdKF, pMP->mId);
+
+                pMP->addObservation(pPrefKF, i);
+                pPrefKF->addObservation(pMP, i);
                 continue;
             }
 
             Point3f posW = cvu::se3map(cvu::inv(pPrefKF->getPose()), localMPs[i]);
 
-            //! TODO to delete, for debug. 这个应该很可能会出现
+            //! TODO to delete, for debug.
+            //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新, 故这里不能生成MP!
             //! 照理说 localMPs[i] 有一个正常的值的话, 那么就应该有观测出现啊???
-            //! 有匹配点对的情况下不会出现! 可以删了. 20191010
-            if (localMPs[i].z < 0.f) {
-                cerr << "[LocalMap] localMPs[i].z < 0. 这个可能会出现, Pc1的深度有负的情况, 代表此点没有观测" << endl;
+            if (posW.z < 0.f) {
+                fprintf(stderr, "[LocalMap] #KF%ld的mvViewMPs[%d].z < 0. \n", pPrefKF->mIdKF, i);
                 cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << localMPs[i] << endl;
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
+                continue;
             }
 
             Point3f Pc2 = cvu::se3map(mpNewKF->getTcr(), localMPs[i]);

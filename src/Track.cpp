@@ -13,7 +13,6 @@
 #include "converter.h"
 #include "cvutil.h"
 #include "optimizer.h"
-#include "utility.h"
 #include <ros/ros.h>
 
 
@@ -249,7 +248,7 @@ void Track::resetLocalTrack()
     KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);  // cv::KeyPoint转cv::Point2f
 
     // 更新当前Local MP为参考帧观测到的MP
-    mLocalMPs = mpReferenceKF->mViewMPs;
+    mLocalMPs = mpReferenceKF->mvViewMPs;
     mnGoodPrl = 0;
     mMatchIdx.clear();
 
@@ -528,8 +527,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nInliers)
     if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-        mpLocalMapper
-            ->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
+        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
         return bNeedNewKF;
     }
 
@@ -561,18 +559,18 @@ int Track::doTriangulate()
     // 1.遍历参考帧的KP
     int nTrackedOld = 0, nGoodDepth = 0;
     for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
-        // 2.如果参考帧的KP与当前帧的KP有匹配
         if (mMatchIdx[i] < 0)
             continue;
 
-        // 2.且参考帧KP已经有对应的MP观测了，则局部地图点更新为此MP
+        // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则可见地图点更新为此MP
         if (mpReferenceKF->hasObservation(i)) {
-            mLocalMPs[i] = mpReferenceKF->mViewMPs[i];
+            mLocalMPs[i] = mpReferenceKF->mvViewMPs[i];
             nTrackedOld++;
             continue;
         }
 
         // 3.如果参考帧KP没有对应的MP，则为此匹配对KP三角化计算深度(相对参考帧的坐标)
+        // 由于两个投影矩阵是两KF之间的相对投影, 故三角化得到的坐标是相对参考帧的坐标, 即Pc1
         Point2f pt1 = mpReferenceKF->mvKeyPoints[i].pt;
         Point2f pt2 = mCurrentFrame.mvKeyPoints[mMatchIdx[i]].pt;
         Point3f Pc1 = cvu::triangulate(pt1, pt2, Proj1, Proj2);

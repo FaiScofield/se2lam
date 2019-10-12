@@ -135,12 +135,14 @@ int main(int argc, char** argv)
         clahe->apply(imgGray, imgClahe);
 
         //! ORB提取特征点
+        WorkTimer timer;
         frameCur = Frame(imgClahe, imgFiles[i].timeStamp, Se2(), kpExtractor, K, D);
         KFCur = make_shared<KeyFrame>(frameCur);
         KFCur->ComputeBoW(vocabulary);
         imgCur.copyTo(imgWithFeatureCur);
         for (int i = 0, iend = frameCur.N; i < iend; ++i)
             circle(imgWithFeatureCur, frameCur.mvKeyPoints[i].pt, 3, Scalar(255, 0, 0));
+        printf("#%ld 创建KF,提取特征点,计算词向量,标记KP共耗时%.2fms\n", frameCur.id, timer.count());
 
         if (firstFrame) {
             imgCur.copyTo(imgRef);
@@ -158,11 +160,24 @@ int main(int argc, char** argv)
         map<int, int> matchBow, matchCV;
         vector<Point2f> prevMatched;
         KeyPoint::convert(frameRef.mvKeyPoints, prevMatched);
-        nMatched1 = kpMatcher->MatchByWindow(frameRef, frameCur, prevMatched, 25, matchIdx);
-        nMatched2 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, H12, matchIdx12, 25);
-        nMatched3 = kpMatcher->SearchByBoW(KFRef, KFCur, matchBow, false);
-        nMatched4 = matchByCV(frameRef.mDescriptors, frameCur.mDescriptors, matchCV);
 
+        timer.start();
+        nMatched1 = kpMatcher->MatchByWindow(frameRef, frameCur, prevMatched, 25, matchIdx);
+        printf("#%ld 匹配方式 MatchByWindow() 耗时%.2fms\n", frameCur.id, timer.count());
+
+        timer.start();
+        nMatched2 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, H12, matchIdx12, 25);
+        printf("#%ld 匹配方式 MatchByWindowWarp() 耗时%.2fms\n", frameCur.id, timer.count());
+
+        timer.start();
+        nMatched3 = kpMatcher->SearchByBoW(KFRef, KFCur, matchBow, false);
+        printf("#%ld 匹配方式 SearchByBoW() 耗时%.2fms\n", frameCur.id, timer.count());
+
+        timer.start();
+        nMatched4 = matchByCV(frameRef.mDescriptors, frameCur.mDescriptors, matchCV);
+        printf("#%ld 匹配方式 matchByCV() 耗时%.2fms\n", frameCur.id, timer.count());
+
+        timer.start();
         if (nMatched1 >= 10) {
             Mat H = Mat::eye(3, 3, CV_64F);
             nInlines1 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx, H);
@@ -180,6 +195,7 @@ int main(int argc, char** argv)
             Mat H = Mat::eye(3, 3, CV_64F);
             nInlines4 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchCV, H);
         }
+        printf("#%ld 剔除外点总耗时%.2fms\n", frameCur.id, timer.count());
 
         //! 存储匹配结果作分析H
 //        vvMatches[idx].push_back(nMatched2);

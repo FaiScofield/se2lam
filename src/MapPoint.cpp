@@ -13,9 +13,17 @@
 
 namespace se2lam
 {
+
 using namespace cv;
 using namespace std;
 typedef unique_lock<mutex> locker;
+
+
+//bool MPIdLessThan::operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const
+//{
+//    return lhs->mId < rhs->mId;
+//}
+
 
 unsigned long MapPoint::mNextId = 1;
 
@@ -47,7 +55,7 @@ MapPoint::~MapPoint()
 }
 
 //! FIXME Count pointer = 4 时无法析构, Count pointer = 2时正常析构
-void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
+void MapPoint::setNull(shared_ptr<MapPoint>& pThis)
 {
     locker lock(mMutexObs);
     mbNull = true;
@@ -67,7 +75,9 @@ void MapPoint::setNull(const shared_ptr<MapPoint>& pThis)
     mMainDescriptor.release();
     mMainKF = nullptr;
 
-    fprintf(stderr, "[MapPoint] A MP#%ld is set to null. Count pointer = %ld\n", pThis->mId,
+    mpMap->eraseMP(pThis);
+
+    fprintf(stderr, "[MapPoint] A MP#%ld is set to null by others. Count pointer = %ld\n", pThis->mId,
             pThis.use_count());
 }
 
@@ -84,6 +94,11 @@ void MapPoint::setNull()
     mObservations.clear();
     mMainDescriptor.release();
     mMainKF = nullptr;
+
+    auto ptr = shared_from_this();
+    mpMap->eraseMP(ptr);
+    fprintf(stderr, "[MapPoint] A MP#%ld is set to null by itself. Count pointer = %ld\n", this->mId,
+            ptr.use_count());
 }
 
 size_t MapPoint::countObservation()
@@ -155,7 +170,7 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
     updateMainKFandDescriptor();
     updateParallax(pKF);
 
-    if (mbNull)
+    if (mbNull && mObservations.size() > 0)
         mbNull = false;
 }
 
@@ -170,7 +185,7 @@ void MapPoint::addObservations(const map<PtrKeyFrame, size_t>& obsCandidates)
     }
     updateMainKFandDescriptor();
 
-    if (mbNull)
+    if (mbNull && mObservations.size() > 0)
         mbNull = false;
 }
 
@@ -206,7 +221,8 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
     float cosAngle = cv::norm(posKF.dot(mNormalVector)) / (dist * cv::norm(mNormalVector));
     bool c1 = std::abs(mMainKF->mvKeyPoints[mObservations[mMainKF]].octave - kp.octave) <= 2;
     bool c2 = cosAngle >= 0.866f;  // no larger than 30 degrees
-    bool c3 = dist >= mMinDist && dist <= mMaxDist;
+//    bool c3 = dist >= mMinDist && dist <= mMaxDist;
+    bool c3 = true;
     return c1 && c2 && c3;
 }
 
@@ -246,7 +262,7 @@ PtrKeyFrame MapPoint::getMainKF()
  */
 void MapPoint::updateMainKFandDescriptor()
 {
-    if (mbNull || mObservations.empty())
+    if (mObservations.empty())
         return;
 
     Point3f pose;
@@ -318,12 +334,13 @@ void MapPoint::updateMainKFandDescriptor()
 
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
-    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
-    float dist = cv::norm(mMainKF->mViewMPs[idx]);
+//    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
+    float dist = cv::norm(mMainKF->mvViewMPs[idx]);
     int nlevels = mMainKF->mnScaleLevels;
 
+    mMinDist = dist / mLevelScaleFactor;
     mMaxDist = dist * mLevelScaleFactor;
-    mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
+//    mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
 }
 
 /**
@@ -425,7 +442,7 @@ void MapPoint::updateMeasureInKFs()
 
         Mat Tcw = pKF->getPose();
         Point3f posKF = cvu::se3map(Tcw, mPos);
-        pKF->mViewMPs[it->second] = posKF;
+        pKF->mvViewMPs[it->second] = posKF;
     }
 }
 

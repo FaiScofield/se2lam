@@ -20,9 +20,6 @@
 namespace se2lam
 {
 
-class MapPoint;
-typedef std::shared_ptr<MapPoint> PtrMapPoint;
-
 struct SE3Constraint {
 public:
     cv::Mat measure;
@@ -37,6 +34,9 @@ public:
 };
 typedef std::shared_ptr<SE3Constraint> PtrSE3Cstrt;
 
+class Map;
+class MapPoint;
+typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 class KeyFrame : public Frame
 {
@@ -45,14 +45,12 @@ public:
     KeyFrame(const Frame& frame);
     ~KeyFrame();
 
-    //    cv::Mat getPose();
-    //    void setPose(const cv::Mat &_Tcw);
-    //    void setPose(const Se2 &_Twb);
+//    cv::Mat getPose();
+//    void setPose(const cv::Mat &_Tcw);
+//    void setPose(const Se2 &_Twb);
 
     struct IdLessThan {
-        bool operator()(const std::shared_ptr<KeyFrame>& lhs,
-                        const std::shared_ptr<KeyFrame>& rhs) const
-        {
+        bool operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs) const {
             return lhs->mIdKF < rhs->mIdKF;
         }
     };
@@ -107,14 +105,15 @@ public:
                            const cv::Mat& _info);
     void setOdoMeasureTo(std::shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
 
+    void setMap(Map* pMap) { mpMap = pMap; }
 public:
     static unsigned long mNextIdKF;
 
     unsigned long mIdKF;
 
     //! TODO 此变量的作用和变化还需要探究一下, 是否需要加锁访问? 是否可以改成PtrMapPoint?
-    vector<cv::Point3f> mViewMPs;  // MP在当前KF相机坐标系下的坐标, 即Pc
-    vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mViewMPsInfo;
+    vector<cv::Point3f> mvViewMPs;  // MP在当前KF相机坐标系下的坐标, 即Pc
+    vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mvViewMPsInfo;
 
     // KeyFrame contraints: From this or To this
     std::map<std::shared_ptr<KeyFrame>, SE3Constraint> mFtrMeasureFrom;  // 特征图中后面的连接
@@ -133,12 +132,14 @@ public:
 
     //! 以下信息需要加锁访问
 protected:
+    Map* mpMap;
+
     bool mbNull;
 
     std::map<PtrMapPoint, size_t> mObservations;  // size_t为MP在此KF中对应的特征点的索引
     std::map<size_t, PtrMapPoint> mDualObservations;
 
-    std::set<std::shared_ptr<KeyFrame>, KeyFrame::IdLessThan> mspCovisibleKFs;
+    std::set<std::shared_ptr<KeyFrame>/*, KeyFrame::IdLessThan*/> mspCovisibleKFs;
 
 //    std::mutex mMutexImg; // 这两个在Frame里已经有了
 //    std::mutex mMutexPose;
