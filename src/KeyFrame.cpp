@@ -77,7 +77,7 @@ KeyFrame::~KeyFrame()
 }
 
 // Please handle odometry based constraints after calling this function
-//! FIXME KF在setNull()后仍然有6-8个引用计数!!!无法析构!
+//! 加入成员变量map的指针后通过调用map删除其相关容器中的指针, 现已可以正常析构. 20191015
 void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 {
     locker lckPose(mMutexPose);
@@ -90,42 +90,42 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
     mbNull = true;
     mpORBExtractor = nullptr;
 
-    mImage.release();
-    mDescriptors.release();
     mvKeyPoints.clear();
+    mDescriptors.release();
+    if (bNeedVisulization)
+        mImage.release();
 
     // Handle Feature based constraints
-    fprintf(stderr, "[KeyFrame] KF#%ld before Handling constraints, Count pointer = %ld\n",
-           mIdKF, pThis.use_count());
-    for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; ++it) {
-        it->first->mFtrMeasureTo.erase(pThis);
-    }
-    for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; ++it) {
-        it->first->mFtrMeasureFrom.erase(pThis);
-    }
-    fprintf(stderr, "[KeyFrame] KF#%ld after Handling constraints, Count pointer = %ld\n",
-           mIdKF, pThis.use_count());
+    size_t n1 = mFtrMeasureFrom.size(), n2 = mFtrMeasureTo.size();
+    if (n1 || n2)
+        fprintf(stderr, "[KeyFrame] KF#%ld 取消特征约束之前引用计数 = %ld\n", mIdKF, pThis.use_count());
+    if (n1 > 0)
+        for (auto it = mFtrMeasureFrom.begin(), iend = mFtrMeasureFrom.end(); it != iend; ++it)
+            it->first->mFtrMeasureTo.erase(pThis);
+    if (n2 > 0)
+        for (auto it = mFtrMeasureTo.begin(), iend = mFtrMeasureTo.end(); it != iend; ++it)
+            it->first->mFtrMeasureFrom.erase(pThis);
+    if (n1 || n2)
+        fprintf(stderr, "[KeyFrame] KF#%ld 取消特征约束之后引用计数 = %ld\n", mIdKF, pThis.use_count());
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
-    fprintf(stderr, "[KeyFrame] KF#%ld before Handling MP observations(%ld), Count pointer = %ld\n",
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测前(%ld)引用计数 = %ld\n",
            mIdKF, mObservations.size(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
-    fprintf(stderr, "[KeyFrame] KF#%ld after Handling MP observations, Count pointer = %ld\n",
-           mIdKF, pThis.use_count());
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
-    fprintf(stderr, "[KeyFrame] KF#%ld before Handling Covisibility(%ld), Count pointer = %ld\n",
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系前(%ld)引用计数 = %ld\n",
            mIdKF, mspCovisibleKFs.size(), pThis.use_count());
     for (auto it = mspCovisibleKFs.begin(), iend = mspCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
-    fprintf(stderr, "[KeyFrame] KF#%ld after Handling Covisibility, Count pointer = %ld\n",
-           mIdKF, pThis.use_count());
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     mObservations.clear();
     mDualObservations.clear();
@@ -135,7 +135,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
 
     mpMap->eraseKF(pThis);
 
-    fprintf(stderr, "[KeyFrame] A KF#%ld is set to null, Count pointer = %ld\n",
+    fprintf(stderr, "[KeyFrame] KF#%ld 被Map设置为null, 引用计数 = %ld\n",
            mIdKF, pThis.use_count());
 }
 
@@ -145,11 +145,25 @@ size_t KeyFrame::countObservation()
     return mObservations.size();
 }
 
-void KeyFrame::setViewMP(Point3f pt3f, int idx, Eigen::Matrix3d info)
+void KeyFrame::setViewMP(Point3f pt3f, size_t idx, Eigen::Matrix3d info)
 {
     locker lock(mMutexObs);
     mvViewMPs[idx] = pt3f;
     mvViewMPsInfo[idx] = info;
+}
+
+Point3f KeyFrame::getViewMPPoseInCamareFrame(size_t idx)
+{
+    locker lock(mMutexObs);
+
+    Point3f ret(-1.f, -1.f, -1.f);
+
+    auto it = mDualObservations.find(idx);
+    if (it != mDualObservations.end()) {
+        Point3f Pw = mDualObservations[idx]->mPos;
+        ret = cvu::se3map(Tcw, Pw);
+    }
+    return ret;
 }
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame> pKF)
@@ -201,7 +215,7 @@ bool KeyFrame::isNull()
 bool KeyFrame::hasObservation(const PtrMapPoint &pMP)
 {
     locker lock(mMutexObs);
-    map<PtrMapPoint, size_t>::iterator it = mObservations.find(pMP);
+    auto it = mObservations.find(pMP);
 
     return (it != mObservations.end());
 }
@@ -237,12 +251,8 @@ bool KeyFrame::hasObservation(size_t idx)
 void KeyFrame::addObservation(PtrMapPoint pMP, size_t idx)
 {
     locker lock(mMutexObs);
-    if (!pMP)
-        return;
-    if (pMP->isNull())
-        return;
-    mObservations[pMP] = idx;
-    mDualObservations[idx] = pMP;
+    mObservations.insert(make_pair(pMP, idx));
+    mDualObservations.insert(make_pair(idx, pMP));
 }
 
 map<PtrMapPoint, size_t> KeyFrame::getObservations()
@@ -319,23 +329,17 @@ DBoW2::BowVector KeyFrame::GetBowVector()
     return mBowVec;
 }
 
-//! 找到特征点对应的MPs，关键函数，后续应该有一个观测更新的函数需要被调用
 vector<PtrMapPoint> KeyFrame::GetMapPointMatches()
 {
     vector<PtrMapPoint> ret(N, nullptr);
-
-    std::map<size_t, PtrMapPoint>::iterator iter;
-    for (size_t i = 0; i != N; ++i) {
-        iter = mDualObservations.find(i);
-        if (iter != mDualObservations.end())
-            ret[i] = iter->second;
-    }
+    for (auto iter = mDualObservations.begin(), iend = mDualObservations.end(); iter != iend; ++iter)
+        ret[iter->first] = iter->second;
 
     return ret;
 }
 
 /**
- * @brief KeyFrame::setObservation 设置MP的观测，在MP被merge的时候调用
+ * @brief 设置MP的观测，在MP被merge的时候调用
  * @param pMP   观测上要设置的MP
  * @param idx   特征点的编号
  */
@@ -347,7 +351,7 @@ void KeyFrame::setObservation(const PtrMapPoint &pMP, size_t idx)
     if (mDualObservations.find(idx) == mDualObservations.end())
         return;
 
-    mObservations.erase(mDualObservations[idx]);
+//    mObservations.erase(mDualObservations[idx]);
     mObservations[pMP] = idx;
     mDualObservations[idx] = pMP;
 }
@@ -356,9 +360,9 @@ PtrMapPoint KeyFrame::getObservation(size_t idx)
 {
     locker lock(mMutexObs);
 
-    if (!mDualObservations[idx]) {
+    if (mDualObservations[idx] == nullptr)
         fprintf(stderr, "[KeyFrame] This is a NULL index in observation!\n");
-    }
+
     return mDualObservations[idx];
 }
 

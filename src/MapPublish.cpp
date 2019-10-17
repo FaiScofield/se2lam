@@ -100,8 +100,8 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNow.ns = "MapPointsNow";
     mMPsNow.id = 5;
     mMPsNow.type = visualization_msgs::Marker::POINTS;
-    mMPsNow.scale.x = mPointSize;
-    mMPsNow.scale.y = mPointSize;
+    mMPsNow.scale.x = mPointSize * 2.f;
+    mMPsNow.scale.y = mPointSize * 2.f;
     mMPsNow.pose.orientation.w = 1.0;
     mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.color.r = 1.0;
@@ -137,25 +137,13 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.color.b = 1.0;
     mFeatGraph.color.a = 1.0;
 
-    // Configure KeyFrames Spanning Tree
-    //    mMST.header.frame_id = MAP_FRAME_ID;
-    //    mMST.ns = GRAPH_NAMESPACE;
-    //    mMST.id = 8;
-    //    mMST.type = visualization_msgs::Marker::LINE_LIST;
-    //    mMST.scale.x = 0.005;
-    //    mMST.pose.orientation.w = 1.0;
-    //    mMST.action = visualization_msgs::Marker::ADD;
-    //    mMST.color.b = 1.0f;
-    //    mMST.color.g = 1.0f;
-    //    mMST.color.a = 1.0;
-
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
     mVIGraph.ns = "VIGraph";
-    mVIGraph.id = 9;
+    mVIGraph.id = 8;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mVIGraph.scale.x = 0.05;
-    mVIGraph.scale.y = 0.05;
+    mVIGraph.scale.x = 0.1;
+    mVIGraph.scale.y = 0.1;
     mVIGraph.pose.orientation.w = 1.0;
     mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.color.r = 0.0;
@@ -166,11 +154,11 @@ MapPublish::MapPublish(Map* pMap)
     // Configure Odometry Raw Graph, light red
     mOdomRawGraph.header.frame_id = MAP_FRAME_ID;
     mOdomRawGraph.ns = "OdomRawGraph";
-    mOdomRawGraph.id = 10;
+    mOdomRawGraph.id = 9;
     mOdomRawGraph.type = visualization_msgs::Marker::LINE_LIST;
     mOdomRawGraph.action = visualization_msgs::Marker::ADD;
-    mOdomRawGraph.scale.x = 0.03;
-    mOdomRawGraph.scale.y = 0.03;
+    mOdomRawGraph.scale.x = 0.07;
+    mOdomRawGraph.scale.y = 0.07;
     mOdomRawGraph.pose.orientation.w = 1.0;
     mOdomRawGraph.color.r = 0.95;
     mOdomRawGraph.color.g = 0.0;
@@ -180,7 +168,7 @@ MapPublish::MapPublish(Map* pMap)
     // Cofigure MPs with no good Parallax, purple
     mMPsNoGoodPrl.header.frame_id = MAP_FRAME_ID;
     mMPsNoGoodPrl.ns = "MapPointsNoGoodParallax";
-    mMPsNoGoodPrl.id = 11;
+    mMPsNoGoodPrl.id = 10;
     mMPsNoGoodPrl.type = visualization_msgs::Marker::POINTS;
     mMPsNoGoodPrl.scale.x = 0.08;
     mMPsNoGoodPrl.scale.y = 0.08;
@@ -209,7 +197,6 @@ MapPublish::MapPublish(Map* pMap)
 
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
-    //    publisher.publish(mMST);
 
     publisher.publish(mVIGraph);
     publisher.publish(mOdomRawGraph);
@@ -221,8 +208,6 @@ MapPublish::~MapPublish()
 
 void MapPublish::publishKeyFrames()
 {
-    mErrorSum = 0.;
-
     mKFsNeg.points.clear();
     mKFsAct.points.clear();
 
@@ -241,16 +226,14 @@ void MapPublish::publishKeyFrames()
     cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
     vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
-    if (vKFsAll.empty()) {
+    if (vKFsAll.empty())
         return;
-    }
 
     vector<PtrKeyFrame> vKFsAct;
-    if (mbIsLocalize) {
+    if (mbIsLocalize)
         vKFsAct = mpLocalizer->GetLocalKFs();
-    } else {
+    else
         vKFsAct = mpMap->getLocalKFs();
-    }
 
     //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
     for (int i = 0, iend = vKFsAll.size(); i != iend; ++i) {
@@ -422,7 +405,6 @@ void MapPublish::publishKeyFrames()
 
     publisher.publish(mKFsNeg);
     publisher.publish(mKFsAct);
-
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
@@ -448,7 +430,7 @@ void MapPublish::publishMapPoints()
 
     vector<PtrMapPoint> vpMPNeg = mpMap->getAllMP();
 
-    // AllMPs 包含了 MPsNeg 和 MPsAct
+    // MPsAll 包含了 MPsNeg 和 MPsAct
     vector<PtrMapPoint> vpMPNegGood;
     for (auto iter = vpMPNeg.begin(); iter != vpMPNeg.end(); iter++) {
         PtrMapPoint pMPtemp = *iter;
@@ -466,7 +448,7 @@ void MapPublish::publishMapPoints()
         if (count == 0)
             vpMPActGood.push_back(pMPtemp);
     }
-    vpMPAct.swap(vpMPActGood);
+    vpMPAct.swap(vpMPActGood); // MPsAct 去掉 MPsNow
 
     mMPsNeg.points.reserve(vpMPNeg.size());
     for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
@@ -494,9 +476,9 @@ void MapPublish::publishMapPoints()
         msg_p.y = vpMPAct[i]->getPos().y / mScaleRatio;
         msg_p.z = vpMPAct[i]->getPos().z / mScaleRatio;
 
-        if (!vpMPAct[i]->isGoodPrl())
-            mMPsNoGoodPrl.points.push_back(msg_p);
-        else
+//        if (!vpMPAct[i]->isGoodPrl())
+//            mMPsNoGoodPrl.points.push_back(msg_p);
+//        else
             mMPsAct.points.push_back(msg_p);
     }
 
@@ -511,9 +493,9 @@ void MapPublish::publishMapPoints()
         msg_p.y = pMPtmp->getPos().y / mScaleRatio;
         msg_p.z = pMPtmp->getPos().z / mScaleRatio;
 
-        if (!pMPtmp->isGoodPrl())
-            mMPsNoGoodPrl.points.push_back(msg_p);
-        else
+//        if (!pMPtmp->isGoodPrl())
+//            mMPsNoGoodPrl.points.push_back(msg_p);
+//        else
             mMPsNow.points.push_back(msg_p);
     }
 
@@ -599,6 +581,59 @@ void MapPublish::publishCameraCurr(const cv::Mat& Twc)
     publisher.publish(mKFNow);
 }
 
+//! 可视化原始odo的输入
+void MapPublish::publishOdomInformation()
+{
+    static geometry_msgs::Point msgsLast;
+    geometry_msgs::Point msgsCurr;
+
+    if (!mbIsLocalize) {
+        //! 这里要对齐到首帧的Odom, 位姿从原点开始
+        static Se2 firstOdom = mpMap->getCurrentKF()->odom;
+        static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
+
+        Se2 currOdom = mpMap->getCurrentKF()->odom;
+        Mat Twbi = currOdom.toCvSE3();
+        Mat Tb0bi = (Tb0w * Twbi).col(3);
+        msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
+        msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
+    } else {
+        //! 这里要对齐到首帧的Pose, 位姿不一定从原点开始
+        auto currState = mpLocalizer->getTrackingState();
+        auto lastState = mpLocalizer->getLastTrackingState();
+
+        if (currState == cvu::OK) {
+            PtrKeyFrame pKF = mpLocalizer->getKFCurr();
+
+            static bool isFirstFrame = true;
+            static Mat Twc_b = mpLocalizer->getCurrKFPose().toCvSE3();
+            static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
+
+            Mat Twbi = (pKF->odom).toCvSE3();
+            Mat Tb0bi = Tb0w * Twbi;              // 先变换到首帧的odom坐标系原点下
+            Mat Twc_bi = (Twc_b * Tb0bi).col(3);  // 再变换到首帧的pose坐标系原点下
+            msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
+            msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
+            if (currState == cvu::OK && lastState == cvu::LOST)
+                isFirstFrame = true;
+            if (isFirstFrame) {
+                msgsLast = msgsCurr;
+                isFirstFrame = false;
+                ;
+            }
+        } else {
+            return;
+        }
+    }
+
+    mOdomRawGraph.points.push_back(msgsLast);
+    mOdomRawGraph.points.push_back(msgsCurr);
+    msgsLast = msgsCurr;
+
+    mOdomRawGraph.header.stamp = ros::Time::now();
+    publisher.publish(mOdomRawGraph);
+}
+
 void MapPublish::run()
 {
     mbIsLocalize = Config::LocalizationOnly;
@@ -610,9 +645,8 @@ void MapPublish::run()
     int nSaveId = 0;
     ros::Rate rate(Config::FPS /* / 3*/);
     while (nh.ok()) {
-        if (checkFinish()) {
+        if (checkFinish())
             break;
-        }
         if (mpMap->empty())
             continue;
 
@@ -692,57 +726,6 @@ bool MapPublish::isFinished()
     return mbFinished;
 }
 
-//! 可视化原始odo的输入
-void MapPublish::publishOdomInformation()
-{
-    static geometry_msgs::Point msgsLast;
-    geometry_msgs::Point msgsCurr;
 
-    if (!mbIsLocalize) {
-        //! 这里要对齐到首帧的Odom, 位姿从原点开始
-        static Se2 firstOdom = mpMap->getCurrentKF()->odom;
-        static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
-
-        Se2 currOdom = mpMap->getCurrentKF()->odom;
-        Mat Twbi = currOdom.toCvSE3();
-        Mat Tb0bi = (Tb0w * Twbi).col(3);
-        msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
-        msgsCurr.y = Tb0bi.at<float>(1, 0) / mScaleRatio;
-    } else {
-        //! 这里要对齐到首帧的Pose, 位姿不一定从原点开始
-        auto currState = mpLocalizer->getTrackingState();
-        auto lastState = mpLocalizer->getLastTrackingState();
-
-        if (currState == cvu::OK) {
-            PtrKeyFrame pKF = mpLocalizer->getKFCurr();
-
-            static bool isFirstFrame = true;
-            static Mat Twc_b = mpLocalizer->getCurrKFPose().toCvSE3();
-            static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
-
-            Mat Twbi = (pKF->odom).toCvSE3();
-            Mat Tb0bi = Tb0w * Twbi;              // 先变换到首帧的odom坐标系原点下
-            Mat Twc_bi = (Twc_b * Tb0bi).col(3);  // 再变换到首帧的pose坐标系原点下
-            msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
-            msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
-            if (currState == cvu::OK && lastState == cvu::LOST)
-                isFirstFrame = true;
-            if (isFirstFrame) {
-                msgsLast = msgsCurr;
-                isFirstFrame = false;
-                ;
-            }
-        } else {
-            return;
-        }
-    }
-
-    mOdomRawGraph.points.push_back(msgsLast);
-    mOdomRawGraph.points.push_back(msgsCurr);
-    msgsLast = msgsCurr;
-
-    mOdomRawGraph.header.stamp = ros::Time::now();
-    publisher.publish(mOdomRawGraph);
-}
 
 }  // namespace se2lam

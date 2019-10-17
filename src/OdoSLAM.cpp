@@ -150,7 +150,7 @@ void OdoSLAM::start()
 
         thread threadTracker(&Track::run, mpTrack);
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
-        thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
+//        thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
 
         if (Config::NeedVisulization) {
             thread threadMapPub(&MapPublish::run, mpMapPub);
@@ -159,7 +159,7 @@ void OdoSLAM::start()
 
         threadTracker.detach();
         threadLocalMapper.detach();
-        threadGlobalMapper.detach();
+//        threadGlobalMapper.detach();
     }
 
     thread threadWait(&wait, this);

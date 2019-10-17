@@ -38,7 +38,7 @@ struct Se2 {
     double timeStamp;    // for odo message
 
     Se2();
-    Se2(float _x, float _y, float _theta, double _time = 0.f);
+    Se2(float _x, float _y, float _theta, double _time = 0.);
     Se2(const Se2& that);
     ~Se2();
     Se2 inv() const;

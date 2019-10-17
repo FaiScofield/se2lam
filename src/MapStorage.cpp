@@ -119,9 +119,11 @@ void MapStorage::sortMapPoints() {
 void MapStorage::saveKeyFrames() {
 
     // Save images to individual files
-    for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
-        PtrKeyFrame pKF = mvKFs[i];
-        imwrite(mMapPath + to_string(i) + ".bmp", pKF->mImage);
+    if (Config::NeedVisulization) {
+        for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
+            PtrKeyFrame pKF = mvKFs[i];
+            imwrite(mMapPath + to_string(i) + ".bmp", pKF->mImage);
+        }
     }
 
     // Write data to file
@@ -400,14 +402,16 @@ void MapStorage::loadKeyFrames() {
 
     file.release();
 
-    for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
-        PtrKeyFrame pKF = mvKFs[i];
-        Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);
-        if (!img.data) {
-            fprintf(stderr, "[MapStore] KeyFrame image '%d.bmp' doesn't exist!!\n", i);
-            continue;
+    if (Config::NeedVisulization) {
+        for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
+            PtrKeyFrame pKF = mvKFs[i];
+            Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);
+            if (!img.data) {
+                fprintf(stderr, "[MapStore] KeyFrame image '%d.bmp' doesn't exist!!\n", i);
+                continue;
+            }
+            img.copyTo(pKF->mImage);
         }
-        img.copyTo(pKF->mImage);
     }
 
     std::cout << "[MapStorage] Load " << mvKFs.size() << " KeyFrames." << std::endl;

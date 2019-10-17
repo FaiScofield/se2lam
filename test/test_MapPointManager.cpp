@@ -89,7 +89,7 @@ int main(int argc, char** argv)
         tt.mpMap->setCurrentFramePose(tt.mCurrentFrame.getPose());
 
         timer.stop();
-        fprintf(stdout, "[Track] #%ld Tracking consuming time: %fms\n", tt.mCurrentFrame.id, timer.time);
+        fprintf(stdout, "[Track] #%ld Tracking consuming time: %.2fms\n", tt.mCurrentFrame.id, timer.time);
 
         //! 匹配情况可视化
 //        Mat outImgWarp;

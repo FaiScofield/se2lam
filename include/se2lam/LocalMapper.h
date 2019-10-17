@@ -25,8 +25,8 @@ public:
 
     void run();
 
-    void setMap(Map* pMap);
-    void setGlobalMapper(GlobalMapper* pGlobalMapper);
+    void setMap(Map* pMap) { mpMap = pMap; mpMap->setLocalMapper(this); }
+    void setGlobalMapper(GlobalMapper* pGlobalMapper) { mpGlobalMapper = pGlobalMapper; }
 
     void addNewKF(PtrKeyFrame& pKF, const std::vector<cv::Point3f>& localMPs,
                   const std::vector<int>& vMatched12, const std::vector<bool>& vbGoodPrl);
@@ -34,33 +34,31 @@ public:
     void findCorrespd(const std::vector<int>& vMatched12, const std::vector<cv::Point3f>& localMPs,
                       const std::vector<bool>& vbGoodPrl);
 
+    void updateLocalGraphInMap();
+    void pruneRedundantKFinMap();
     void removeOutlierChi2();
-
     void localBA();
-    void setAbortBA();
+
+    void setAbortBA() { mbAbortBA = true; }
     bool acceptNewKF();
     void setAcceptNewKF(bool value);
     void setGlobalBABegin(bool value);
 
-    // For debugging by hbtang
-    void printOptInfo(const SlamOptimizer& _optimizer);
-
     void requestFinish();
     bool isFinished();
 
-    void updateLocalGraphInMap();
-    void pruneRedundantKFinMap();
-
-    //    int getNumFKsInQueue();
+    // For debugging by hbtang
+    void printOptInfo(const SlamOptimizer& _optimizer);
 
     bool mbPrintDebugInfo;
-
     std::mutex mutexMapper;
 
 protected:
+    bool checkFinish();
+    void setFinish();
+
     Map* mpMap;
     GlobalMapper* mpGlobalMapper;
-    ORBVocabulary* mpORBVoc;
 
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
@@ -73,8 +71,6 @@ protected:
     bool mbGlobalBABegin;
     std::mutex mMutexLocalGraph;
 
-    bool checkFinish();
-    void setFinish();
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;

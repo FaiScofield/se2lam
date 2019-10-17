@@ -230,12 +230,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
         // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
         if (mvMatchIdx[i] >= 0 && !mpReferenceKF->hasObservation(i)) {
             if (pKF->hasObservation(mvMatchIdx[i])) {
-                //! TODO to delete, for debug.
-                //! 这个应该很可能会出现, 局部MPs投影到当前KF上可能会关联上.
-                //! 如果出现了这种情况, 应该要给参考帧也关联上此MP.
                 PtrMapPoint pMP = pKF->getObservation(mvMatchIdx[i]);
-                fprintf(stderr, "[LocalMap] 这个可能会出现, 局部MPs投影到当前#KF%ld上可能会关联上.! 如果出现了这种情况, 应该要给参考帧也关联上此MP%ld.\n",
-                        pKF->mIdKF, pMP->mId);
 
                 pMP->addObservation(mpReferenceKF, i);
                 mpReferenceKF->addObservation(pMP, i);
@@ -248,7 +243,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
             //! TODO to delete, for debug.
             //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新, 故这里不能生成MP
             if (posW.z < 0.f) {
-                fprintf(stderr, "[LocalMap] #KF%ld的mvViewMPs[%d].z < 0. \n", mpReferenceKF->mIdKF, i);
+                fprintf(stderr, "[LocalMap] #KF%ld的mvViewMPs[%ld].z < 0. \n", mpReferenceKF->mIdKF, i);
                 cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << mpReferenceKF->mvViewMPs[i] << endl;
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
                 continue;

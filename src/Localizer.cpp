@@ -62,7 +62,7 @@ void Localizer::run()
     ComputeBowVecAll();
 
     timer.stop();
-    fprintf(stderr, "[Localizer] Compute Bow Vectors all cost time: %fms\n", timer.time);
+    fprintf(stderr, "[Localizer] Compute Bow Vectors all cost time: %.2fms\n", timer.time);
     cerr << "[Localizer] Tracking Start ..." << endl;
 
     // traj log
@@ -87,7 +87,7 @@ void Localizer::run()
         if (!sensorUpdated)
             continue;
 
-        mpSensors->readData(odo, img, imgTime);
+        mpSensors->readDataWithTime(odo, img, imgTime);
         ReadFrameInfo(img, imgTime, odo);  // 每一帧都是KF，mpKFRef数据赋值
 
         //! 定位成功后会更新Tcw, 并由Tcw更新Twb

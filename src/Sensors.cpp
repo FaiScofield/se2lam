@@ -11,12 +11,10 @@ namespace se2lam
 {
 
 Sensors::Sensors() : imgUpdated(false), odoUpdated(false)
-{
-}
+{}
 
 Sensors::~Sensors()
-{
-}
+{}
 
 bool Sensors::update()
 {
@@ -35,6 +33,7 @@ void Sensors::updateImg(const cv::Mat& img_, double time_)
 
     img_.copyTo(mImg);
     timeImg = time_;
+
     imgUpdated = true;
 }
 
@@ -49,11 +48,12 @@ void Sensors::updateOdo(float x_, float y_, float theta_, double time_)
     mOdo.y = y_;
     mOdo.theta = theta_;
     mOdo.timeStamp = time_;
+    timeOdo = time_;
 
     odoUpdated = true;
 }
 
-void Sensors::updateOdo(std::vector<Se2>& odoQue_)
+void Sensors::updateOdoSequence(std::vector<Se2>& odoQue_)
 {
     std::unique_lock<std::mutex> lock(mMutexOdo);
 
@@ -81,7 +81,7 @@ void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
     cndvSensorUpdate.notify_all();
 }
 
-void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_)
+void Sensors::readDataSequence(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
@@ -95,7 +95,7 @@ void Sensors::readData(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double&
     cndvSensorUpdate.notify_all();
 }
 
-void Sensors::readData(Se2& odo, cv::Mat& img, double& time)
+void Sensors::readDataWithTime(Se2& odo, cv::Mat& img, double& time)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
@@ -121,7 +121,7 @@ Se2 Sensors::dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& ti
     Se2 res;
     size_t n = dataOdoSeq_.size();
     if (n < 2) {
-        std::cerr << "[Track] ** WARNING ** Less odom sequence input!" << std::endl;
+        std::cerr << "[Sensor][Warni] Less odom sequence input!" << std::endl;
         return res;
     }
 

@@ -61,14 +61,14 @@ void MapPoint::setNull(shared_ptr<MapPoint>& pThis)
     mbNull = true;
     mbGoodParallax = false;
 
-    fprintf(stderr, "[MapPoint] MP#%ld before handling observations(%ld), Count pointer = %ld\n",
+    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测前(%ld), 引用计数 = %ld\n",
             mId, mObservations.size(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
     }
-    fprintf(stderr, "[MapPoint] MP#%ld after handling observations(%ld), Count pointer = %ld\n",
+    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测后, 引用计数 = %ld\n",
             mId, mObservations.size(), pThis.use_count());
 
     mObservations.clear();
@@ -77,7 +77,7 @@ void MapPoint::setNull(shared_ptr<MapPoint>& pThis)
 
     mpMap->eraseMP(pThis);
 
-    fprintf(stderr, "[MapPoint] A MP#%ld is set to null by others. Count pointer = %ld\n", pThis->mId,
+    fprintf(stderr, "[MapPoint] MP#%ld 被Map设置为null. 引用计数 = %ld\n", pThis->mId,
             pThis.use_count());
 }
 
@@ -97,7 +97,7 @@ void MapPoint::setNull()
 
     auto ptr = shared_from_this();
     mpMap->eraseMP(ptr);
-    fprintf(stderr, "[MapPoint] A MP#%ld is set to null by itself. Count pointer = %ld\n", this->mId,
+    fprintf(stderr, "[MapPoint] MP#%ld 被自己设置为null. 引用计数 = %ld\n", this->mId,
             ptr.use_count());
 }
 
@@ -136,7 +136,7 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
 
     mObservations.erase(pKF);
     if (mObservations.size() == 0) {
-        fprintf(stderr, "[MapPoint] A MP#%ld is set to null in eraseObservation()\n", mId);
+        fprintf(stderr, "[MapPoint] MP#%ld 因为没有观测而被设置为null\n", mId);
         setNull();  // 这个函数不能加锁mMutexObs
     }
     else
@@ -163,12 +163,13 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
 {
     locker lock(mMutexObs);
 
-    //! map.insert()会保证元素唯一性. operator[]返回引用,则会更新
+    //! 插入时insert()的效率高, 更新时operator[]的效率高
     mObservations.insert(make_pair(pKF, idx));
-//    mObservations[pKF] = idx;
 
+    WorkTimer timer;
     updateMainKFandDescriptor();
     updateParallax(pKF);
+//    printf("[MapPoint][Timer] MP#%ld 添加观测后更新描述子和视差共耗时: %.2fms\n", mId, timer.count());
 
     if (mbNull && mObservations.size() > 0)
         mbNull = false;
@@ -401,7 +402,7 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame &pKF1, const PtrKeyFrame &p
         locker lock(mMutexPos);
         mPos = posW;
         mbGoodParallax = true;
-        fprintf(stderr, "[MapPoint] Parallax of MP %ld updated to good now!\n", mId);
+        fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
     }
 
     // Update measurements in KFs. 更新约束和信息矩阵

@@ -63,7 +63,8 @@ public:
     void addCovisibleKF(const std::shared_ptr<KeyFrame> pKF);
 
     //! NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
-    void setViewMP(cv::Point3f pt3f, int idx, Eigen::Matrix3d info);
+    void setViewMP(cv::Point3f pt3f, size_t idx, Eigen::Matrix3d info);
+    cv::Point3f getViewMPPoseInCamareFrame(size_t idx);
 
     //! Functions for observation operations
     std::set<PtrMapPoint> getAllObsMPs(bool checkParallax = true);
@@ -95,8 +96,7 @@ public:
 
     vector<PtrMapPoint> GetMapPointMatches();
 
-    void addFtrMeasureFrom(std::shared_ptr<KeyFrame> pKF, const cv::Mat& _mea,
-                           const cv::Mat& _info);
+    void addFtrMeasureFrom(std::shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
     void addFtrMeasureTo(std::shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
     void eraseFtrMeasureFrom(std::shared_ptr<KeyFrame> pKF);
     void eraseFtrMeasureTo(std::shared_ptr<KeyFrame> pKF);

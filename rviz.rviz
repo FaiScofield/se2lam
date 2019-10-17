@@ -25,7 +25,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: ImgMatch
 Toolbars:
   toolButtonStyle: 2
 Visualization Manager:
@@ -36,7 +36,16 @@ Visualization Manager:
       Marker Topic: /se2lam/Map
       Name: Marker
       Namespaces:
-        {}
+        Camera: true
+        CovisGraph: false
+        FeatGraph: false
+        KeyFramesActive: false
+        KeyFramesNegative: false
+        MapPointsActive: true
+        MapPointsNegative: true
+        MapPointsNow: true
+        OdoGraph: true
+        OdomRawGraph: true
       Queue Size: 100
       Value: true
     - Class: rviz/Image
@@ -95,7 +104,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 62.8375664
+      Distance: 25.3103848
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1

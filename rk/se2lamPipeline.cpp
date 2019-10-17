@@ -39,7 +39,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     bf::path path(dataFolder);
     if (!bf::exists(path)) {
-        cerr << "[main ] Data folder doesn't exist!" << endl;
+        cerr << "[main ][Error] Data folder doesn't exist!" << endl;
         ros::shutdown();
         return;
     }
@@ -60,11 +60,11 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     }
 
     if (allImages.empty()) {
-        cerr << "[main ] Not image data in the folder!" << endl;
+        cerr << "[main ][Error] Not image data in the folder!" << endl;
         ros::shutdown();
         return;
     } else {
-        cout << "[main ] Read " << allImages.size() << " image files in the folder." << endl;
+        cout << "[main ][Info ] Read " << allImages.size() << " image files in the folder." << endl;
     }
 
     //! 注意不能直接对string排序
@@ -76,7 +76,7 @@ void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
 {
     ifstream rec(odomFile);
     if (!rec.is_open()) {
-        cerr << "[main ] Error in opening file: " << odomFile << endl;
+        cerr << "[main ][Error] Error in opening file: " << odomFile << endl;
         rec.close();
         ros::shutdown();
         return;
@@ -96,11 +96,11 @@ void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
     rec.close();
 
     if (odoData.empty()) {
-        cerr << "[main ] Not odom data in the file!" << endl;
+        cerr << "[main ][Error] Not odom data in the file!" << endl;
         ros::shutdown();
         return;
     } else {
-        cout << "[main ] Read " << odoData.size() << " odom datas from the file." << endl;
+        cout << "[main ][Info ] Read " << odoData.size() << " odom datas from the file." << endl;
     }
 }
 
@@ -117,7 +117,7 @@ void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
             break;
     }
     allImages.erase(allImages.begin(), iter);
-    cout << "[main ] Cut some images for timestamp too earlier, now image size: "
+    cout << "[main ][Info ] Cut some images for timestamp too earlier, now image size: "
          << allImages.size() << endl;
 
     // 数据对齐
@@ -159,41 +159,64 @@ int main(int argc, char** argv)
     vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
 
-    string odomRawFile = Config::DataPath + "/OdomRaw.txt";
-    vector<Se2> allOdoms;
-    readOdomsRK(odomRawFile, allOdoms);
+//    string odomRawFile = Config::DataPath + "/OdomRaw.txt";
+//    vector<Se2> allOdoms;
+//    readOdomsRK(odomRawFile, allOdoms);
 
-    map<RK_IMAGE, vector<Se2>> dataAligned;
-    dataAlignment(allImages, allOdoms, dataAligned);
-    assert(allImages.size() == dataAligned.size());
+//    map<RK_IMAGE, vector<Se2>> dataAligned;
+//    dataAlignment(allImages, allOdoms, dataAligned);
+//    assert(allImages.size() == dataAligned.size());
+
+    string odomRawFile = Config::DataPath + "/odo_raw.txt";
+    ifstream rec(odomRawFile);
+    if (!rec.is_open()) {
+        cerr << "[main ][Error] Please check file if exists!" << endl;
+        rec.close();
+        ros::shutdown();
+        return -1;
+    }
+
+    float x, y, theta;
+    string line;
 
     size_t m = static_cast<size_t>(Config::ImgStartIndex);
     size_t n = static_cast<size_t>(Config::ImgCount);
     n = min(allImages.size(), n);
 
     ros::Rate rate(Config::FPS);
-    for (size_t i = m; i != n && system.ok(); ++i) {
+    for (size_t i = 0; i != n && system.ok(); ++i) {
+        // 起始帧不为0的时候保证odom数据跟image对应
+        if (i < m) {
+            std::getline(rec, line);
+            continue;
+        }
+        std::getline(rec, line);
+        istringstream iss(line);
+        iss >> x >> y >> theta;
+
         string fullImgName = allImages[i].fileName;
         double imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
-            cerr << "[main ] No image data for image " << fullImgName << endl;
+            cerr << "[main ][Error] No image data for image " << fullImgName << endl;
             continue;
         }
 
-        system.receiveOdoData(dataAligned[allImages[i]]);
-        system.receiveImgData(img, imgTime);
+//        system.receiveOdoDatas(dataAligned[allImages[i]]);
+//        system.receiveImgData(img, imgTime);
+        system.receiveOdoData(x, y, theta);
+        system.receiveImgData(img);
 
         rate.sleep();
     }
-    cout << "[main ] Finish test_rk..." << endl;
+    cout << "[main ][Info ] Finish test_rk..." << endl;
 
     system.requestFinish();  // 让系统给其他线程发送结束指令
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "[main ] System shutdown..." << endl;
-    cout << "[main ] Exit test..." << endl;
+    cout << "[main ][Info ] System shutdown..." << endl;
+    cout << "[main ][Info ] Exit test..." << endl;
     return 0;
 }

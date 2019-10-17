@@ -70,7 +70,7 @@ private:
     void updateFramePose();
     int removeOutliers();
 
-    bool needNewKF(int nTrackedOldMP, int nMatched);
+    bool needNewKF();
     int doTriangulate();
 
     bool checkFinish();
@@ -96,11 +96,13 @@ private:
     PtrKeyFrame mpReferenceKF;
     std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧KP的MP观测在相机坐标系下的坐标即Pc, 这和mViewMPs有啥关系??
-    std::vector<int> mMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
+    std::vector<int> mvMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
 //    std::set<PtrKeyFrame> mspKFLocal;
 //    std::set<PtrMapPoint> mspMPLocal;
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
+    int mnInliers, mnMatchSum, mnTrackedOld;
+    int mnLostFrames;
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames;
@@ -110,11 +112,8 @@ private:
     PreSE2 preSE2;
     Se2 mLastOdom;
 
-    int nInliers;
-    int nLostFrames;
-
+    cv::Mat K, D;
     cv::Mat Homography;
-    cv::Mat mVelocity;
 
     bool mbFinishRequested;
     bool mbFinished;

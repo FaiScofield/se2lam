@@ -94,8 +94,7 @@ void GlobalMapper::run()
 
         timer.stop();
         double t1 = timer.time;
-        printf("[Globa] #%ld(KF#%ld) [Map]UpdateFeatGraph() cost time: %fms\n", mpKFCurr->id,
-               mpKFCurr->mIdKF, t1);
+        printf("[Globa][Timer] #%ld(KF#%ld) G1.更新特征图耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t1);
         timer.start();
 
         //! Refresh BowVec for all KFs
@@ -103,8 +102,7 @@ void GlobalMapper::run()
 
         timer.stop();
         double t2 = timer.time;
-        printf("[Globa] #%ld(KF#%ld) ComputeBowVecAll() cost time: %fms\n", mpKFCurr->id,
-               mpKFCurr->mIdKF, t2);
+        printf("[Globa][Timer] #%ld(KF#%ld) G2.计算词向量耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t2);
         timer.start();
 
         //! Detect loop close
@@ -112,8 +110,7 @@ void GlobalMapper::run()
 
         timer.stop();
         double t3 = timer.time;
-        printf("[Globa] #%ld(KF#%ld) DetectLoopClose() cost time: %fms\n", mpKFCurr->id,
-               mpKFCurr->mIdKF, t3);
+        printf("[Globa][Timer] #%ld(KF#%ld) G3.回环检测耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t3);
         timer.start();
 
         //! Verify loop close
@@ -133,8 +130,7 @@ void GlobalMapper::run()
         timer.stop();
         double t4 = timer.time;
         if (bIfLoopCloseVerified)
-            printf("[Globa] #%ld(KF#%ld) VerifyLoopClose() passed! cost time: %fms\n", mpKFCurr->id,
-                   mpKFCurr->mIdKF, t4);
+            printf("[Globa][Timer] #%ld(KF#%ld) G4.回环验证通过, 耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t4);
 
         timer.start();
 
@@ -142,21 +138,21 @@ void GlobalMapper::run()
         if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed)) {
             locker lock(mpLocalMapper->mutexMapper);
 
+            WorkTimer wt;
             GlobalBA();  // 更新KF和MP
 
             mbGlobalBALastLoop = true;
-            printf("[Globa] #%ld(KF#%ld) Loop closed occured! numKFs = %ld, numMPs = %ld\n\n",
-                   mpKFCurr->id, mpKFCurr->mIdKF, mpMap->countKFs(), mpMap->countMPs());
+            printf("[Globa][Timer] #%ld(KF#%ld) G5.全局优化耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
+                   mpKFCurr->id, mpKFCurr->mIdKF, wt.count(), mpMap->countKFs(), mpMap->countMPs());
         } else {
             mbGlobalBALastLoop = false;
         }
 
         timer.stop();
-        double t5 = timer.time;
+        double t5 = t1 + t2 + t3 + t4 + timer.time;
 
-        fprintf(stderr, "[Globa] #%ld(KF#%ld) loopTime = %fms, numKFs = %ld, numMPs = %ld\n",
-                mpKFCurr->id, mpKFCurr->mIdKF, t1 + t2 + t3 + t4 + t5, mpMap->countKFs(),
-                mpMap->countMPs());
+        fprintf(stderr, "[Globa][Timer] #%ld(KF#%ld) G6.GlobalMap线程本次运行总耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
+                mpKFCurr->id, mpKFCurr->mIdKF, t5, mpMap->countKFs(), mpMap->countMPs());
 
         mbNewKF = false;
 
@@ -176,7 +172,7 @@ void GlobalMapper::run()
  */
 void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs)
 {
-    cout << "[ Map ] UpdataFeatGraph().... " << endl;
+    cout << "[ Map ] 正在更新特征图.... " << endl;
     int numPairKFs = _vKFPairs.size();
     for (int i = 0; i != numPairKFs; ++i) {
         pair<PtrKeyFrame, PtrKeyFrame> pairKF = _vKFPairs[i];
@@ -287,21 +283,21 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     //! Remove Outliers: by RANSAC of Fundamental
     RemoveMatchOutlierRansac(mpKFCurr, mpKFLoop, mapMatch);
     _mapMatchGood = mapMatch;
-    int numGoodMatch = mapMatch.size();  // KP匹配数,包含了MP匹配数
+    int nGoodKFMatch = mapMatch.size();  // KP匹配数,包含了MP匹配数
 
     //! Remove all KPs matches
     RemoveKPMatch(mpKFCurr, mpKFLoop, mapMatch);
     _mapMatchMP = mapMatch;
-    int numGoodMPMatch = mapMatch.size();  // MP匹配数
+    int nGoodMPMatch = mapMatch.size();  // MP匹配数
 
     //! Show Match Info
     set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
-    int numMPsCurrent = spMPsCurrent.size();           // 当前KF的可观测MP数
-    int numKPsCurrent = mpKFCurr->mvKeyPoints.size();  // 当前KF提取的KP数
+    int nMPsCurrent = spMPsCurrent.size();           // 当前KF的可观测MP数
+    int nKPsCurrent = mpKFCurr->mvKeyPoints.size();  // 当前KF提取的KP数
 
     //! Create New Feature based Constraint. 匹配数达到阈值要求,构建特征图和约束
-    double ratioMPMatched = numGoodMPMatch * 1.0 / numMPsCurrent;
-    if (numGoodMPMatch >= numMinMatchMP && numGoodMatch >= numMinMatchKP &&
+    double ratioMPMatched = nGoodMPMatch * 1.0 / nMPsCurrent;
+    if (nGoodMPMatch >= numMinMatchMP && nGoodKFMatch >= numMinMatchKP &&
         ratioMPMatched >= ratioMinMatchMP) {
         // Generate feature based constraint
         SE3Constraint Se3_Curr_Loop;
@@ -313,17 +309,13 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
         }
 
         if (Config::GlobalPrint) {
-            cerr << "[Globa] LoopClosure Vertify: PASS! Add feature constraint from KF#"
-                 << mpKFCurr->mIdKF << " to KF#" << mpKFLoop->mIdKF
-                 << ", MPGood/KPGood/MPNow/KPNow=" << numGoodMPMatch << "/" << numGoodMatch << "/"
-                 << numMPsCurrent << "/" << numKPsCurrent << endl;
+            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证通过! 和KF#%ld添加了特征约束, MPGood/KPGood/MPNow/KPNow=%d/%d/%d/%d\n",
+                    mpKFCurr->id, mpKFCurr->mIdKF, mpKFLoop->mIdKF, nGoodMPMatch, nGoodKFMatch, nMPsCurrent, nKPsCurrent);
         }
     } else {
         if (Config::GlobalPrint) {
-            cerr << "[Globa] LoopClosure Vertify: FAILED! No enough MPs matched, "
-                    "MPGood/KPGood/MPNow/KPNow = "
-                 << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/"
-                 << numKPsCurrent << endl;
+            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证失败! MP匹配点数不足, MPGood/KPGood/MPNow/KPNow=%d/%d/%d/%d\n",
+                    mpKFCurr->id, mpKFCurr->mIdKF, nGoodMPMatch, nGoodKFMatch, nMPsCurrent, nKPsCurrent);
         }
     }
 
@@ -338,7 +330,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
 //! BUG 会崩溃 20190927
 void GlobalMapper::GlobalBA()
 {
-    cout << "[ Map ] GlobalBA().... " << endl;
+    cout << "[ Map ] 正在进行GlobalBA().... " << endl;
     mpLocalMapper->setGlobalBABegin(true);
 
 #ifdef PRE_REJECT_FTR_OUTLIER
@@ -372,11 +364,11 @@ void GlobalMapper::GlobalBA()
         Mat Twc = cvu::inv(pKF->getPose());
         bool bIfFix = (pKF->mIdKF == 1);
 
-        //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
+//        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(Twc), pKF->mIdKF,
                                                            Config::Tbc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
-        //        pEdge->setLevel(1);
+//        pEdge->setLevel(1);
 
         mapId2pKF[pKF->mIdKF] = pKF;
 
@@ -1105,6 +1097,9 @@ void GlobalMapper::ComputeBowVecAll()
 
 void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
 {
+    if (Config::NeedVisulization)
+        return;
+
     //! Renew images
     if (mpKFCurr == nullptr || mpKFCurr->isNull()) {
         return;
@@ -1255,7 +1250,7 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
     mapMatch = mapMatchGood;
 }
 
-// Remove match pair with KP. 去掉只有KP匹配但是没有对应MP的匹配
+// Remove match pair with KP. 去掉只有KP匹配但是没有对应MP的匹配, 回环验证时调用
 void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
                                  map<int, int>& mapMatch)
 {
@@ -1282,7 +1277,6 @@ void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
     }
 }
 
-// Return all connected KFs from a given KF
 /**
  * @brief 获得和KF特征图上相连的所有KFs
  * @param _pKF          输入KF,搜索起点

@@ -83,12 +83,9 @@ private:
     float mCameraSize;
     float mScaleRatio;
 
-
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;
-
-    double mErrorSum = 0.;
 };  // class MapPublisher
 
 }  // namespace se2lam

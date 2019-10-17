@@ -22,6 +22,7 @@ typedef unique_lock<mutex> locker;
 
 unsigned long Frame::nextId = 1;
 bool Frame::bIsInitialComputations = true;
+bool Frame::bNeedVisulization = true;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 
@@ -44,6 +45,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
         gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
 
         bIsInitialComputations = false;
+        bNeedVisulization = Config::NeedVisulization;
     }
 
     id = nextId++;
@@ -63,7 +65,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
     if (mvKeyPoints.empty())
         return;
 
-    if (Config::NeedVisulization)
+    if (bNeedVisulization)
         imgGray.copyTo(mImage);
 
     //    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
@@ -136,7 +138,7 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
     if (mvKeyPoints.empty())
         return;
 
-    if (Config::NeedVisulization)
+    if (bNeedVisulization)
         imgClahed.copyTo(mImage);
 
     //    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
@@ -183,7 +185,7 @@ Frame::Frame(const Frame& f)
       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
       Trb(f.Trb)
 {
-    if (Config::NeedVisulization)
+    if (bNeedVisulization)
         f.mImage.copyTo(mImage);
 
     for (int i = 0; i != FRAME_GRID_COLS; ++i)
@@ -198,7 +200,7 @@ Frame& Frame::operator=(const Frame& f)
 {
     mpORBExtractor = f.mpORBExtractor;
 
-    if (Config::NeedVisulization)
+    if (bNeedVisulization)
         f.mImage.copyTo(mImage);
 
     mvKeyPoints = f.mvKeyPoints;
