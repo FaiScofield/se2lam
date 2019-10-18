@@ -24,8 +24,8 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f), mScaleRatio(Config::MappubScaleRatio),
-      mbFinishRequested(false), mbFinished(false)
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f),
+      mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
 
@@ -203,8 +203,7 @@ MapPublish::MapPublish(Map* pMap)
 }
 
 MapPublish::~MapPublish()
-{
-}
+{}
 
 void MapPublish::publishKeyFrames()
 {
@@ -448,7 +447,7 @@ void MapPublish::publishMapPoints()
         if (count == 0)
             vpMPActGood.push_back(pMPtemp);
     }
-    vpMPAct.swap(vpMPActGood); // MPsAct 去掉 MPsNow
+    vpMPAct.swap(vpMPActGood);  // MPsAct 去掉 MPsNow
 
     mMPsNeg.points.reserve(vpMPNeg.size());
     for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
@@ -476,10 +475,10 @@ void MapPublish::publishMapPoints()
         msg_p.y = vpMPAct[i]->getPos().y / mScaleRatio;
         msg_p.z = vpMPAct[i]->getPos().z / mScaleRatio;
 
-//        if (!vpMPAct[i]->isGoodPrl())
-//            mMPsNoGoodPrl.points.push_back(msg_p);
-//        else
-            mMPsAct.points.push_back(msg_p);
+        //        if (!vpMPAct[i]->isGoodPrl())
+        //            mMPsNoGoodPrl.points.push_back(msg_p);
+        //        else
+        mMPsAct.points.push_back(msg_p);
     }
 
     mMPsNow.points.reserve(spMPNow.size());
@@ -493,10 +492,10 @@ void MapPublish::publishMapPoints()
         msg_p.y = pMPtmp->getPos().y / mScaleRatio;
         msg_p.z = pMPtmp->getPos().z / mScaleRatio;
 
-//        if (!pMPtmp->isGoodPrl())
-//            mMPsNoGoodPrl.points.push_back(msg_p);
-//        else
-            mMPsNow.points.push_back(msg_p);
+        //        if (!pMPtmp->isGoodPrl())
+        //            mMPsNoGoodPrl.points.push_back(msg_p);
+        //        else
+        mMPsNow.points.push_back(msg_p);
     }
 
     mMPsNeg.header.stamp = ros::Time::now();
@@ -636,13 +635,11 @@ void MapPublish::publishOdomInformation()
 
 void MapPublish::run()
 {
-    mbIsLocalize = Config::LocalizationOnly;
-
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
     image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
-    int nSaveId = 0;
+    int nSaveId = 1;
     ros::Rate rate(Config::FPS /* / 3*/);
     while (nh.ok()) {
         if (checkFinish())
@@ -650,23 +647,22 @@ void MapPublish::run()
         if (mpMap->empty())
             continue;
 
-//        cv::Mat img = mpFramePub->drawFrame();
-//        if (img.empty())
-//            continue;
+        //        cv::Mat img = mpFramePub->drawFrame();
+        //        if (img.empty())
+        //            continue;
 
-//        // 给参考帧标注KFid号
+        // 给参考帧标注KFid号
         PtrKeyFrame pKP = mpMap->getCurrentKF();
-//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
+        //        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
 
-//        sensor_msgs::ImagePtr msg =
-//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-//        pub.publish(msg);
+        //        sensor_msgs::ImagePtr msg =
+        //            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+        //        pub.publish(msg);
 
         // draw image matches
         cv::Mat Tcw;
         if (!mbIsLocalize) {
-            Mat imgMatch;
-            mpTracker->drawMatchesForPub(imgMatch);
+            Mat imgMatch = mpTracker->getImageMatches();
 
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
@@ -674,8 +670,7 @@ void MapPublish::run()
 
             // debug 存下match图片
             if (Config::SaveMatchImage) {
-                string text = to_string(nSaveId++) + "-KF" + to_string(pKP->mIdKF);
-                string fileName = Config::MatchImageStorePath + text + ".jpg";
+                string fileName = Config::MatchImageStorePath + to_string(nSaveId++) + ".jpg";
                 cv::imwrite(fileName, imgMatch);
             }
 
@@ -725,7 +720,6 @@ bool MapPublish::isFinished()
     locker lock(mMutexFinish);
     return mbFinished;
 }
-
 
 
 }  // namespace se2lam

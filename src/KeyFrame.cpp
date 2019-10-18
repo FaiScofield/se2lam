@@ -73,7 +73,7 @@ KeyFrame::KeyFrame(const Frame &frame) : Frame(frame), mbBowVecExist(false), mbN
 
 KeyFrame::~KeyFrame()
 {
-    fprintf(stderr, "[KeyFrame] A KF#%ld(#%ld) is decontructed!\n", mIdKF, id);
+    fprintf(stderr, "[KeyFrame] KF#%ld(#%ld) 已被析构!\n", mIdKF, id);
 }
 
 // Please handle odometry based constraints after calling this function
@@ -160,7 +160,7 @@ Point3f KeyFrame::getViewMPPoseInCamareFrame(size_t idx)
 
     auto it = mDualObservations.find(idx);
     if (it != mDualObservations.end()) {
-        Point3f Pw = mDualObservations[idx]->mPos;
+        Point3f Pw = mDualObservations[idx]->getPos();
         ret = cvu::se3map(Tcw, Pw);
     }
     return ret;

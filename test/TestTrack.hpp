@@ -94,7 +94,7 @@ TestTrack::TestTrack()
 
     K = Config::Kcam;
     D = Config::Dcam;
-    Homography = cv::Mat::eye(3, 3, CV_64F);  // double
+    Homography = cv::Mat::eye(3, 3, CV_32FC1);  // double
 
     mbPrint = Config::GlobalPrint;
 }
@@ -289,7 +289,7 @@ void TestTrack::resetLocalTrack()
 
     mnGoodPrl = 0;
     mvMatchIdx.clear();
-    Homography = Mat::eye(3, 3, CV_64F);
+    Homography = Mat::eye(3, 3, CV_32FC1);
 }
 
 size_t TestTrack::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
@@ -362,9 +362,9 @@ void TestTrack::drawMatchesForPub(Mat& imgMatch)
     hconcat(imgL, imgR, imgMatch);
 
     char strMatches[64];
-    std::snprintf(strMatches, 64, "F: %ld-%ld, M: %d/%d", mpReferenceKF->id,
-                  mCurrentFrame.id, mnInliers, mnMatchSum);
-    putText(imgMatch, strMatches, Point(50, 15), 1, 1, Scalar(0, 0, 255), 2);
+    std::snprintf(strMatches, 64, "KF: %ld-%ld, M: %d/%d", mpReferenceKF->mIdKF,
+                  mCurrentFrame.id - mpReferenceKF->id, mnInliers, mnMatchSum);
+    putText(imgMatch, strMatches, Point(250, 15), 1, 1, Scalar(0, 0, 255), 2);
 
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
         if (mvMatchIdx[i] < 0) {
@@ -373,10 +373,10 @@ void TestTrack::drawMatchesForPub(Mat& imgMatch)
             Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
             Point2f ptCur = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
 
-            Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+            Mat pt1 = (Mat_<float>(3, 1) << ptCur.x, ptCur.y, 1);
             Mat pt2 = Homography * pt1;
-            pt2 /= pt2.at<double>(2);
-            Point2f pc(pt2.at<double>(0), pt2.at<double>(1));
+            pt2 /= pt2.at<float>(2);
+            Point2f pc(pt2.at<float>(0), pt2.at<float>(1));
             Point2f pr = ptRef + Point2f(imgL.cols, 0);
 
             circle(imgMatch, pc, 3, Scalar(0, 255, 0));  // 匹配上的为绿色
@@ -460,11 +460,11 @@ int TestTrack::removeOutliers()
 {
     vector<Point2f> pt1, pt2;
     vector<size_t> idx;
-    pt1.reserve(mpReferenceKF->mvKeyPoints.size());
-    pt2.reserve(mCurrentFrame.mvKeyPoints.size());
-    idx.reserve(mpReferenceKF->mvKeyPoints.size());
+    pt1.reserve(mpReferenceKF->N);
+    pt2.reserve(mCurrentFrame.N);
+    idx.reserve(mpReferenceKF->N);
 
-    for (size_t i = 0, iend = mpReferenceKF->mvKeyPoints.size(); i < iend; ++i) {
+    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
         idx.push_back(i);
@@ -476,7 +476,8 @@ int TestTrack::removeOutliers()
         return 0;
 
     vector<unsigned char> mask;
-    Homography = findHomography(pt1, pt2, RANSAC, 3, mask);
+    Mat H = findHomography(pt1, pt2, RANSAC, 3, mask);
+    H.convertTo(Homography, CV_32FC1);
 
     int nInlier = 0;
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
@@ -489,7 +490,7 @@ int TestTrack::removeOutliers()
     if (nInlier < 10) {
         nInlier = 0;
         std::fill(mvMatchIdx.begin(), mvMatchIdx.end(), -1);
-        Homography = Mat::eye(3, 3, CV_64F);
+        Homography = Mat::eye(3, 3, CV_32FC1);
     }
 
     return nInlier;

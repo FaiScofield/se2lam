@@ -95,7 +95,7 @@ std::string Config::MatchImageStorePath = "/home/vance/output/se2/";
 
 void Config::readConfig(const std::string& path)
 {
-    std::cout << "[Config] Loading config file..." << std::endl;
+    std::cout << "[Config][Info ] Loading config file..." << std::endl;
 
     DataPath = path;
 
@@ -218,7 +218,7 @@ bool Config::acceptDepth(float depth)
 
 void Config::checkParamValidity()
 {
-    std::cout << "[Config] Camera paramters below:" << std::endl
+    std::cout << "[Config][Info ] Camera paramters below:" << std::endl
               << " - Camera matrix: " << std::endl
               << " " << Kcam << std::endl
               << " - Camera distortion: " << std::endl
@@ -228,7 +228,7 @@ void Config::checkParamValidity()
               << " - Camera extrinsic Tbc (Body to Camera): " << std::endl
               << " " << Tbc << std::endl
               << std::endl;
-    std::cout << "[Config] Setting paramters below:" << std::endl
+    std::cout << "[Config][Info ] Setting paramters below:" << std::endl
               << " - FPS: " << FPS << std::endl
               << " - Image start index: " << ImgStartIndex << std::endl
               << " - Image count: " << ImgCount << std::endl

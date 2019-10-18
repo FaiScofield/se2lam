@@ -39,10 +39,10 @@ public:
         mpSensors->updateOdo(x_, y_, z_, time_);
     }
 
-    inline void receiveOdoDataSequence(std::vector<Se2> &odoDeque_)
-    {
-        mpSensors->updateOdoSequence(odoDeque_);
-    }
+//    inline void receiveOdoDataSequence(std::vector<Se2> &odoDeque_)
+//    {
+//        mpSensors->updateOdoSequence(odoDeque_);
+//    }
 
     inline void receiveImgData(const cv::Mat &img_, double time_ = 0.)
     {
@@ -76,9 +76,11 @@ private:
     std::mutex mMutexFinish;
 
     bool checkFinish();
-    void saveMap();
     void sendRequestFinish();
     void checkAllExit();
+
+    void saveMap();
+
     static void wait(OdoSLAM* system);
 };
 

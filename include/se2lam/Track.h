@@ -48,7 +48,7 @@ public:
     size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
                       std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
     void drawFrameForPub(cv::Mat& imgLeft);
-    void drawMatchesForPub(cv::Mat& imgMatch);
+    cv::Mat getImageMatches();
 
     bool isFinished();
     void requestFinish();
@@ -73,12 +73,15 @@ private:
     bool needNewKF();
     int doTriangulate();
 
+    void drawMatchesForPub(bool warp);
+
     bool checkFinish();
     void setFinish();
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
     bool mbPrint;
+    bool mbNeedVisualization;
 
     // only useful when odo time not sync with img time
 //    double mTimeOdo;
@@ -112,8 +115,9 @@ private:
     PreSE2 preSE2;
     Se2 mLastOdom;
 
-    cv::Mat K, D;
-    cv::Mat Homography;
+    cv::Mat mK, mD;
+    cv::Mat mHomography;
+    cv::Mat mImgOutMatch;
 
     bool mbFinishRequested;
     bool mbFinished;

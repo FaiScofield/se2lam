@@ -51,7 +51,7 @@ MapPoint::MapPoint(Point3f pos, bool goodPrl)
 
 MapPoint::~MapPoint()
 {
-    fprintf(stderr, "[MapPoint] A MP#%ld is decontructed!\n", mId);
+    fprintf(stderr, "[MapPoint] MP#%ld 已被析构!\n", mId);
 }
 
 //! FIXME Count pointer = 4 时无法析构, Count pointer = 2时正常析构

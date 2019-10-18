@@ -80,14 +80,14 @@ void Localizer::run()
 
         //! Get new measurement: image and odometry
         cv::Mat img;
-        double imgTime;
+        double imgTime(0.);
         Se2 odo;
         Point3f odo_3f;
         bool sensorUpdated = mpSensors->update();
         if (!sensorUpdated)
             continue;
 
-        mpSensors->readDataWithTime(odo, img, imgTime);
+        mpSensors->readData(odo, img);
         ReadFrameInfo(img, imgTime, odo);  // 每一帧都是KF，mpKFRef数据赋值
 
         //! 定位成功后会更新Tcw, 并由Tcw更新Twb

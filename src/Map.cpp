@@ -83,14 +83,14 @@ void Map::eraseMP(const PtrMapPoint& pMP)
  */
 void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
 {
-    fprintf(stderr, "[ Map ] Merging MP between #%ld(keep) and #%ld(delete) MP.\n",
+    fprintf(stderr, "[ Map ][Info ] Merging MP between #%ld(keep) and #%ld(delete) MP.\n",
             toKeep->mId, toDelete->mId);
     std::set<PtrKeyFrame> pKFs = toKeep->getObservations();
     for (auto it = pKFs.begin(), itend = pKFs.end(); it != itend; ++it) {
         PtrKeyFrame pKF = *it;
         //!@Vance: 有一KF能同时观测到这两个MP就返回，Why?
         if (pKF->hasObservation(toKeep) && pKF->hasObservation(toDelete)) {
-            cerr << "[ Map ] Return for a kF(toKeep) has same observation." << endl;
+            cerr << "[ Map ][Warni] Return for a kF(toKeep) has same observation." << endl;
             return;  //! TODO 应该是break？
         }
     }
@@ -98,14 +98,14 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
     for (auto it = pKFs.begin(), itend = pKFs.end(); it != itend; ++it) {
         PtrKeyFrame pKF = *it;
         if (pKF->hasObservation(toKeep) && pKF->hasObservation(toDelete)) {
-            cerr << "[ Map ] Return for a kF(toDelete) has same observation." << endl;
+            cerr << "[ Map ][Warni] Return for a kF(toDelete) has same observation." << endl;
             return;  //! TODO 应该是break？
         }
     }
 
     toDelete->mergedInto(toKeep);
     mspMPs.erase(toDelete);
-    fprintf(stderr, "[ Map ] Have a merge between #%ld(keep) and #%ld(delete) MP.\n", toKeep->mId,
+    fprintf(stderr, "[ Map ][Info ] Have a merge between #%ld(keep) and #%ld(delete) MP.\n", toKeep->mId,
             toDelete->mId);
 
     // 还要更新局部的MP
@@ -217,7 +217,7 @@ Mat Map::getCurrentFramePose()
  */
 bool Map::pruneRedundantKF()
 {
-    printf("[Local] #%ld(KF#%ld) [Map]正在修剪冗余KF...\n",
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]正在修剪冗余KF...\n",
            mCurrentKF->id, mCurrentKF->mIdKF);
 
     std::vector<PtrMapPoint> vLocalGraphMPs;
@@ -285,7 +285,7 @@ bool Map::pruneRedundantKF()
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
 //                        mspKFs.erase(thisKF);
                         thisKF->setNull(thisKF);
-                        fprintf(stderr, "[ Map ] KF#%ld 被修剪, 引用计数 = %ld\n",
+                        fprintf(stderr, "[ Map ][Info ] KF#%ld 被修剪, 引用计数 = %ld\n",
                                thisKF->mIdKF, thisKF.use_count());
 
                         // 给前后帧之间添加共视关联和约束
@@ -345,7 +345,7 @@ bool Map::pruneRedundantKF()
         std::swap(vpKFs, mvLocalGraphKFs);
     }
 
-    printf("[Local] #%ld(KF#%ld) [Map]Prune Local KFs: %ld, Mps: %ld\n", mCurrentKF->id,
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]LocalMap 修剪量: KFs: %ld, Mps: %ld\n", mCurrentKF->id,
            mCurrentKF->mIdKF, nKFsBefore - mvLocalGraphKFs.size(),
            nMPsBefore - mvLocalGraphMPs.size());
     return pruned;
@@ -450,7 +450,7 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
     pKFCurr->addCovisibleKF(pKFLoop);
     pKFLoop->addCovisibleKF(pKFCurr);
 
-    fprintf(stderr, "[ Map ] Merge loop close between KF#%ld and KF#%ld\n", pKFCurr->mIdKF,
+    fprintf(stderr, "[ Map ][Info ] Merge loop close between KF#%ld and KF#%ld\n", pKFCurr->mIdKF,
             pKFLoop->mIdKF);
     for (auto iter = mapMatchMP.begin(), itend = mapMatchMP.end(); iter != itend; iter++) {
         size_t idKPCurr = iter->first;
@@ -533,7 +533,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
                          vector<vector<int>>& vnAllIdx)
 {
     locker lock(mMutexLocalGraph);
-    printf("[Local] #%ld(KF#%ld) [Map]正在加载局部BA. removeOutlierChi2() - loadLocalGraph()...\n",
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]正在加载局部BA以移除离群MP. removeOutlierChi2()...\n",
            mCurrentKF->id, mCurrentKF->mIdKF);
 
     int camParaId = 0;
@@ -644,7 +644,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
             PtrKeyFrame pKF = (*j);
             if (checkAssociationErr(pKF, pMP)) {  // 确认一下联接关系有没有错
                 fprintf(stderr,
-                        "[ Map ] removeOutlierChi2() Wrong Association! for KF#%ld and MP#%ld \n",
+                        "[Local][Warni] removeOutlierChi2() Wrong Association! for KF#%ld and MP#%ld \n",
                         pKF->mIdKF, pMP->mId);
                 continue;
             }
@@ -774,7 +774,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
             if (checkAssociationErr(pKF, pMP)) {
                 fprintf(
                     stderr,
-                    "[ Map ] loadLocalGraphOnlyBa() Wrong Association! for KF#%ld and MP#%ld \n",
+                    "[Local][Warni] loadLocalGraphOnlyBa() Wrong Association! for KF#%ld and MP#%ld \n",
                     pKF->mIdKF, pMP->mId);
                 continue;
             }
@@ -881,7 +881,7 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
         if (pMP->countObservation() < 2) {
 //            mspMPs.erase(pMP);
             pMP->setNull(pMP);  // 加了Map的锁
-            fprintf(stderr, "[ Map ] MP#%ld 在移除外点中因观测数少于2而被修剪, 引用计数 = %ld\n",
+            fprintf(stderr, "[ Map ][Info ] MP#%ld 在移除外点中因观测数少于2而被修剪, 引用计数 = %ld\n",
                     pMP->mId, pMP.use_count());
             nBadMP++;
         }
@@ -1021,11 +1021,13 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GlobalPrint) {
-                fprintf(stderr, "[Globa] #%ld(KF#%ld) [Map]Add feature constraint from KF#%ld to KF#%ld\n", _pKF->id, _pKF->mIdKF, ptKFFrom->mIdKF, ptKFTo->mIdKF);
+                fprintf(stderr, "[Globa][Error] #%ld(KF#%ld) [Map]Add feature constraint from KF#%ld to KF#%ld\n",
+                        _pKF->id, _pKF->mIdKF, ptKFFrom->mIdKF, ptKFTo->mIdKF);
             }
         } else {
             if (Config::GlobalPrint)
-                fprintf(stderr, "[Globa] #%ld(KF#%ld) [Map]Add feature constraint failed!\n", _pKF->id, _pKF->mIdKF);
+                fprintf(stderr, "[Globa][Error] #%ld(KF#%ld) [Map]Add feature constraint failed!\n",
+                        _pKF->id, _pKF->mIdKF);
         }
     }
 
@@ -1035,7 +1037,7 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
 //! 此函数在LocalMap的localBA()函数中调用
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-    printf("[Local] #%ld(KF#%ld) [Map]正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
            mCurrentKF->mIdKF);
 
     locker lock(mMutexLocalGraph);
@@ -1072,7 +1074,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
         bool fixed = (pKF->id == minKFid) || (pKF->id == 1);
         if (fixed)
-            printf("[Local] #%ld(KF#%ld) [Map]vertex of #KF%ld is fixed! minKFid = %ld\n",
+            printf("[Local][Info ] #%ld(KF#%ld) [Map]vertex of #KF%ld is fixed! minKFid = %ld\n",
                    mCurrentKF->id, mCurrentKF->mIdKF, pKF->id, minKFid);
 
         Se2 Twb = pKF->getTwb();
@@ -1118,7 +1120,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
     // Store xyz2uv edges
     const int N = mvLocalGraphMPs.size();
 
-    printf("[Local] #%ld(KF#%ld) [Map]loadLocalGraph() nLocalKFs = %d, nRefKFs = %d, nMPs = %d\n",
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]LocalMap的顶点情况: nLocalKFs = %d, nRefKFs = %d, nMPs = %d\n",
            mCurrentKF->id, mCurrentKF->mIdKF, nLocalKFs, nRefKFs, N);
 
     const float delta = Config::ThHuber;
@@ -1137,7 +1139,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
             PtrKeyFrame pKF = (*j);
             if (checkAssociationErr(pKF, pMP)) {
-                fprintf(stderr, "[ Map ] localBA() Wrong Association! for KF#%ld-%d and MP#%ld-%d\n",
+                fprintf(stderr, "[ Map ][Warni] localBA() Wrong Association! for KF#%ld-%d and MP#%ld-%d\n",
                 pKF->mIdKF, pKF->getFeatureIndex(pMP), pMP->mId, pMP->getIndexInKF(pKF));
                 continue;
             }
@@ -1191,7 +1193,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     size_t nVertices = optimizer.vertices().size();
     size_t nEdges = optimizer.edges().size();
-    printf("[Local] #%ld(KF#%ld) [Map]loadLocalGraph() optimizer nVertices = %ld, nEdges = %ld\n",
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]loadLocalGraph() optimizer nVertices = %ld, nEdges = %ld\n",
            mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nEdges);
     // check optimizer
 

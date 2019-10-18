@@ -81,7 +81,7 @@ public:
     unsigned long id;  // 图像序号
     Se2 odom;          // 原始里程计输入
 
-    int N;  // 特征总数
+    size_t N;  // 特征总数
     cv::Mat mImage;
     cv::Mat mDescriptors;
     std::vector<cv::KeyPoint> mvKeyPoints;

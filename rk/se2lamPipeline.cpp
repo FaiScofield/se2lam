@@ -18,7 +18,7 @@ namespace bf = boost::filesystem;
 const char* vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
 
 struct RK_IMAGE {
-    RK_IMAGE(const string& s, const float& t) : fileName(s), timeStamp(t) {}
+    RK_IMAGE(const string& s, const double& t) : fileName(s), timeStamp(t) {}
 
     string fileName;
     double timeStamp;
@@ -39,7 +39,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     bf::path path(dataFolder);
     if (!bf::exists(path)) {
-        cerr << "[main ][Error] Data folder doesn't exist!" << endl;
+        cerr << "[Main ][Error] Data folder doesn't exist!" << endl;
         ros::shutdown();
         return;
     }
@@ -60,11 +60,11 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     }
 
     if (allImages.empty()) {
-        cerr << "[main ][Error] Not image data in the folder!" << endl;
+        cerr << "[Main ][Error] Not image data in the folder!" << endl;
         ros::shutdown();
         return;
     } else {
-        cout << "[main ][Info ] Read " << allImages.size() << " image files in the folder." << endl;
+        cout << "[Main ][Info ] Read " << allImages.size() << " image files in the folder." << endl;
     }
 
     //! 注意不能直接对string排序
@@ -72,11 +72,12 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     files = allImages;
 }
 
+/*
 void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
 {
     ifstream rec(odomFile);
     if (!rec.is_open()) {
-        cerr << "[main ][Error] Error in opening file: " << odomFile << endl;
+        cerr << "[Main ][Error] Error in opening file: " << odomFile << endl;
         rec.close();
         ros::shutdown();
         return;
@@ -96,11 +97,11 @@ void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
     rec.close();
 
     if (odoData.empty()) {
-        cerr << "[main ][Error] Not odom data in the file!" << endl;
+        cerr << "[Main ][Error] Not odom data in the file!" << endl;
         ros::shutdown();
         return;
     } else {
-        cout << "[main ][Info ] Read " << odoData.size() << " odom datas from the file." << endl;
+        cout << "[Main ][Info ] Read " << odoData.size() << " odom datas from the file." << endl;
     }
 }
 
@@ -117,7 +118,7 @@ void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
             break;
     }
     allImages.erase(allImages.begin(), iter);
-    cout << "[main ][Info ] Cut some images for timestamp too earlier, now image size: "
+    cout << "[Main ][Info ] Cut some images for timestamp too earlier, now image size: "
          << allImages.size() << endl;
 
     // 数据对齐
@@ -137,17 +138,18 @@ void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
         dataAligned[allImages[i]] = odoDeq;
     }
 }
+*/
 
 int main(int argc, char** argv)
 {
     //! ROS Initialize
-    ros::init(argc, argv, "test_vn");
+    ros::init(argc, argv, "se2_pipeline");
     ros::start();
 
     if (argc < 2) {
-        cerr << "Usage: rosrun se2lam test_rk rk_dataPath" << endl;
+        cerr << "Usage: rosrun se2lam se2lamPipeline <dataPath>" << endl;
         ros::shutdown();
-        return -1;
+        exit(-1);
     }
 
     OdoSLAM system;
@@ -167,18 +169,17 @@ int main(int argc, char** argv)
 //    dataAlignment(allImages, allOdoms, dataAligned);
 //    assert(allImages.size() == dataAligned.size());
 
-    string odomRawFile = Config::DataPath + "/odo_raw.txt";
+    string odomRawFile = Config::DataPath + "/odo_raw.txt"; // [mm]
     ifstream rec(odomRawFile);
     if (!rec.is_open()) {
-        cerr << "[main ][Error] Please check file if exists!" << endl;
+        cerr << "[Main ][Error] Please check file if exists!" << endl;
         rec.close();
         ros::shutdown();
-        return -1;
+        exit(-1);
     }
 
     float x, y, theta;
     string line;
-
     size_t m = static_cast<size_t>(Config::ImgStartIndex);
     size_t n = static_cast<size_t>(Config::ImgCount);
     n = min(allImages.size(), n);
@@ -195,10 +196,10 @@ int main(int argc, char** argv)
         iss >> x >> y >> theta;
 
         string fullImgName = allImages[i].fileName;
-        double imgTime = allImages[i].timeStamp;
+//        double imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
-            cerr << "[main ][Error] No image data for image " << fullImgName << endl;
+            cerr << "[Main ][Error] No image data for image " << fullImgName << endl;
             continue;
         }
 
@@ -209,14 +210,14 @@ int main(int argc, char** argv)
 
         rate.sleep();
     }
-    cout << "[main ][Info ] Finish test_rk..." << endl;
+    cout << "[Main ][Info ] Finish test_rk..." << endl;
 
     system.requestFinish();  // 让系统给其他线程发送结束指令
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "[main ][Info ] System shutdown..." << endl;
-    cout << "[main ][Info ] Exit test..." << endl;
+    cout << "[Main ][Info ] System shutdown..." << endl;
+    cout << "[Main ][Info ] Exit test..." << endl;
     return 0;
 }

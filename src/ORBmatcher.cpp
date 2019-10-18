@@ -660,12 +660,12 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         KeyPoint kp1 = frame1.mvKeyPoints[i1];
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
-        Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
+        Mat pt1 = (Mat_<float>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
         Mat pt2 = H12 * pt1;
-        pt2 /= pt2.at<double>(2);
-        Point3d p(pt2.at<double>(0), pt2.at<double>(1), pt2.at<double>(2));
+        pt2 /= pt2.at<float>(2);
+//        Point3d p(pt2.at<float>(0), pt2.at<float>(1), pt2.at<float>(2));
         vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
+            frame2.GetFeaturesInArea(pt2.at<float>(0), pt2.at<float>(1), winSize, level, level);
         if (vIndices2.empty())
             continue;
 

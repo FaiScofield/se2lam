@@ -53,6 +53,7 @@ void Sensors::updateOdo(float x_, float y_, float theta_, double time_)
     odoUpdated = true;
 }
 
+/*
 void Sensors::updateOdoSequence(std::vector<Se2>& odoQue_)
 {
     std::unique_lock<std::mutex> lock(mMutexOdo);
@@ -67,6 +68,7 @@ void Sensors::updateOdoSequence(std::vector<Se2>& odoQue_)
 
     odoUpdated = true;
 }
+*/
 
 void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
 {
@@ -81,6 +83,7 @@ void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
     cndvSensorUpdate.notify_all();
 }
 
+/*
 void Sensors::readDataSequence(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
@@ -109,6 +112,7 @@ void Sensors::readDataWithTime(Se2& odo, cv::Mat& img, double& time)
     imgUpdated = false;
     cndvSensorUpdate.notify_all();
 }
+*/
 
 void Sensors::forceSetUpdate(bool val)
 {
@@ -116,6 +120,7 @@ void Sensors::forceSetUpdate(bool val)
     imgUpdated = val;
 }
 
+/*
 Se2 Sensors::dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& timeImg_)
 {
     Se2 res;
@@ -138,7 +143,6 @@ Se2 Sensors::dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& ti
 
     return res;
 }
-
-
+*/
 
 }  // namespace se2lam

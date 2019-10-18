@@ -18,6 +18,9 @@ using namespace std;
 using namespace cv;
 
 OdoSLAM::OdoSLAM()
+    : mpMap(nullptr), mpLocalMapper(nullptr), mpGlobalMapper(nullptr), mpFramePub(nullptr),
+      mpMapPub(nullptr), mpTrack(nullptr), mpMapStorage(nullptr), mpLocalizer(nullptr),
+      mpSensors(nullptr), mpVocabulary(nullptr), mbFinishRequested(false), mbFinished(false)
 {}
 
 OdoSLAM::~OdoSLAM()
@@ -42,26 +45,27 @@ void OdoSLAM::setVocFileBin(const char* strVoc)
          << "###\n"
          << endl;
 
-    cout << "[System] Set ORB Vocabulary to: " << strVoc << endl;
-    cout << "[System] Loading ORB Vocabulary. This could take a while." << endl;
+    cout << "[Syste][Info ] Set ORB Vocabulary to: " << strVoc << endl;
+    cout << "[Syste][Info ] Loading ORB Vocabulary. This could take a while." << endl;
 
     // Init ORB BoW
     WorkTimer timer;
-    timer.start();
-    string strVocFile = strVoc;
+
     mpVocabulary = new ORBVocabulary();
+
+    string strVocFile(strVoc);
     bool bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
     if (!bVocLoad) {
-        cerr << "[ERROR] Wrong path to vocabulary, Falied to open it." << endl;
+        cerr << "[Syste][Error] Wrong path to vocabulary, Falied to open it." << endl;
         return;
     }
-    timer.stop();
-    cout << "[System] Vocabulary loaded! Cost time[ms]: " << timer.time << endl;
+
+    printf("[Syste][Info ] Vocabulary loaded! Cost time: %.2fms\n", timer.count());
 }
 
 void OdoSLAM::setDataPath(const char* strDataPath)
 {
-    cout << "[System] Set Data Path to: " << strDataPath << endl << endl;
+    cout << "[Syste][Info ] Set Data Path to: " << strDataPath << endl;
     Config::readConfig(strDataPath);
 }
 
@@ -82,8 +86,8 @@ cv::Mat OdoSLAM::getCurrentCameraPoseCW()
 
 void OdoSLAM::start()
 {
-    if (!mpVocabulary) {
-        std::cerr << "[System] Please set vocabulary first!!" << std::endl;
+    if (mpVocabulary == nullptr) {
+        std::cerr << "[Syste][Error] Please set vocabulary first!!" << std::endl;
         return;
     }
 
@@ -130,20 +134,19 @@ void OdoSLAM::start()
     mbFinished = false;
 
     if (Config::LocalizationOnly) {
-        cerr << "[System] =====>> Localization-Only Mode <<=====" << endl;
-
-        thread threadLocalizer(&Localizer::run, mpLocalizer);
+        cerr << "[Syste][Info ] =====>> Localization-Only Mode <<=====" << endl;
 
         //! 注意标志位在这里设置的
         mpFramePub->mbIsLocalize = true;
         mpMapPub->mbIsLocalize = true;
 
+        thread threadLocalizer(&Localizer::run, mpLocalizer);
         thread threadMapPub(&MapPublish::run, mpMapPub);
 
         threadLocalizer.detach();
         threadMapPub.detach();
     } else {  // SLAM case
-        cout << "[System] =====>> Running SLAM <<=====" << endl;
+        cout << "[Syste][Info ] =====>> Running SLAM <<=====" << endl;
 
         mpMapPub->mbIsLocalize = false;
         mpFramePub->mbIsLocalize = false;
@@ -151,7 +154,6 @@ void OdoSLAM::start()
         thread threadTracker(&Track::run, mpTrack);
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
 //        thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
-
         if (Config::NeedVisulization) {
             thread threadMapPub(&MapPublish::run, mpMapPub);
             threadMapPub.detach();
@@ -186,7 +188,7 @@ void OdoSLAM::wait(OdoSLAM* system)
 
     system->mbFinished = true;
 
-    cerr << "[System] System is cleared .." << endl;
+    cerr << "[Syste][Info ] System is cleared .." << endl;
 }
 
 void OdoSLAM::saveMap()
@@ -201,10 +203,10 @@ void OdoSLAM::saveMap()
 
     // Save keyframe trajectory
     string trajFile = Config::MapFileStorePath + Config::WriteTrajFileName;
-    cerr << "\n[System] Saving keyframe trajectory to " << trajFile << endl;
+    cerr << "\n[Syste][Info ] Saving keyframe trajectory to " << trajFile << endl;
     ofstream towrite(trajFile);
     if (!towrite.is_open())
-        cerr << "[System] Save trajectory error! Please check the trajectory file correct." << endl;
+        cerr << "[Syste][Error] Save trajectory error! Please check the trajectory file correct." << endl;
     towrite << "#format: id x y z theta" << endl;
     vector<PtrKeyFrame> vct = mpMap->getAllKF();
     for (size_t i = 0, iend = vct.size(); i != iend; ++i) {
@@ -259,21 +261,28 @@ void OdoSLAM::sendRequestFinish()
 
 void OdoSLAM::checkAllExit()
 {
+    if (Config::NeedVisulization) {
+        while (1) {
+            if (mpMapPub->isFinished())
+                break;
+            else
+                std::this_thread::sleep_for(std::chrono::microseconds(2));
+        }
+    }
+
     if (Config::LocalizationOnly) {
         while (1) {
-            if (mpLocalizer->isFinished() && mpMapPub->isFinished())
+            if (mpLocalizer->isFinished())
                 break;
             else
                 std::this_thread::sleep_for(std::chrono::microseconds(2));
         }
     } else {
         while (1) {
-            if (mpTrack->isFinished() && mpLocalMapper->isFinished() &&
-                mpGlobalMapper->isFinished() && mpMapPub->isFinished()) {
+            if (mpTrack->isFinished() && mpLocalMapper->isFinished() && mpGlobalMapper->isFinished())
                 break;
-            } else {
+            else
                 std::this_thread::sleep_for(std::chrono::microseconds(2));
-            }
         }
     }
 }
@@ -287,8 +296,8 @@ void OdoSLAM::waitForFinish()
             std::this_thread::sleep_for(std::chrono::microseconds(2));
         }
     }
+    cerr << "[Syste][Info ] Wait for finish thread finished..." << endl;
     std::this_thread::sleep_for(std::chrono::microseconds(20));
-    cerr << "[System] Wait for finish thread finished..." << endl;
 }
 
 bool OdoSLAM::ok()

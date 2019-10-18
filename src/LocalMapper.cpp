@@ -55,14 +55,14 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKFNew, const vector<Point3f> &localMPs,
     //! 更新 KF.mViewMPs, KF.mObservations 和 MP.mObservations
     findCorrespd(vMatched12, localMPs, vbGoodPrl);
     double t1 = timer.count();
-    printf("[Local][Timer] #%ld(#KF%ld) L1.1.关联地图点总耗时: %.2fms\n",
+    printf("[Local][Timer] #%ld(KF#%ld) L1.1.关联地图点总耗时: %.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, t1);
 
     //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     timer.start();
     mpMap->updateCovisibility(mpNewKF);
     double t2 = timer.count();
-    printf("[Local][Timer] #%ld(#KF%ld) L1.2.更新共视关系耗时: %.2fms\n",
+    printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, t2);
 
     timer.start();
@@ -89,9 +89,9 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKFNew, const vector<Point3f> &localMPs,
     mbAcceptNewKF = false;
 
     double t3 = timer.count();
-    printf("[Local][Timer] #%ld(#KF%ld) L1.3.添加里程计约束耗时: %.2fms\n",
+    printf("[Local][Timer] #%ld(KF#%ld) L1.3.添加里程计约束耗时: %.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, t3);
-    printf("[Local][Timer] #%ld(#KF%ld) L1.4.LocalMap的预处理总耗时: %.2fms\n",
+    printf("[Local][Timer] #%ld(KF#%ld) L1.4.LocalMap的预处理总耗时: %.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, t1 + t2 + t3);
 }
 
