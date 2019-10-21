@@ -43,7 +43,7 @@ void Map::insertKF(PtrKeyFrame& pKF)
 void Map::insertMP(PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
-    assert(pMP->countObservation() > 0);
+    assert(pMP->countObservations() > 0);
     pMP->setMap(this);
     mspMPs.insert(pMP);
 }
@@ -60,7 +60,7 @@ void Map::eraseKF(const PtrKeyFrame& pKF)
         mvLocalGraphKFs.erase(iter1);
     auto iter2 = find(mvRefKFs.begin(), mvRefKFs.end(), pKF);
     if (iter2 != mvRefKFs.end())
-        mvLocalGraphKFs.erase(iter2);
+        mvRefKFs.erase(iter2);
 }
 
 //! 未使用函数
@@ -285,7 +285,7 @@ bool Map::pruneRedundantKF()
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
 //                        mspKFs.erase(thisKF);
                         thisKF->setNull(thisKF);
-                        fprintf(stderr, "[ Map ][Info ] KF#%ld 被修剪, 引用计数 = %ld\n",
+                        fprintf(stderr, "[ Map ][Info ] KF#%ld 此KF被修剪, 引用计数 = %ld\n",
                                thisKF->mIdKF, thisKF.use_count());
 
                         // 给前后帧之间添加共视关联和约束
@@ -486,7 +486,7 @@ Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2,
         }
     }
 
-    return Point2f(1.f*nSameMP/pKF1->countObservation(), 1.f*nSameMP/pKF2->countObservation());
+    return Point2f(1.f*nSameMP/pKF1->countObservations(), 1.f*nSameMP/pKF2->countObservations());
 }
 
 /**
@@ -878,7 +878,7 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
             pKF->eraseObservation(pMP);
         }
 
-        if (pMP->countObservation() < 2) {
+        if (pMP->countObservations() < 2) {
 //            mspMPs.erase(pMP);
             pMP->setNull(pMP);  // 加了Map的锁
             fprintf(stderr, "[ Map ][Info ] MP#%ld 在移除外点中因观测数少于2而被修剪, 引用计数 = %ld\n",
@@ -996,6 +996,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
 
 /**
  * @brief 更新特征图
+ * FIXME 目前特征图约束添加大部分是失败的, 待验证
  * @param _pKF  当前帧KF
  * @return      返回是否有更新的标志
  */
@@ -1224,7 +1225,7 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
     Mat pose = cvu::inv(getCurrentKF()->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) / 1000.f, pose.at<float>(1, 3) / 1000.f,
                                 pose.at<float>(2, 3) / 1000.f};
-    int size = std::min(static_cast<int>(vKFsAll.size()), 5);  // 最近的5个KF
+    int size = std::min(static_cast<int>(vKFsAll.size()), 8);  // 最近的5个KF
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());

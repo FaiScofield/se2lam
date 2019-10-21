@@ -21,15 +21,15 @@ target_link_libraries(se2lamPipeline
 
 
 #find_package(PythonLibs 2.7)
-find_package(Pangolin)
-include_directories(${Pangolin_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
-add_executable(ICPtrajectory ICPtrajectory.cpp)
-target_link_libraries(ICPtrajectory
-    se2lam
-    ${LINK_LIBS}
-    ${Pangolin_LIBRARIES}
-#    ${PYTHON_LIBRARIES}
-)
+#find_package(Pangolin)
+#include_directories(${Pangolin_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+#add_executable(ICPtrajectory ICPtrajectory.cpp)
+#target_link_libraries(ICPtrajectory
+#    se2lam
+#    ${LINK_LIBS}
+#    ${Pangolin_LIBRARIES}
+##    ${PYTHON_LIBRARIES}
+#)
 
 
 

@@ -69,7 +69,7 @@ void MapStorage::saveMap() {
 
     saveFtrGraph();
 
-    printf("[MapStorage] Map saved to '%s'\n\n", (mMapPath+mMapFile).c_str());
+    printf("\n[MapStorage] Map saved to '%s'\n", (mMapPath+mMapFile).c_str());
 
 }
 

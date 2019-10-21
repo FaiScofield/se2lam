@@ -78,7 +78,7 @@ KeyFrame::~KeyFrame()
 
 // Please handle odometry based constraints after calling this function
 //! 加入成员变量map的指针后通过调用map删除其相关容器中的指针, 现已可以正常析构. 20191015
-void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
+void KeyFrame::setNull(shared_ptr<KeyFrame> &pThis)
 {
     locker lckPose(mMutexPose);
     locker lckObs(mMutexObs);
@@ -139,7 +139,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame> &pThis)
            mIdKF, pThis.use_count());
 }
 
-size_t KeyFrame::countObservation()
+size_t KeyFrame::countObservations()
 {
     locker lock(mMutexObs);
     return mObservations.size();

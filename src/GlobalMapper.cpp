@@ -151,7 +151,7 @@ void GlobalMapper::run()
         timer.stop();
         double t5 = t1 + t2 + t3 + t4 + timer.time;
 
-        fprintf(stderr, "[Globa][Timer] #%ld(KF#%ld) G6.GlobalMap线程本次运行总耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
+        printf("[Globa][Timer] #%ld(KF#%ld) G6.GlobalMap线程本次运行总耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
                 mpKFCurr->id, mpKFCurr->mIdKF, t5, mpMap->countKFs(), mpMap->countMPs());
 
         mbNewKF = false;
@@ -161,7 +161,7 @@ void GlobalMapper::run()
 
         rate.sleep();
     }
-    cout << "[Globa] Exiting globalmapper .." << endl;
+    cout << "[Globa][Info ] Exiting globalmapper .." << endl;
 
     setFinish();
 }

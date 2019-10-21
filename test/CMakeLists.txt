@@ -1,10 +1,10 @@
 ## Build an exe
-#add_executable(test_vn test_vn.cpp)
-#target_link_libraries(test_vn
-#    se2lam
-#    ${LINK_LIBS}
-#    ${G2O_LIBS}
-#)
+add_executable(test_vn test_vn.cpp)
+target_link_libraries(test_vn
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+)
 
 #add_executable(test_rk test_rk.cpp)
 #target_link_libraries(test_rk

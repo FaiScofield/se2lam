@@ -42,6 +42,17 @@ bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
     return r1.timeStamp < r2.timeStamp;
 }
 
+void readImagesSe2(const string& dataFolder, vector<string>& files)
+{
+    vector<string> allImages;
+    allImages.reserve(3108);
+    for (int i = 0; i < 3108; ++i) {
+        string ni = dataFolder + to_string(i) + ".bmp";
+        allImages.push_back(ni);
+    }
+    files = allImages;
+}
+
 void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     bf::path path(dataFolder);
@@ -189,16 +200,9 @@ Mat drawKPMatches(const Frame* frameRef, const Frame* frameCur, const Mat& imgRe
             }
             p2 = frameRef->mvKeyPoints[i].pt + Point2f(0, imgCur.rows);
 
-            // 外点红色, 内点绿色, 没有匹配的点蓝色
-            if (matchIdx12[i] == -2) {
-                circle(outImg, p1, 3, Scalar(0, 255, 255));
-                circle(outImg, p2, 3, Scalar(0, 255, 255));
-                line(outImg, p1, p2, Scalar(0, 255, 255));
-            } else {
-                circle(outImg, p1, 3, Scalar(0, 255, 0));
-                circle(outImg, p2, 3, Scalar(0, 255, 0));
-                line(outImg, p1, p2, Scalar(0, 0, 255));
-            }
+            circle(outImg, p1, 3, Scalar(0, 255, 0));
+            circle(outImg, p2, 3, Scalar(0, 255, 0));
+            line(outImg, p1, p2, Scalar(0, 0, 255));
         }
     }
     return outImg;
@@ -283,7 +287,6 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
 int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
                          map<int, int>& matches12, Mat& H12, const int flag = 0)
 {
-    assert(kpRef.size() == kpCur.size());
     assert(!matches12.empty());
 
     vector<Point2f> ptRef, ptCur;

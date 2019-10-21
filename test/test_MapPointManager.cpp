@@ -15,7 +15,7 @@ int main(int argc, char** argv)
 
     //! check input
     if (argc < 2) {
-        fprintf(stderr, "Usage: test_pointDetection <rk_dataPath> [number_frames_to_process]");
+        fprintf(stderr, "Usage: test_MapPointManager <rk_dataPath> [number_frames_to_process]");
         ros::shutdown();
         exit(-1);
     }
@@ -28,7 +28,6 @@ int main(int argc, char** argv)
 
     //! initialization
     Config::readConfig(string(argv[1]));
-    Mat K = Config::Kcam, D = Config::Dcam;
 
     string dataFolder = Config::DataPath + "/slamimg";
     vector<RK_IMAGE> allImages;
@@ -43,12 +42,15 @@ int main(int argc, char** argv)
     assert(allImages.size() == alignedOdoms.size());
 
     Map *pMap = new Map();
-    ORBmatcher *kpMatcher = new ORBmatcher();
+    ORBmatcher *pMatcher = new ORBmatcher();
     ORBVocabulary *pVocabulary = new ORBVocabulary();
     bool bVocLoad = pVocabulary->loadFromBinaryFile(g_orbVocFile);
     if(!bVocLoad) {
         cerr << "[Track] Wrong path to vocabulary. " << endl;
         cerr << "[Track] Falied to open at: " << g_orbVocFile << endl;
+        delete pMap;
+        delete pMatcher;
+        delete pVocabulary;
         exit(-1);
     }
     cout << "[Track] Vocabulary loaded!" << endl << endl;
@@ -92,16 +94,18 @@ int main(int argc, char** argv)
         fprintf(stdout, "[Track] #%ld Tracking consuming time: %.2fms\n", tt.mCurrentFrame.id, timer.time);
 
         //! 匹配情况可视化
-//        Mat outImgWarp;
-//        tt.drawMatchesForPub(outImgWarp);
-//        imshow("Image Warp Match", outImgWarp);
-        waitKey(120);
+//        Mat outImgWarp = tt.drawMatchesForPub();
+//        if (!outImgWarp.empty()) {
+//            imshow("Image Warp Match", outImgWarp);
+//            waitKey(0);
+//        }
 
         rate.sleep();
     }
     tv.requestFinish();
 
-    delete kpMatcher;
+    delete pMap;
+    delete pMatcher;
     delete pVocabulary;
     return 0;
 }

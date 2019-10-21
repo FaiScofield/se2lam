@@ -21,56 +21,63 @@ int main(int argc, char **argv)
     ros::start();
 
     if (argc != 2) {
-        cerr << "Usage: rosrun se2lam test_vn dataPath" << endl;
+        cerr << "Usage: rosrun se2lam test_vn <dataPath>" << endl;
         ros::shutdown();
-        return -1;
+        exit(-1);
     }
 
     se2lam::OdoSLAM system;
-
     system.setVocFileBin(vocFile);
     system.setDataPath(argv[1]);
     system.start();
 
-    string fullOdoName = se2lam::Config::DataPath + "/odo_raw.txt";
-    ifstream rec(fullOdoName);
-    float x,y,theta;
+    string odomRawFile = se2lam::Config::DataPath + "/odo_raw.txt";
+    ifstream rec(odomRawFile);
+    if (!rec.is_open()) {
+        cerr << "[Main ][Error] Please check if the file exists!" << endl;
+        rec.close();
+        ros::shutdown();
+        exit(-1);
+    }
+
+    float x, y, theta;
     string line;
-
-    ros::Rate rate(se2lam::Config::FPS);
-
     int n = se2lam::Config::ImgCount;
     int m = se2lam::Config::ImgStartIndex;
 
+    ros::Rate rate(se2lam::Config::FPS);
     for(int i = 0; i < n && system.ok(); ++i) {
         // 起始帧不为0的时候保证odom数据跟image对应
         if (i < m) {
             std::getline(rec, line);
             continue;
         }
-
-        string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
-        Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         std::getline(rec, line);
         istringstream iss(line);
         iss >> x >> y >> theta;
+
+        string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
+        Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
+        if (!img.data) {
+            cerr << "[Main ][Error] No image data for image " << fullImgName << endl;
+            continue;
+        }
 
         system.receiveOdoData(x, y, theta);
         system.receiveImgData(img);
 
         rate.sleep();
     }
-    cout << "[Main] Finish test..." << endl;
+    cout << "[Main ][Info ] Finish test_vn..." << endl;
 
-    system.requestFinish();
+    rec.close();
+    system.requestFinish();  // 让系统给其他线程发送结束指令
     system.waitForFinish();
 
     ros::shutdown();
 
-    cout << "[Main] Ros close..." << endl;
-    rec.close();
-    cout << "[Main] Exit test..." << endl;
+    cout << "[Main ][Info ] System shutdown..." << endl;
+    cout << "[Main ][Info ] Exit test..." << endl;
     return 0;
-
 }
 

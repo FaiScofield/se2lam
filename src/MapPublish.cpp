@@ -100,8 +100,8 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNow.ns = "MapPointsNow";
     mMPsNow.id = 5;
     mMPsNow.type = visualization_msgs::Marker::POINTS;
-    mMPsNow.scale.x = mPointSize * 2.f;
-    mMPsNow.scale.y = mPointSize * 2.f;
+    mMPsNow.scale.x = mPointSize * 1.5f;
+    mMPsNow.scale.y = mPointSize * 1.5f;
     mMPsNow.pose.orientation.w = 1.0;
     mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.color.r = 1.0;
@@ -690,7 +690,7 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cout << "[MapPublis] Exiting Mappublish .." << endl;
+    cout << "[MapPu][Info ] Exiting Mappublish .." << endl;
 
     nh.shutdown();
 

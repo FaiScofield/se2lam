@@ -55,7 +55,7 @@ public:
         }
     };
 
-    void setNull(const std::shared_ptr<KeyFrame>& pThis);
+    void setNull(std::shared_ptr<KeyFrame>& pThis);
     bool isNull();
 
     std::set<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
@@ -75,7 +75,7 @@ public:
     void eraseObservation(const PtrMapPoint pMP);
     void eraseObservation(size_t idx);
 
-    size_t countObservation();  // Count how many observed MP
+    size_t countObservations();  // Count how many observed MP
 
     // Whether a MP is observed by this KF.
     bool hasObservation(const PtrMapPoint& pMP);

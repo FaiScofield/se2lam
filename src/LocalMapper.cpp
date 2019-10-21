@@ -111,7 +111,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
     PtrKeyFrame pPrefKF = mpMap->getCurrentKF(); // 这是上一参考帧KF
 
     printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 当前MP总数: %ld, 参考帧MP观测数: %ld\n",
-           mpNewKF->id, mpNewKF->mIdKF, mpMap->countMPs(), pPrefKF->countObservation());
+           mpNewKF->id, mpNewKF->mIdKF, mpMap->countMPs(), pPrefKF->countObservations());
 
     if (!bNoMP) {
         //! 1.如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP

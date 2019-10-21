@@ -1,5 +1,6 @@
 #include "test_functions.hpp"
 
+//string g_configPath = "/home/vance/dataset/se2/se2_config/";
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 string g_matchResult = "/home/vance/output/rk_se2lam/test_matchResult.txt";
@@ -61,12 +62,6 @@ int matchByCV(const Mat& desRef, const Mat& desCur, map<int, int>& matchCV)
         if (dist > max_dist) max_dist = dist;
     }
     float delta_dist = std::max(std::min(2.f * min_dist, 0.5f * max_dist), 20.f);
-//    printf("-- Max dist : %f \n", max_dist);
-//    printf("-- Min dist : %f \n", min_dist);
-//    printf("-- delta dist : %f \n", delta_dist);
-
-    //-- Draw only "good" matches (i.e. whose distance is less than 0.6*max_dist )
-    //-- PS.- radiusMatch can also be used here.
 
     for (int i = 0, iend = desRef.rows; i < iend; ++i) {
         if (matches[i].distance < delta_dist)
@@ -81,7 +76,7 @@ int main(int argc, char** argv)
 
     //! check input
     if (argc < 2) {
-        fprintf(stderr, "Usage: test_pointDetection <rk_dataPath> [number_frames_to_process]");
+        fprintf(stderr, "Usage: test_pointDetection <dataPath> [number_frames_to_process]");
         exit(-1);
     }
     int num = INT_MAX;
@@ -97,6 +92,10 @@ int main(int argc, char** argv)
     string dataFolder = string(argv[1]) + "slamimg";
     vector<RK_IMAGE> imgFiles;
     readImagesRK(dataFolder, imgFiles);
+
+//    string dataFolder = string(argv[1]) + "image/";
+//    vector<string> imgFiles;
+//    readImagesSe2(dataFolder, imgFiles);
 
     ORBextractor *kpExtractor = new ORBextractor(500, 1, 1, 1, 20);
     ORBmatcher *kpMatcher = new ORBmatcher(0.8); // 0.6
@@ -119,11 +118,12 @@ int main(int argc, char** argv)
     PtrKeyFrame KFCur, KFRef;
     Mat imgColor, imgGray, imgCur, imgRef, imgWithFeatureCur, imgWithFeatureRef;
     Mat outImgORBMatch, outImgWarp, outImgBow, outImgCV, outImgConcat;
-    Mat H12 = Mat::eye(3, 3, CV_64F);
+    Mat H12 = Mat::eye(3, 3, CV_64FC1);
     num = std::min(num, static_cast<int>(imgFiles.size()));
     int skipFrames = 50;
     for (int i = skipFrames; i < num; ++i) {
         imgColor = imread(imgFiles[i].fileName, CV_LOAD_IMAGE_COLOR);
+//        imgColor = imread(imgFiles[i], CV_LOAD_IMAGE_COLOR);
         if (imgColor.data == nullptr)
             continue;
         cv::undistort(imgColor, imgCur, Config::Kcam, Config::Dcam);
@@ -137,6 +137,7 @@ int main(int argc, char** argv)
         //! ORB提取特征点
         WorkTimer timer;
         frameCur = Frame(imgClahe, imgFiles[i].timeStamp, Se2(), kpExtractor, K, D);
+//        frameCur = Frame(imgClahe, 0., Se2(), kpExtractor, K, D);
         KFCur = make_shared<KeyFrame>(frameCur);
         KFCur->ComputeBoW(vocabulary);
         imgCur.copyTo(imgWithFeatureCur);
@@ -221,7 +222,7 @@ int main(int argc, char** argv)
         hconcat(outImgCV, outImgBow, imgTmp2);
         hconcat(imgTmp2, imgTmp1, outImgConcat);
         imshow("BOW & ORB & Image Warp Match", outImgConcat);
-        waitKey(100);
+        waitKey(30);
 //        string fileWarp = "/home/vance/output/rk_se2lam/warp/warp-" + text + ".bmp";
 //        string fileMatch = "/home/vance/output/rk_se2lam/warp/match-" + text + ".bmp";
 //        imwrite(fileWarp, outImgWarp);
@@ -233,7 +234,7 @@ int main(int argc, char** argv)
             imgWithFeatureCur.copyTo(imgWithFeatureRef);
             frameRef = frameCur;
             KFRef = KFCur;
-            H12 = Mat::eye(3, 3, CV_64F);
+            H12 = Mat::eye(3, 3, CV_64FC1);
         }
     }
 

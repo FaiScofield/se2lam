@@ -140,7 +140,7 @@ void Localizer::run()
 
             MatchLocalMap();
 
-            size_t numMPCurr = mpKFCurr->countObservation();
+            size_t numMPCurr = mpKFCurr->countObservations();
             printf("[Local] #%ld(KF%ld) have %ld MPs observation.\n", mpKFCurr->id, mpKFCurr->mIdKF, numMPCurr);
             if (numMPCurr > 30) {
                 DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
@@ -800,7 +800,7 @@ void Localizer::UpdateCovisKFCurr()
 
         FindCommonMPs(mpKFCurr, pKF, spMPs);
 
-        if (spMPs.size() > 0.1 * mpKFCurr->countObservation())
+        if (spMPs.size() > 0.1 * mpKFCurr->countObservations())
             mpKFCurr->addCovisibleKF(pKF);
     }
 }
@@ -982,7 +982,7 @@ bool Localizer::TrackLocalMap()
 
     MatchLocalMap();
 
-    int numMPCurr = mpKFCurr->countObservation();
+    int numMPCurr = mpKFCurr->countObservations();
     if (numMPCurr > 30) {
 //                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
     }

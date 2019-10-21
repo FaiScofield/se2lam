@@ -61,15 +61,15 @@ void MapPoint::setNull(shared_ptr<MapPoint>& pThis)
     mbNull = true;
     mbGoodParallax = false;
 
-    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测前(%ld), 引用计数 = %ld\n",
-            mId, mObservations.size(), pThis.use_count());
+//    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测前(%ld), 引用计数 = %ld\n",
+//            mId, mObservations.size(), pThis.use_count());
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
         if (pKF->hasObservation(pThis))
             pKF->eraseObservation(pThis);
     }
-    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测后, 引用计数 = %ld\n",
-            mId, mObservations.size(), pThis.use_count());
+//    fprintf(stderr, "[MapPoint] MP#%ld 处理KF观测后, 引用计数 = %ld\n",
+//            mId, mObservations.size(), pThis.use_count());
 
     mObservations.clear();
     mMainDescriptor.release();
@@ -77,8 +77,8 @@ void MapPoint::setNull(shared_ptr<MapPoint>& pThis)
 
     mpMap->eraseMP(pThis);
 
-    fprintf(stderr, "[MapPoint] MP#%ld 被Map设置为null. 引用计数 = %ld\n", pThis->mId,
-            pThis.use_count());
+//    fprintf(stderr, "[MapPoint] MP#%ld 被Map设置为null. 引用计数 = %ld\n", pThis->mId,
+//            pThis.use_count());
 }
 
 //! Abandon a MP as an outlier, only for internal use. 注意不要加锁mMutexObs
@@ -97,11 +97,11 @@ void MapPoint::setNull()
 
     auto ptr = shared_from_this();
     mpMap->eraseMP(ptr);
-    fprintf(stderr, "[MapPoint] MP#%ld 被自己设置为null. 引用计数 = %ld\n", this->mId,
-            ptr.use_count());
+//    fprintf(stderr, "[MapPoint] MP#%ld 被自己设置为null. 引用计数 = %ld\n", this->mId,
+//            ptr.use_count());
 }
 
-size_t MapPoint::countObservation()
+size_t MapPoint::countObservations()
 {
     locker lock(mMutexObs);
     return mObservations.size();
@@ -138,9 +138,9 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
     if (mObservations.size() == 0) {
         fprintf(stderr, "[MapPoint] MP#%ld 因为没有观测而被设置为null\n", mId);
         setNull();  // 这个函数不能加锁mMutexObs
-    }
-    else
+    } else {
         updateMainKFandDescriptor();
+    }
 }
 
 void MapPoint::eraseObservations(const map<PtrKeyFrame, size_t>& obsCandidates)

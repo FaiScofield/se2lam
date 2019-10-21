@@ -356,7 +356,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
         return vIndices;
 
     //! ceil向上取整
-    int nMaxCellX = ceil((x + minXUn + r) * gridElementWidthInv); // FIXME + ?
+    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv); // FIXME + ?
     nMaxCellX = min(FRAME_GRID_COLS - 1, nMaxCellX);
     if (nMaxCellX < 0)
         return vIndices;
@@ -366,10 +366,13 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     if (nMinCellY >= FRAME_GRID_ROWS)
         return vIndices;
 
-    int nMaxCellY = ceil((y + minYUn + r) * gridElementHeightInv); // FIXME + ?
+    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv); // FIXME + ?
     nMaxCellY = min(FRAME_GRID_ROWS - 1, nMaxCellY);
     if (nMaxCellY < 0)
         return vIndices;
+
+    assert(nMinCellX <= nMaxCellX);
+    assert(nMinCellY <= nMaxCellY);
 
     const bool bCheckLevels = (minLevel > 0) || (maxLevel >= 0);
     const bool bSameLevel = (minLevel == maxLevel);

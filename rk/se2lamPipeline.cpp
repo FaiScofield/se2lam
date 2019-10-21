@@ -172,7 +172,7 @@ int main(int argc, char** argv)
     string odomRawFile = Config::DataPath + "/odo_raw.txt"; // [mm]
     ifstream rec(odomRawFile);
     if (!rec.is_open()) {
-        cerr << "[Main ][Error] Please check file if exists!" << endl;
+        cerr << "[Main ][Error] Please check if the file exists!" << endl;
         rec.close();
         ros::shutdown();
         exit(-1);
@@ -210,8 +210,9 @@ int main(int argc, char** argv)
 
         rate.sleep();
     }
-    cout << "[Main ][Info ] Finish test_rk..." << endl;
+    cout << "[Main ][Info ] Finish se2lamPipeline..." << endl;
 
+    rec.close();
     system.requestFinish();  // 让系统给其他线程发送结束指令
     system.waitForFinish();
 

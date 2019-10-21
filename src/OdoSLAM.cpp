@@ -153,7 +153,7 @@ void OdoSLAM::start()
 
         thread threadTracker(&Track::run, mpTrack);
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
-//        thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
+        thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
         if (Config::NeedVisulization) {
             thread threadMapPub(&MapPublish::run, mpMapPub);
             threadMapPub.detach();
@@ -161,7 +161,7 @@ void OdoSLAM::start()
 
         threadTracker.detach();
         threadLocalMapper.detach();
-//        threadGlobalMapper.detach();
+        threadGlobalMapper.detach();
     }
 
     thread threadWait(&wait, this);
@@ -261,6 +261,8 @@ void OdoSLAM::sendRequestFinish()
 
 void OdoSLAM::checkAllExit()
 {
+    cout << "[Syste][Info ] Checking for all thread exited..." << endl;
+
     if (Config::NeedVisulization) {
         while (1) {
             if (mpMapPub->isFinished())

@@ -37,7 +37,7 @@ public:
     void eraseObservation(const PtrKeyFrame& pKF);
     void eraseObservations(const std::map<PtrKeyFrame, size_t>& obsCandidates);
     bool hasObservation(const PtrKeyFrame& pKF);
-    size_t countObservation();
+    size_t countObservations();
 
     cv::Point3f getNormalVector();
     cv::Point2f getMainMeasure();

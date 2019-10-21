@@ -42,7 +42,7 @@ Track::Track()
 
     mK = Config::Kcam;
     mD = Config::Dcam;
-    mHomography = Mat::eye(3, 3, CV_32FC1);  // float
+    mHomography = Mat::eye(3, 3, CV_64FC1);  // float
 
     mbPrint = Config::GlobalPrint;
     mbNeedVisualization = Config::NeedVisulization;
@@ -148,7 +148,10 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
 
     //! 基于H矩阵的透视变换先验估计投影Cell的位置
     mnMatchSum =
-        matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mHomography, mvMatchIdx, 20);
+        matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mHomography, mvMatchIdx, 25);
+    if (mnMatchSum < 0.1 * Config::MaxFtrNumber)
+        mnMatchSum =
+            matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mHomography, mvMatchIdx, 40);
 
     //! 利用单应矩阵H计算匹配内点，内点数大于10才能继续
     mnInliers = removeOutliers();        // H更新
@@ -156,12 +159,12 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
         mnTrackedOld = doTriangulate();  // 更新viewMPs
         drawMatchesForPub(true);
         if (mbPrint)
-            printf("[Track][Info ] #%ld 2.与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
+            printf("[Track][Info ] #%ld 与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
                    mCurrentFrame.id, mnTrackedOld, mnInliers, mnMatchSum);
     } else {
         drawMatchesForPub(false);
         if (mbPrint)
-            fprintf(stderr, "[Track][Warni] #%ld 2.与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
+            fprintf(stderr, "[Track][Warni] #%ld 与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
                     mCurrentFrame.id, mnTrackedOld, mnMatchSum);
     }
 
@@ -257,7 +260,7 @@ void Track::resetLocalTrack()
     for (int i = 0; i < 9; ++i)
         preSE2.cov[i] = 0;
 
-    mHomography = Mat::eye(3, 3, CV_32FC1);
+    mHomography = Mat::eye(3, 3, CV_64FC1);
 }
 
 //! 可视化用，数据拷贝
@@ -321,32 +324,35 @@ void Track::drawFrameForPub(Mat& imgLeft)
 
 void Track::drawMatchesForPub(bool warp)
 {
-    Mat imgL = mCurrentFrame.mImage.clone();
-    Mat imgR = mpReferenceKF->mImage.clone();
-    if (imgL.channels() == 1)
-        cvtColor(imgL, imgL, CV_GRAY2BGR);
-    if (imgR.channels() == 1)
-        cvtColor(imgR, imgR, CV_GRAY2BGR);
+    if (mCurrentFrame.id == mpReferenceKF->id)
+        return;
+
+    Mat imgWarp, H21;
+    Mat imgCur = mCurrentFrame.mImage.clone();
+    Mat imgRef = mpReferenceKF->mImage.clone();
+    if (imgCur.channels() == 1)
+        cvtColor(imgCur, imgCur, CV_GRAY2BGR);
+    if (imgRef.channels() == 1)
+        cvtColor(imgRef, imgRef, CV_GRAY2BGR);
 
     // 所有KP先上蓝色
-    drawKeypoints(imgL, mCurrentFrame.mvKeyPoints, imgL, Scalar(255, 0, 0),
+    drawKeypoints(imgCur, mCurrentFrame.mvKeyPoints, imgCur, Scalar(255, 0, 0),
                   DrawMatchesFlags::DRAW_OVER_OUTIMG);
-    drawKeypoints(imgR, mpReferenceKF->mvKeyPoints, imgR, Scalar(255, 0, 0),
+    drawKeypoints(imgRef, mpReferenceKF->mvKeyPoints, imgRef, Scalar(255, 0, 0),
                   DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
     if (warp) {
-        Mat H21 = mHomography.inv(DECOMP_SVD);
-        Mat imgLW;
-        warpPerspective(imgL, imgLW, H21, imgR.size());
-        hconcat(imgLW, imgR, mImgOutMatch);
+        H21 = mHomography.inv(DECOMP_SVD);
+        warpPerspective(imgCur, imgWarp, H21, imgRef.size());
+        hconcat(imgWarp, imgRef, mImgOutMatch);
     } else {
-        hconcat(imgL, imgR, mImgOutMatch);
+        hconcat(imgCur, imgRef, mImgOutMatch);
     }
 
     char strMatches[64];
     std::snprintf(strMatches, 64, "KF: %ld-%ld, M: %d/%d", mpReferenceKF->mIdKF,
                   mCurrentFrame.id - mpReferenceKF->id, mnInliers, mnMatchSum);
-    putText(mImgOutMatch, strMatches, Point(250, 15), 1, 1, Scalar(0, 0, 255), 2);
+    putText(mImgOutMatch, strMatches, Point(240, 15), 1, 1, Scalar(0, 0, 255), 2);
 
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
         if (mvMatchIdx[i] < 0) {
@@ -357,14 +363,14 @@ void Track::drawMatchesForPub(bool warp)
 
             Point2f ptl, ptr;
             if (warp) {
-                Mat pt1 = (Mat_<float>(3, 1) << ptCur.x, ptCur.y, 1);
-                Mat pt2 = mHomography * pt1;
-                pt2 /= pt2.at<float>(2);
-                ptl = Point2f(pt2.at<float>(0), pt2.at<float>(1));
+                Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+                Mat pt2 = H21 * pt1;
+                pt2 /= pt2.at<double>(2);
+                ptl = Point2f(pt2.at<double>(0), pt2.at<double>(1));
             } else {
                 ptl = ptCur;
             }
-            ptr = ptRef + Point2f(imgL.cols, 0);
+            ptr = ptRef + Point2f(imgCur.cols, 0);
 
             // 匹配上KP的为绿色
             circle(mImgOutMatch, ptl, 3, Scalar(0, 255, 0));
@@ -489,8 +495,7 @@ int Track::removeOutliers()
 
     vector<unsigned char> mask;
 //   Mat F = findFundamentalMat(pt1, pt2, FM_RANSAC, 3, 0.99, mask);
-    Mat H = findHomography(pt1, pt2, RANSAC, 3, mask);  // 朝天花板摄像头应该用H矩阵, F会退化
-    H.convertTo(mHomography, CV_32FC1);
+    mHomography = findHomography(pt1, pt2, RANSAC, 3, mask);  // 朝天花板摄像头应该用H矩阵, F会退化
 
     int nInlier = 0;
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
@@ -512,10 +517,36 @@ int Track::removeOutliers()
 
 bool Track::needNewKF()
 {
-    //    bool c0 = mCurrentFrame.id - mpReferenceKF->id >= nMinFrames;  // 1.间隔首先要足够大
-    //    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;  // 3.2 或间隔达到上限了
-    //    bool c2 = mnGoodPrl < 20;  // 3.1没匹配上的MP中拥有良好视差的点数小于20
+    int nOldKP = mpReferenceKF->countObservations();
+    bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
+    bool c1 = static_cast<float>(mnTrackedOld) <= nOldKP * 0.5f;
+    bool c2 = mnGoodPrl > 40;
+    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
+    bool c4 = mnMatchSum < 0.1f * Config::MaxFtrNumber || mnMatchSum < 20;
+    bool bNeedNewKF = c0 && ( (c1 && c2) || c3 || c4 );
 
+    bool bNeedKFByOdo = false;
+    if (mbUseOdometry) {
+        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
+        bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过20°
+        cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
+        cv::Mat xy = cTc.rowRange(0, 2).col(3);
+        bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
+
+        bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+    }
+    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
+
+    // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
+    if (mpLocalMapper->acceptNewKF()) {
+        return bNeedNewKF;
+    } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
+        printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id, mnTrackedOld);
+        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
+        return bNeedNewKF;
+    }
+
+/*
     int nMPObs = mpReferenceKF->countObservation();  // 注意初始帧观测数为0
     bool c1 = (float)mnTrackedOld > nMPObs * 0.5f;   // 2.关联MP数不能太多(要小于50%)
     if (nMPObs && c1) {
@@ -533,31 +564,8 @@ bool Track::needNewKF()
                mCurrentFrame.id);
         return false;
     }
-    /*
-        bool bNeedNewKF = c4;
+*/
 
-        bool bNeedKFByOdo = false;
-        if (mbUseOdometry) {
-            Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-            bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过20°
-            cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
-            cv::Mat xy = cTc.rowRange(0, 2).col(3);
-            bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
-
-            bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
-        }
-        bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
-
-        // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
-        if (mpLocalMapper->acceptNewKF()) {
-            return bNeedNewKF;
-        } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-            printf("[Track] #%ld 强制添加KF\n", mCurrentFrame.id, mnTrackedOld);
-            mpLocalMapper->setAbortBA();  //
-       如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
-            return bNeedNewKF;
-        }
-    */
     return false;
 }
 

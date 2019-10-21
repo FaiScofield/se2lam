@@ -78,9 +78,9 @@ using namespace std;
 
 const float HARRIS_K = 0.04f;
 
-const int PATCH_SIZE = 23;       // 31
-const int HALF_PATCH_SIZE = 11;  // 15
-const int EDGE_THRESHOLD = 12;   // 16
+const int PATCH_SIZE = 31;       // 31, 23
+const int HALF_PATCH_SIZE = 15;  // 15, 11
+const int EDGE_THRESHOLD = 16;   // 16, 12
 
 static void HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize, float harris_k)
 {
@@ -611,7 +611,7 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
 
                 Mat cellImage =
                     mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
-                Mat cellImageandMask = cellImage.clone();
+//                Mat cellImageandMask = cellImage.clone();
 
                 Mat cellMask;
                 if (!mvMaskPyramid[level].empty())
@@ -619,15 +619,17 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
 
                 cellKeyPoints[i][j].reserve(nfeaturesCell * 5);
 
-                // 加入直线的mask
-                FAST(cellImageandMask, cellKeyPoints[i][j], fastTh, true);
-                KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
+                FAST(cellImage, cellKeyPoints[i][j], fastTh, true);
 
-                if (cellKeyPoints[i][j].size() <= 10) {  // 3
+                // 加入直线的mask
+//                FAST(cellImageandMask, cellKeyPoints[i][j], fastTh, true);
+//                KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
+
+                if (cellKeyPoints[i][j].size() <= 3) {  // 3
                     cellKeyPoints[i][j].clear();
-                    //                    FAST(cellImage, cellKeyPoints[i][j], 7, true);
-                    FAST(cellImageandMask, cellKeyPoints[i][j], 5, true);  // 7
-                    KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
+                    FAST(cellImage, cellKeyPoints[i][j], 7, true);
+//                    FAST(cellImageandMask, cellKeyPoints[i][j], 5, true);  // 7
+//                    KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
                 }
 
                 if (scoreType == ORB::HARRIS_SCORE) {

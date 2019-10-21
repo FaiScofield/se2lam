@@ -25,8 +25,8 @@ public:
     double cov[9];  // 3*3, RowMajor
 };
 
-const int FRAME_GRID_ROWS = 23;  // default 48 for 480
-const int FRAME_GRID_COLS = 31;  // default 64 for 640
+const int FRAME_GRID_ROWS = 48;  // default 48 for 480, 23
+const int FRAME_GRID_COLS = 64;  // default 64 for 640, 31
 
 class Frame
 {

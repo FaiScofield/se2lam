@@ -636,12 +636,17 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
  * @param winSize       cell尺寸
  * @return              返回匹配点的总数
  */
-int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H12,
+int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& _H12,
                                   std::vector<int>& vnMatches12, const int winSize)
 {
+    Mat H12 = _H12.clone();
     if (!H12.data) {
         std::cerr << "Input argument error for empty H!" << std::endl;
         return 0;
+    }
+    if (H12.type() != CV_64FC1) {
+        std::cerr << "Convert H to type double!" << std::endl;
+        _H12.convertTo(H12, CV_64FC1);
     }
 
     int nmatches = 0;
@@ -650,7 +655,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
     vector<int> rotHist[HISTO_LENGTH];
     for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(500);
-    const float factor = 1.f / (float)HISTO_LENGTH;
+    const float factor = 1.f / HISTO_LENGTH;
 
     vector<int> vMatchesDistance(frame2.N, INT_MAX);
     vector<int> vnMatches21(frame2.N, -1);
@@ -660,12 +665,12 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         KeyPoint kp1 = frame1.mvKeyPoints[i1];
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
-        Mat pt1 = (Mat_<float>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
+        Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
         Mat pt2 = H12 * pt1;
-        pt2 /= pt2.at<float>(2);
-//        Point3d p(pt2.at<float>(0), pt2.at<float>(1), pt2.at<float>(2));
+        pt2 /= pt2.at<double>(2);
+//        Point3d p(pt2.at<double>(0), pt2.at<double>(1), pt2.at<double>(2));
         vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(pt2.at<float>(0), pt2.at<float>(1), winSize, level, level);
+            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())
             continue;
 

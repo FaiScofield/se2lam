@@ -249,16 +249,14 @@ void TestViewer::run()
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
-    ros::Rate rate(Config::FPS/2);
+    ros::Rate rate(Config::FPS);
     while (nh.ok()) {
         if (checkFinish())
             break;
-
         if (mpMap->empty())
             continue;
 
-        Mat imgMatch;
-        mpTracker->drawMatchesForPub(imgMatch);
+        Mat imgMatch = mpTracker->drawMatchesForPub();
         if (imgMatch.empty())
             continue;
 
