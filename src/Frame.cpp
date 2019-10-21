@@ -45,7 +45,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
         gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
 
         bIsInitialComputations = false;
-        bNeedVisulization = Config::NeedVisulization;
+        bNeedVisulization = Config::NeedVisualization;
     }
 
     id = nextId++;

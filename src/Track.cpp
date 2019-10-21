@@ -45,7 +45,7 @@ Track::Track()
     mHomography = Mat::eye(3, 3, CV_64FC1);  // float
 
     mbPrint = Config::GlobalPrint;
-    mbNeedVisualization = Config::NeedVisulization;
+    mbNeedVisualization = Config::NeedVisualization;
 }
 
 Track::~Track()
@@ -267,13 +267,12 @@ void Track::resetLocalTrack()
 size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
                          vector<int>& vMatches12)
 {
-    if (Config::NeedVisulization)
+    if (!mbNeedVisualization)
+        return 0;
+    if (mvMatchIdx.empty())
         return 0;
 
     locker lock(mMutexForPub);
-
-    if (mvMatchIdx.empty())
-        return 0;
 
     mpReferenceKF->copyImgTo(img1);
     mCurrentFrame.copyImgTo(img2);
@@ -282,12 +281,12 @@ size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<Key
     kp2 = mCurrentFrame.mvKeyPoints;
     vMatches12 = mvMatchIdx;
 
-    return vMatches12.size();
+    return mvMatchIdx.size();
 }
 
 void Track::drawFrameForPub(Mat& imgLeft)
 {
-    if (Config::NeedVisulization)
+    if (!mbNeedVisualization)
         return;
 
     locker lock(mMutexForPub);
@@ -324,6 +323,8 @@ void Track::drawFrameForPub(Mat& imgLeft)
 
 void Track::drawMatchesForPub(bool warp)
 {
+    if (!mbNeedVisualization)
+        return;
     if (mCurrentFrame.id == mpReferenceKF->id)
         return;
 

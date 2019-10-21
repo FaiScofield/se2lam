@@ -31,7 +31,7 @@ public:
 
     MapStorage();
 
-    void setMap(Map* pMap);
+    void setMap(Map* pMap) { mpMap = pMap; }
 
     void setFilePath(const string path, const string file);
 

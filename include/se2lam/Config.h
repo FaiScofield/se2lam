@@ -152,7 +152,7 @@ public:
     static std::string WriteTrajFileName;
 
     // visulization
-    static bool NeedVisulization; //! TODO 是否需要可视化, 不可视化时内存占用小, 可在嵌入式平台上跑
+    static bool NeedVisualization; //! TODO 是否需要可视化, 不可视化时内存占用小, 可在嵌入式平台上跑
     static int MappubScaleRatio;  // 地图可视化比例
 
     //! other

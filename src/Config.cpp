@@ -80,7 +80,7 @@ std::string Config::ReadMapFileName;
 std::string Config::WriteMapFileName = "se2lam.map";
 std::string Config::WriteTrajFileName = "se2lam.traj";
 
-bool Config::NeedVisulization = true;
+bool Config::NeedVisualization = true;
 int Config::MappubScaleRatio = 300;
 
 cv::Mat Config::PrjMtrxEye;
@@ -194,7 +194,7 @@ void Config::readConfig(const std::string& path)
     settings["write_map_file_name"] >> WriteMapFileName;
     settings["write_traj_file_name"] >> WriteTrajFileName;
 
-    settings["need_visulization"] >> NeedVisulization;
+    settings["need_visulization"] >> NeedVisualization;
     settings["mappub_scale_ratio"] >> MappubScaleRatio;
 
     PrjMtrxEye = Kcam * cv::Mat::eye(3, 4, CV_32FC1);
@@ -251,7 +251,7 @@ void Config::checkParamValidity()
               << " - Map file name(write): " << WriteMapFileName << std::endl
               << " - Trajectory file name(write): " << WriteTrajFileName << std::endl
               << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
-              << " - Need visulization: " << NeedVisulization << std::endl
+              << " - Need visulization: " << NeedVisualization << std::endl
               << " - Local print(debug): " << LocalPrint << std::endl
               << " - Global print(debug): " << GlobalPrint << std::endl
               << " - Save match images(debug): " << SaveMatchImage << std::endl

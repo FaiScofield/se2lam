@@ -34,9 +34,6 @@ public:
     void findCorrespd();
     void updateLocalGraph();
 
-    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
-                      std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
-    void drawFrameForPub(cv::Mat& imgLeft);
     cv::Mat drawMatchesForPub();
 
 public:
@@ -290,55 +287,6 @@ void TestTrack::resetLocalTrack()
     mnGoodPrl = 0;
     mvMatchIdx.clear();
     Homography = Mat::eye(3, 3, CV_64FC1);
-}
-
-size_t TestTrack::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
-                             vector<int>& vMatches12)
-{
-    locker lock(mMutexForPub);
-
-    if (mvMatchIdx.empty())
-        return 0;
-
-    mpReferenceKF->copyImgTo(img1);
-    mCurrentFrame.copyImgTo(img2);
-
-    kp1 = mpReferenceKF->mvKeyPoints;
-    kp2 = mCurrentFrame.mvKeyPoints;
-    vMatches12 = mvMatchIdx;
-
-    return vMatches12.size();
-}
-
-void TestTrack::drawFrameForPub(Mat& imgLeft)
-{
-    locker lock(mMutexForPub);
-
-    //! 画左侧两幅图
-    Mat imgUp = mCurrentFrame.mImage.clone();
-    Mat imgDown = mpReferenceKF->mImage.clone();
-    if (imgUp.channels() == 1)
-        cvtColor(imgUp, imgUp, CV_GRAY2BGR);
-    if (imgDown.channels() == 1)
-        cvtColor(imgDown, imgDown, CV_GRAY2BGR);
-
-    for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
-        Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
-        if (mvMatchIdx[i] < 0) {
-            circle(imgDown, ptRef, 3, Scalar(255, 0, 0), 1);  // 未匹配上的为蓝色
-            continue;
-        } else {
-            circle(imgDown, ptRef, 3, Scalar(0, 255, 0), 1);  // 匹配上的为绿色
-
-            Point2f ptCurr = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
-            circle(imgUp, ptCurr, 3, Scalar(0, 255, 0), 1);  // 当前KP为绿色
-            circle(imgUp, ptRef, 3, Scalar(0, 0, 255), 1);   // 参考KP为红色
-            line(imgUp, ptRef, ptCurr, Scalar(0, 255, 0));
-        }
-    }
-    putText(imgUp, to_string(mnInliers), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-    putText(imgDown, to_string(mpReferenceKF->mIdKF), Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-    vconcat(imgUp, imgDown, imgLeft);
 }
 
 cv::Mat TestTrack::drawMatchesForPub()

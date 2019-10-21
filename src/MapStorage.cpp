@@ -25,9 +25,6 @@ void MapStorage::setFilePath(const string path, const string file) {
     mMapFile = file;
 }
 
-void MapStorage::setMap(Map *pMap) {
-    mpMap = pMap;
-}
 
 void MapStorage::loadMap() {
 
@@ -88,7 +85,7 @@ void MapStorage::sortKeyFrames() {
     }
 
     // Change Id of KF to be vector index
-    for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
+    for (unsigned long i = 0, iend = mvKFs.size(); i != iend; ++i) {
         PtrKeyFrame pKF = mvKFs[i];
         pKF->mIdKF  = i;
     }
@@ -109,7 +106,7 @@ void MapStorage::sortMapPoints() {
     }
 
     // Change Id of MP to be vector index
-    for (int i = 0, iend = mvMPs.size(); i != iend; ++i) {
+    for (unsigned long i = 0, iend = mvMPs.size(); i != iend; ++i) {
         PtrMapPoint pMP = mvMPs[i];
         pMP->mId = i;
     }
@@ -117,9 +114,8 @@ void MapStorage::sortMapPoints() {
 }
 
 void MapStorage::saveKeyFrames() {
-
     // Save images to individual files
-    if (Config::NeedVisulization) {
+    if (Config::NeedVisualization) {
         for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
             PtrKeyFrame pKF = mvKFs[i];
             imwrite(mMapPath + to_string(i) + ".bmp", pKF->mImage);
@@ -152,7 +148,7 @@ void MapStorage::saveKeyFrames() {
         file << "Descriptor" << pKF->mDescriptors;
 
         if (pKF->mvViewMPs.size() != pKF->mvKeyPoints.size())
-            cout << "Wrong size of KP in saving" << endl;
+            cerr << "Wrong size of KP in saving" << endl;
 
         file << "ViewMPs" << "[";
         for (int j = 0, jend = pKF->mvViewMPs.size(); j < jend; ++j) {
@@ -402,7 +398,7 @@ void MapStorage::loadKeyFrames() {
 
     file.release();
 
-    if (Config::NeedVisulization) {
+    if (Config::NeedVisualization) {
         for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
             PtrKeyFrame pKF = mvKFs[i];
             Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);

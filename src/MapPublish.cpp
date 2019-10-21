@@ -6,7 +6,6 @@
 */
 
 #include "MapPublish.h"
-#include "FramePublish.h"
 #include "Map.h"
 #include "converter.h"
 #include <cstdio>
@@ -635,6 +634,8 @@ void MapPublish::publishOdomInformation()
 
 void MapPublish::run()
 {
+    assert(Config::NeedVisualization == 1);
+
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
     image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
@@ -647,17 +648,17 @@ void MapPublish::run()
         if (mpMap->empty())
             continue;
 
-        //        cv::Mat img = mpFramePub->drawFrame();
-        //        if (img.empty())
-        //            continue;
+//        cv::Mat img = mpFramePub->drawFrame();
+//        if (img.empty())
+//            continue;
 
         // 给参考帧标注KFid号
-        PtrKeyFrame pKP = mpMap->getCurrentKF();
-        //        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
+//        PtrKeyFrame pKP = mpMap->getCurrentKF();
+//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
 
-        //        sensor_msgs::ImagePtr msg =
-        //            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-        //        pub.publish(msg);
+//        sensor_msgs::ImagePtr msg =
+//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+//        pub.publish(msg);
 
         // draw image matches
         cv::Mat Tcw;

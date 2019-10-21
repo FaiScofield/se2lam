@@ -40,6 +40,8 @@ FramePublish::~FramePublish()
 //! NOTE 这个线程没有一直跑，相关函数只有在MapPublish里被调用
 void FramePublish::run()
 {
+    assert(Config::NeedVisualization == 1);
+
     ros::NodeHandle nh;
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);

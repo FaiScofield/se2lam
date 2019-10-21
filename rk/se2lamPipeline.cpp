@@ -45,6 +45,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     }
 
     vector<RK_IMAGE> allImages;
+    allImages.reserve(2000);
     bf::directory_iterator end_iter;
     for (bf::directory_iterator iter(path); iter != end_iter; ++iter) {
         if (bf::is_directory(iter->status()))

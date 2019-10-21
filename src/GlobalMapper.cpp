@@ -1097,7 +1097,7 @@ void GlobalMapper::ComputeBowVecAll()
 
 void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
 {
-    if (Config::NeedVisulization)
+    if (!Config::NeedVisualization)
         return;
 
     //! Renew images
