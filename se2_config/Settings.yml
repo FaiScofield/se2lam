@@ -7,7 +7,7 @@ fps: 5
 
 # How many images, start and max
 img_start_idx: 30
-img_count: 1500
+img_count: 2000
 
 # Accepted feature depth bounds [mm]
 upper_depth: 3600.0
@@ -50,8 +50,9 @@ plane_motion_yrot_info: 1e6
 plane_motion_z_info: 1
 
 # For local graph (unit: m)
-max_local_frame_num: 20
-local_frame_search_radius: 0.5
+max_local_frame_num: 10         # 10
+local_frame_search_level: 2     # 1
+local_frame_search_radius: 0.3  # 0.3
 
 # For global map loopclose
 gm_vcl_num_min_match_mp: 12

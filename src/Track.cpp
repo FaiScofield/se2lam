@@ -149,12 +149,12 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
     //! 基于H矩阵的透视变换先验估计投影Cell的位置
     mnMatchSum =
         matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvMatchIdx, 25);
-    if (mnMatchSum < 0.1 * Config::MaxFtrNumber)
-        mnMatchSum =
-            matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvMatchIdx, 40);
+//    if (mnMatchSum < 0.1 * Config::MaxFtrNumber)
+//        mnMatchSum =
+//            matcher.MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvMatchIdx, 40);
 
-    //! 利用单应矩阵H计算匹配内点，内点数大于10才能继续
-    mnInliers = removeOutliers();        // H更新
+    //! 利用仿射矩阵A计算匹配内点，内点数大于10才能继续
+    mnInliers = removeOutliers();        // A更新
     if (mnInliers >= 10) {               // 内点数大于10则三角化计算MP
         mnTrackedOld = doTriangulate();  // 更新viewMPs
         drawMatchesForPub(true);
@@ -521,37 +521,37 @@ int Track::removeOutliers()
 
 bool Track::needNewKF()
 {
-    int nOldKP = mpReferenceKF->countObservations();
-    bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
-    bool c1 = static_cast<float>(mnTrackedOld) <= nOldKP * 0.5f;
-    bool c2 = mnGoodPrl > 40;
-    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
-    bool c4 = mnMatchSum < 0.1f * Config::MaxFtrNumber || mnMatchSum < 20;
-    bool bNeedNewKF = c0 && ( (c1 && c2) || c3 || c4 );
+//    int nOldKP = mpReferenceKF->countObservations();
+//    bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
+//    bool c1 = static_cast<float>(mnTrackedOld) <= nOldKP * 0.5f;
+//    bool c2 = mnGoodPrl > 40;
+//    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
+//    bool c4 = mnMatchSum < 0.1f * Config::MaxFtrNumber || mnMatchSum < 20;
+//    bool bNeedNewKF = c0 && ( (c1 && c2) || c3 || c4 );
 
-    bool bNeedKFByOdo = false;
-    if (mbUseOdometry) {
-        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过20°
-        cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
-        cv::Mat xy = cTc.rowRange(0, 2).col(3);
-        bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
+//    bool bNeedKFByOdo = false;
+//    if (mbUseOdometry) {
+//        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
+//        bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过20°
+//        cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
+//        cv::Mat xy = cTc.rowRange(0, 2).col(3);
+//        bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
 
-        bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
-    }
-    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
+//        bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+//    }
+//    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
-    // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
-    if (mpLocalMapper->acceptNewKF()) {
-        return bNeedNewKF;
-    } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-        printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id);
-        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
-        return bNeedNewKF;
-    }
+//    // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
+//    if (mpLocalMapper->acceptNewKF()) {
+//        return bNeedNewKF;
+//    } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
+//        printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id);
+//        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
+//        return bNeedNewKF;
+//    }
 
-/*
-    int nMPObs = mpReferenceKF->countObservation();  // 注意初始帧观测数为0
+
+    int nMPObs = mpReferenceKF->countObservations();  // 注意初始帧观测数为0
     bool c1 = (float)mnTrackedOld > nMPObs * 0.5f;   // 2.关联MP数不能太多(要小于50%)
     if (nMPObs && c1) {
         printf("[Track][Info ] #%ld 不是KF, 因为关联MP数超过了50%%(%d)\n", mCurrentFrame.id,
@@ -559,7 +559,7 @@ bool Track::needNewKF()
         return false;
     }
 
-    bool c4 = mnInliers < 0.1f * Config::MaxFtrNumber;  // 3.3 或匹配内点数小于1/10最大特征点数
+    bool c4 = mnInliers < 0.05f * Config::MaxFtrNumber;  // 3.3 或匹配内点数小于1/10最大特征点数
     if (c4 && mpLocalMapper->acceptNewKF()) {
         printf("[Track][Info ] #%ld 成为了KF, 因为匹配内点数小于10%%\n", mCurrentFrame.id);
         return true;
@@ -568,7 +568,7 @@ bool Track::needNewKF()
                mCurrentFrame.id);
         return false;
     }
-*/
+
 
     return false;
 }

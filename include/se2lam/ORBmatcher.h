@@ -39,22 +39,10 @@
 namespace se2lam
 {
 
-//struct line_s_e {
-//    cv::Point2f star_p;
-//    cv::Point2f end_p;
-//    cv::Point2f match_star;
-//    cv::Point2f match_end;
-//};
-
-//void getMatcheLines_Star_Eend(const Frame frame1, const Frame frame2,
-//                              std::vector<line_s_e>& matchesLine1_S_E, int linelable1,
-//                              int linelable2, int pl1, int pl2);
-
-
 class ORBmatcher
 {
 public:
-    ORBmatcher(float nnratio = 0.6, bool checkOri = true, bool withline = false);
+    ORBmatcher(float nnratio = 0.6, bool checkOri = true);
 
     // Computes the Hamming distance between two ORB descriptors
     static int DescriptorDistance(const cv::Mat& a, const cv::Mat& b);
@@ -92,15 +80,6 @@ public:
 
 
     float RadiusByViewingCos(const float& viewCos);
-
-//    int MatchByPointAndLine(const Frame& frame1, Frame& frame2,
-//                            std::vector<cv::Point2f>& vbPrevMatched, const int winSize,
-//                            std::vector<int>& vnMatches12, vector<int>& vMatchesDistance,
-//                            double angle, const int levelOffset = 1, const int minLevel = 0,
-//                            const int maxLevel = 8);  // 7.18修改maxlevel=8
-
-private:
-    bool mbWithLineFeature;
 };
 
 }  // namespace se2lam

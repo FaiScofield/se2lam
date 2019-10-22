@@ -116,7 +116,10 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
     printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 当前MP总数: %ld, 参考帧MP观测数: %ld\n",
            mpNewKF->id, mpNewKF->mIdKF, mpMap->countMPs(), pPrefKF->countObservations());
 
+
     if (!bNoMP) {
+        int nCros = 0, nProj = 0;
+
         //! 1.如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP
         for (int i = 0, iend = pPrefKF->N; i != iend; ++i) {
             if (vMatched12[i] >= 0 && pPrefKF->hasObservation(i)) {
@@ -130,6 +133,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                 mpNewKF->setViewMP(cvu::se3map(Tcr, pPrefKF->mvViewMPs[i]), vMatched12[i], xyzinfo2);
                 mpNewKF->addObservation(pMP, vMatched12[i]);
                 pMP->addObservation(mpNewKF, vMatched12[i]);
+                nCros++;
             }
         }
 
@@ -161,8 +165,13 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             mpNewKF->setViewMP(posNewKF, i, infoNew);
             mpNewKF->addObservation(pMP, i);
             pMP->addObservation(mpNewKF, i);
+            nProj++;
         }
+
+        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 和参考帧/局部地图的关联MP数为: %d/%d\n",
+               mpNewKF->id, mpNewKF->mIdKF, nCros, nProj);
     }
+
 
     //! 3.根据匹配情况给新的KF添加MP
     //! 首帧没有处理到这，第二帧进来有了参考帧，但还没有MPS，就会直接执行到这，生成MPs，所以第二帧才有MP
@@ -208,7 +217,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             nAddNewMP++;
         }
     }
-    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 添加了%d个新MP, 目前MP总数为%ld个\n",
+    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 共添加了%d个新MP, 目前MP总数为%ld个\n",
            mpNewKF->id, mpNewKF->mIdKF, nAddNewMP, mpMap->countMPs());
 }
 
