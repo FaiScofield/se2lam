@@ -49,9 +49,9 @@ plane_motion_xrot_info: 1e6
 plane_motion_yrot_info: 1e6
 plane_motion_z_info: 1
 
-# For local graph (unit: mm)
-max_local_frame_num: 30
-local_frame_search_radius: 800
+# For local graph (unit: m)
+max_local_frame_num: 20
+local_frame_search_radius: 0.5
 
 # For global map loopclose
 gm_vcl_num_min_match_mp: 12

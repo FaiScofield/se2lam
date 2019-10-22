@@ -133,6 +133,7 @@ public:
 
     // local graph
     static int MaxLocalFrameNum;          //! TODO
+    static int LocalFrameSearchLevel;
     static float LocalFrameSearchRadius;  //! TODO
 
     // global map loopclose

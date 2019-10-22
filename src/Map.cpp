@@ -355,7 +355,7 @@ bool Map::pruneRedundantKF()
  * @brief 更新局部地图的KFs与MPs, 以及参考KFs
  * 此函数在LocalMapper::run()函数中调用, mLocalGraphKFs, mRefKFs, mLocalGraphMPs在此更新
  */
-void Map::updateLocalGraph()
+void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 {
     locker lock(mMutexLocalGraph);
 
@@ -374,14 +374,14 @@ void Map::updateLocalGraph()
     //! kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中,
     //! 否则经过同一个地方不会考虑到之前添加的KF
     WorkTimer timer;
-    addLocalGraphThroughKdtree(setLocalKFs);
+    addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius);
     size_t s1 = setLocalKFs.size();
     printf("[Local][Info ] #%ld(KF#%ld) [Map]使用FLANN搜索确定了%ld个Local KFs, 耗时%.2fms\n",
            mCurrentKF->id, mCurrentKF->mIdKF, s1 - 1, timer.count());
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
     timer.start();
-    int searchLevel = 3;  // 3
+    int searchLevel = maxLevel;  // 3
     while (searchLevel > 0) {
         std::set<PtrKeyFrame> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; ++i) {
@@ -392,8 +392,8 @@ void Map::updateLocalGraph()
         searchLevel--;
     }
     size_t s2 = setLocalKFs.size();
-    printf("[Local][Info ] #%ld(KF#%ld) [Map]根据共视关系递归3层搜索确定了%ld个Local KFs, 耗时%.2fms\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, s2 - s1, timer.count());
+    printf("[Local][Info ] #%ld(KF#%ld) [Map]根据共视关系递归%d层搜索确定了%ld个Local KFs, 耗时%.2fms\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, maxLevel, s2 - s1, timer.count());
 
     //! 获得localKFs的所有MPs, 不要求要有良好视差
     //! 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
@@ -1022,7 +1022,7 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GlobalPrint) {
-                fprintf(stderr, "[Globa][Error] #%ld(KF#%ld) [Map]Add feature constraint from KF#%ld to KF#%ld\n",
+                fprintf(stderr, "\n\n[Globa][Info ] #%ld(KF#%ld) [Map]Add feature constraint from KF#%ld to KF#%ld!\n\n",
                         _pKF->id, _pKF->mIdKF, ptKFFrom->mIdKF, ptKFTo->mIdKF);
             }
         } else {
@@ -1208,14 +1208,15 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
     //    }
 }
 
-void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
+void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs,
+                                     int maxN, float searchRadius)
 {
     vector<PtrKeyFrame> vKFsAll = getAllKF();
     vector<Point3f> vKFPoses;
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());
-        Point3f pose(Twc.at<float>(0, 3) / 1000.f, Twc.at<float>(1, 3) / 1000.f,
-                     Twc.at<float>(2, 3) / 1000.f);
+        Point3f pose(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f,
+                     Twc.at<float>(2, 3) * 0.001f);
         vKFPoses.push_back(pose);
     }
 
@@ -1225,12 +1226,13 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
     Mat pose = cvu::inv(getCurrentKF()->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) / 1000.f, pose.at<float>(1, 3) / 1000.f,
                                 pose.at<float>(2, 3) / 1000.f};
-    int size = std::min(static_cast<int>(vKFsAll.size()), 8);  // 最近的5个KF
+//    int size = std::min(static_cast<int>(vKFsAll.size()), 8);  // 最近的5个KF
     std::vector<int> indices;
     std::vector<float> dists;
-    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
+//    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
+    kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
-        if (indices[i] > 0 && dists[i] < 0.3 && vKFsAll[indices[i]])  // 距离在0.3m以内
+        if (indices[i] > 0 && dists[i] < searchRadius && vKFsAll[indices[i]])  // 距离在0.3m以内
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }

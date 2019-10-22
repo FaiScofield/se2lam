@@ -627,8 +627,8 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
 
 
 /**
- * @brief 利用仿射变换(透视变换H矩阵)增加先验
- * 注意内点数较少时H12不可用
+ * @brief 利用仿射变换A(或透视变换H矩阵)增加先验
+ * 注意内点数较少时H12不可用, 朝天花板的最好用仿射变换
  * @param frame1        参考帧F1
  * @param frame2        当前帧F2
  * @param H12           F1到F2的单应矩阵
@@ -636,18 +636,19 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
  * @param winSize       cell尺寸
  * @return              返回匹配点的总数
  */
-int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& _H12,
+int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                                   std::vector<int>& vnMatches12, const int winSize)
 {
-    Mat H12 = _H12.clone();
-    if (!H12.data) {
-        std::cerr << "Input argument error for empty H!" << std::endl;
-        return 0;
-    }
-    if (H12.type() != CV_64FC1) {
-        std::cerr << "Convert H to type double!" << std::endl;
-        _H12.convertTo(H12, CV_64FC1);
-    }
+    assert(HA12.type() == CV_64FC1);
+
+    Mat H = Mat::eye(3, 3, CV_64FC1);
+
+    if (!HA12.data)
+        std::cerr << "[Match][Warni] Input argument error for empty H!" << std::endl;
+    if (HA12.rows == 2)
+        HA12.copyTo(H.rowRange(0, 2));
+    else
+        HA12.copyTo(H.rowRange(0, 3));
 
     int nmatches = 0;
     vnMatches12 = vector<int>(frame1.N, -1);
@@ -666,9 +667,8 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
         Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
-        Mat pt2 = H12 * pt1;
+        Mat pt2 = H * pt1;
         pt2 /= pt2.at<double>(2);
-//        Point3d p(pt2.at<double>(0), pt2.at<double>(1), pt2.at<double>(2));
         vector<size_t> vIndices2 =
             frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())
@@ -754,13 +754,19 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
     return nmatches;
 }
 
-int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H12,
+int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                                   std::map<int, int>& matches12, const int winSize)
 {
-    if (!H12.data) {
-        std::cerr << "Input argument error for empty H!" << std::endl;
-        return 0;
-    }
+    assert(HA12.type() == CV_64FC1);
+
+    Mat H = Mat::eye(3, 3, CV_64FC1);
+
+    if (!HA12.data)
+        std::cerr << "[Match][Warni] Input argument error for empty H!" << std::endl;
+    if (HA12.rows == 2)
+        HA12.copyTo(H.rowRange(0, 2));
+    else
+        HA12.copyTo(H.rowRange(0, 3));
 
     int nmatches = 0;
 
@@ -778,9 +784,8 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         int level = kp1.octave;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
         Mat pt1 = (Mat_<double>(3, 1) << kp1.pt.x, kp1.pt.y, 1);
-        Mat pt2 = H12 * pt1;
+        Mat pt2 = HA12 * pt1;
         pt2 /= pt2.at<double>(2);
-        Point3d p(pt2.at<double>(0), pt2.at<double>(1), pt2.at<double>(2));
         vector<size_t> vIndices2 =
             frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())

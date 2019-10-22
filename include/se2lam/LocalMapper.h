@@ -75,6 +75,9 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
+    int mnMaxLocalFrames;  // 0表示无上限
+    int mnSearchLevel;
+    float mfSearchRadius;
     //    bool mbStopped;
     //    bool mbStopRequested;
     //    bool mbNotStop;

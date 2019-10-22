@@ -95,7 +95,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
         for (int j = 0; j < FRAME_GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
 
-    for (int i = 0; i != N; ++i) {
+    for (size_t i = 0; i != N; ++i) {
         cv::KeyPoint& kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;
@@ -168,7 +168,7 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
         for (int j = 0; j < FRAME_GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
 
-    for (int i = 0; i != N; ++i) {
+    for (size_t i = 0; i != N; ++i) {
         cv::KeyPoint& kp = mvKeyPoints[i];
 
         int nGridPosX, nGridPosY;

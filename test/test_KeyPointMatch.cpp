@@ -6,47 +6,6 @@ string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 string g_matchResult = "/home/vance/output/rk_se2lam/test_matchResult.txt";
 Ptr<DescriptorMatcher> g_CVMatcher = DescriptorMatcher::create("BruteForce-Hamming");
 
-void writeMatchData(const string outFile,
-                    const vector<vector<int>>& vvMatches,
-                    const vector<vector<int>>& vvInliners)
-{
-    assert(vvMatches.size() == vvInliners.size());
-
-    ofstream ofs(outFile);
-    if (!ofs.is_open()) {
-        cerr << "Open file error: " << outFile << endl;
-        return;
-    }
-
-    int n = vvMatches.size();
-    int sum[n] = {0}, sumIn[n] = {0};
-    for (int i = 0; i < n; ++i) {
-        ofs << i << " ";
-        for (size_t j = 0; j < vvMatches[i].size(); ++j) {
-            ofs << vvMatches[i][j] << " ";
-            sum[i] += vvMatches[i][j];
-        }
-        ofs << endl;
-    }
-    ofs << endl;
-    for (int i = 0; i < n; ++i)
-        cout << "Tatal Match Average " << i << ": " << 1.0*sum[i]/vvMatches[i].size() << endl;
-
-    for (int i = 0; i < n; ++i) {
-        ofs << i << " ";
-        for (size_t j = 0; j < vvInliners[i].size(); ++j) {
-            ofs << vvInliners[i][j] << " ";
-            sumIn[i] += vvInliners[i][j];
-        }
-        ofs << endl;
-    }
-    ofs.close();
-    for (int i = 0; i < n; ++i)
-        cout << "Tatal Inliners Average " << i << ": " << 1.0*sumIn[i]/vvInliners[i].size() << endl;
-
-    cerr << "Write match data to file: " << outFile << endl;
-}
-
 int matchByCV(const Mat& desRef, const Mat& desCur, map<int, int>& matchCV)
 {
     vector<DMatch> matches;
@@ -111,14 +70,18 @@ int main(int argc, char** argv)
 
     //! main loop
     bool firstFrame = true;
-//    vector<vector<int>> vvMatches(deltaKF);
-//    vector<vector<int>> vvInliners(deltaKF);
+    size_t nMatchesAll3(0), nMatchesAll4(0), nMatchesAll5(0);
+    size_t nInliersAll3(0), nInliersAll4(0), nInliersAll5(0);
+    float aveMatches3, aveMatches4, aveMatches5;
+    float aveInliers3, aveInliers4, aveInliers5;
 
     Frame frameCur, frameRef;
     PtrKeyFrame KFCur, KFRef;
     Mat imgColor, imgGray, imgCur, imgRef, imgWithFeatureCur, imgWithFeatureRef;
-    Mat outImgORBMatch, outImgWarp, outImgBow, outImgCV, outImgConcat;
+    Mat outImgORBMatch, outImgWarpH, outImgWarpA, outImgBow, outImgCV, outImgConcat;
     Mat H12 = Mat::eye(3, 3, CV_64FC1);
+    Mat A12 = Mat::eye(2, 3, CV_64FC1);
+    Mat I3 = Mat::eye(3, 3, CV_64FC1);
     num = std::min(num, static_cast<int>(imgFiles.size()));
     int skipFrames = 50;
     for (int i = skipFrames; i < num; ++i) {
@@ -155,46 +118,53 @@ int main(int argc, char** argv)
         }
 
         //! 特征点匹配
-        int nMatched1(0), nMatched2(0), nMatched3(0), nMatched4(0);
-        int nInlines1(0), nInlines2(0), nInlines3(0), nInlines4(0);
-        vector<int> matchIdx, matchIdx12;
-        map<int, int> matchBow, matchCV;
+        int nMatched1(0), nMatched2(0), nMatched3(0), nMatched4(0), nMatched5(0);
+        int nInliers1(0), nInliers2(0), nInliers3(0), nInliers4(0), nInliers5(0);
+        vector<int> matchIdx, matchIdxH, matchIdxA;
+        map<int, int> matchIdxBow, matchIdxCV;
         vector<Point2f> prevMatched;
         KeyPoint::convert(frameRef.mvKeyPoints, prevMatched);
 
         timer.start();
-        nMatched1 = kpMatcher->MatchByWindow(frameRef, frameCur, prevMatched, 25, matchIdx);
-        printf("#%ld 匹配方式 MatchByWindow() 耗时%.2fms\n", frameCur.id, timer.count());
-
-        timer.start();
-        nMatched2 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, H12, matchIdx12, 25);
-        printf("#%ld 匹配方式 MatchByWindowWarp() 耗时%.2fms\n", frameCur.id, timer.count());
-
-        timer.start();
-        nMatched3 = kpMatcher->SearchByBoW(KFRef, KFCur, matchBow, false);
-        printf("#%ld 匹配方式 SearchByBoW() 耗时%.2fms\n", frameCur.id, timer.count());
-
-        timer.start();
-        nMatched4 = matchByCV(frameRef.mDescriptors, frameCur.mDescriptors, matchCV);
+        nMatched1 = matchByCV(frameRef.mDescriptors, frameCur.mDescriptors, matchIdxCV);
         printf("#%ld 匹配方式 matchByCV() 耗时%.2fms\n", frameCur.id, timer.count());
 
         timer.start();
-        if (nMatched1 >= 10) {
-            Mat H = Mat::eye(3, 3, CV_64F);
-            nInlines1 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx, H);
-        }
-        if (nMatched2 >= 10) {
-            nInlines2 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx12, H12);
-        } else {
-            H12 = Mat::eye(3, 3, CV_64F);
-        }
+        nMatched2 = kpMatcher->SearchByBoW(KFRef, KFCur, matchIdxBow, false);
+        printf("#%ld 匹配方式 SearchByBoW() 耗时%.2fms\n", frameCur.id, timer.count());
+
+        timer.start();
+        nMatched3 = kpMatcher->MatchByWindow(frameRef, frameCur, prevMatched, 25, matchIdx);
+        printf("#%ld 匹配方式 MatchByWindow() 耗时%.2fms\n", frameCur.id, timer.count());
+        nMatchesAll3 += nMatched3;
+
+        timer.start();
+        nMatched4 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, H12, matchIdxH, 25);
+        printf("#%ld 匹配方式 MatchByWindowWarpH() 耗时%.2fms\n", frameCur.id, timer.count());
+        nMatchesAll4 += nMatched4;
+
+        timer.start();
+        nMatched5 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, A12, matchIdxA, 25);
+        printf("#%ld 匹配方式 MatchByWindowWarpA() 耗时%.2fms\n", frameCur.id, timer.count());
+        nMatchesAll5 += nMatched5;
+
+        timer.start();
+        if (nMatched1 >= 10)
+            nInliers1 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxCV, I3);
+        if (nMatched2 >= 10)
+            nInliers2 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxBow, I3);
         if (nMatched3 >= 10) {
-            Mat H = Mat::eye(3, 3, CV_64F);
-            nInlines3 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchBow, H);
+            nInliers3 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx, I3);
+            nInliersAll3 += nInliers3;
         }
         if (nMatched4 >= 10) {
-            Mat H = Mat::eye(3, 3, CV_64F);
-            nInlines4 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchCV, H);
+            nInliers4 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxH, H12);
+            nInliersAll4 += nInliers4;
+        } else
+            H12 = Mat::eye(3, 3, CV_64FC1);
+        if (nMatched5 >= 10) {
+            nInliers5 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxA, A12);
+            nInliersAll5 += nInliers5;
         }
         printf("#%ld 剔除外点总耗时%.2fms\n", frameCur.id, timer.count());
 
@@ -203,45 +173,99 @@ int main(int argc, char** argv)
 //        vvInliners[idx].push_back(nInlines2);
 
         //! 匹配情况可视化
+        outImgCV = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxCV);
+        outImgBow = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxBow);
         outImgORBMatch = drawKPMatches(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdx);
-        outImgWarp = drawKPMatches(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdx12, H12);
-        outImgBow = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchBow);
-        outImgCV = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchCV);
+        outImgWarpH = drawKPMatchesHA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxH, H12);
+        outImgWarpA = drawKPMatchesHA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxA, A12);
 
-        char strMatches1[64], strMatches2[64], strMatches3[64], strMatches4[64];
-        std::snprintf(strMatches1, 64, "ORB  F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInlines1, nMatched1);
-        std::snprintf(strMatches2, 64, "WARP F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInlines2, nMatched2);
-        std::snprintf(strMatches3, 64, "BOW  F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInlines3, nMatched3);
-        std::snprintf(strMatches4, 64, "CV   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInlines4, nMatched4);
-        putText(outImgORBMatch, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        putText(outImgWarp, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        putText(outImgBow, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        putText(outImgCV, strMatches4, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        Mat imgTmp1, imgTmp2;
-        hconcat(outImgORBMatch, outImgWarp, imgTmp1);
-        hconcat(outImgCV, outImgBow, imgTmp2);
-        hconcat(imgTmp2, imgTmp1, outImgConcat);
-        imshow("BOW & ORB & Image Warp Match", outImgConcat);
-        waitKey(30);
+        char strMatches1[64], strMatches2[64], strMatches3[64], strMatches4[64], strMatches5[64];
+        std::snprintf(strMatches1, 64, "CV    F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInliers1, nMatched1);
+        std::snprintf(strMatches2, 64, "BOW   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInliers2, nMatched2);
+        std::snprintf(strMatches3, 64, "ORB   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInliers3, nMatched3);
+        std::snprintf(strMatches4, 64, "WarpH F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInliers4, nMatched4);
+        std::snprintf(strMatches5, 64, "WarpA F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id, nInliers5, nMatched5);
+        putText(outImgCV, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+        putText(outImgBow, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+        putText(outImgORBMatch, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+        putText(outImgWarpH, strMatches4, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+        putText(outImgWarpA, strMatches5, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+
+        Mat imgTmp1, imgTmp2, imgTmp3;
+        hconcat(outImgCV, outImgBow, imgTmp1);
+        hconcat(outImgORBMatch, outImgWarpH, imgTmp2);
+        hconcat(imgTmp1, imgTmp2, imgTmp3);
+        hconcat(imgTmp3, outImgWarpA, outImgConcat);
+        imshow("CV & BOW & ORB & WarpH & WarpA Matches", outImgConcat);
+        waitKey(10);
 //        string fileWarp = "/home/vance/output/rk_se2lam/warp/warp-" + text + ".bmp";
-//        string fileMatch = "/home/vance/output/rk_se2lam/warp/match-" + text + ".bmp";
 //        imwrite(fileWarp, outImgWarp);
-//        imwrite(fileMatch, outImgORBMatch);
 
         //! 内点数太少要生成新的参考帧
-        if (nInlines2 <= 10) {
+        if (nInliers4 <= 10 || nInliers5 <= 10) {
             imgCur.copyTo(imgRef);
             imgWithFeatureCur.copyTo(imgWithFeatureRef);
             frameRef = frameCur;
             KFRef = KFCur;
             H12 = Mat::eye(3, 3, CV_64FC1);
+            A12 = Mat::eye(2, 3, CV_64FC1);
         }
     }
+    aveMatches3 = nMatchesAll3 / (num - skipFrames - 1.f);
+    aveMatches4 = nMatchesAll4 / (num - skipFrames - 1.f);
+    aveMatches5 = nMatchesAll5 / (num - skipFrames - 1.f);
+    aveInliers3 = nInliersAll3 / (num - skipFrames - 1.f);
+    aveInliers4 = nInliersAll4 / (num - skipFrames - 1.f);
+    aveInliers5 = nInliersAll5 / (num - skipFrames - 1.f);
+    printf("ORB匹配平均匹配点数: %.2f, 平均内点数: %.2f\n", aveMatches3, aveInliers3);
+    printf("WarpH匹配平均匹配点数: %.2f, 平均内点数: %.2f\n", aveMatches4, aveInliers4);
+    printf("WarpA匹配平均匹配点数: %.2f, 平均内点数: %.2f\n", aveMatches5, aveInliers5);
 
-//    writeMatchData(g_matchResult, vvMatches, vvInliners);
 
     delete kpExtractor;
     delete kpMatcher;
     delete vocabulary;
     return 0;
+}
+
+
+void writeMatchData(const string outFile,
+                    const vector<vector<int>>& vvMatches,
+                    const vector<vector<int>>& vvInliners)
+{
+    assert(vvMatches.size() == vvInliners.size());
+
+    ofstream ofs(outFile);
+    if (!ofs.is_open()) {
+        cerr << "Open file error: " << outFile << endl;
+        return;
+    }
+
+    int n = vvMatches.size();
+    int sum[n] = {0}, sumIn[n] = {0};
+    for (int i = 0; i < n; ++i) {
+        ofs << i << " ";
+        for (size_t j = 0; j < vvMatches[i].size(); ++j) {
+            ofs << vvMatches[i][j] << " ";
+            sum[i] += vvMatches[i][j];
+        }
+        ofs << endl;
+    }
+    ofs << endl;
+    for (int i = 0; i < n; ++i)
+        cout << "Tatal Match Average " << i << ": " << 1.0*sum[i]/vvMatches[i].size() << endl;
+
+    for (int i = 0; i < n; ++i) {
+        ofs << i << " ";
+        for (size_t j = 0; j < vvInliners[i].size(); ++j) {
+            ofs << vvInliners[i][j] << " ";
+            sumIn[i] += vvInliners[i][j];
+        }
+        ofs << endl;
+    }
+    ofs.close();
+    for (int i = 0; i < n; ++i)
+        cout << "Tatal Inliners Average " << i << ": " << 1.0*sumIn[i]/vvInliners[i].size() << endl;
+
+    cerr << "Write match data to file: " << outFile << endl;
 }

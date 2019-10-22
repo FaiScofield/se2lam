@@ -81,9 +81,9 @@ public:
     int MatchByWindow(const Frame& frame1, const Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
                       const int winSize, std::vector<int>& vnMatches12, const int levelOffset = 1,
                       const int minLevel = 0, const int maxLevel = 8);
-    int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H,
+    int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                           std::vector<int>& vnMatches12, const int winSize);
-    int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& H12,
+    int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                           std::map<int, int>& matches12, const int winSize);
 
     int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,

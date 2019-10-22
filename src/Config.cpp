@@ -64,7 +64,8 @@ float Config::PlaneMotionInfoYrot = 1e6;
 float Config::PlaneMotionInfoZ = 1;
 
 int Config::MaxLocalFrameNum = 20;         //! TODO
-float Config::LocalFrameSearchRadius = 5;  //! TODO
+int Config::LocalFrameSearchLevel = 3;
+float Config::LocalFrameSearchRadius = 5.f;  //! TODO
 
 float Config::MinScoreBest = 0.005;
 float Config::MinMPMatchRatio = 0.05;
@@ -178,6 +179,7 @@ void Config::readConfig(const std::string& path)
         settings["plane_motion_z_info"] >> PlaneMotionInfoZ;
 
     settings["max_local_frame_num"] >> MaxLocalFrameNum;
+    settings["local_frame_search_level"] >> LocalFrameSearchLevel;
     settings["local_frame_search_radius"] >> LocalFrameSearchRadius;
 
     settings["gm_vcl_num_min_match_mp"] >> MinMPMatchNum;
@@ -243,7 +245,8 @@ void Config::checkParamValidity()
               << " - Local iteration time: " << LocalIterNum << std::endl
               << " - Global iteration time: " << GlobalIterNum << std::endl
               << " - Max local frame num: " << MaxLocalFrameNum << std::endl
-              << " - Local KF search radius[mm]: " << LocalFrameSearchRadius << std::endl
+              << " - Local KF search level: " << LocalFrameSearchLevel << std::endl
+              << " - Local KF search radius[m]: " << LocalFrameSearchRadius << std::endl
               << " - Use prev map: " << UsePrevMap << std::endl
               << " - Save new map: " << SaveNewMap << std::endl
               << " - Map file store path: " << MapFileStorePath << std::endl
@@ -276,14 +279,14 @@ void Config::checkParamValidity()
     assert(ThHuber > 0.f);
     assert(LocalIterNum >= 0);
     assert(GlobalIterNum >= 0);
-    assert(MaxLocalFrameNum > 0);
+    assert(MaxLocalFrameNum >= 0);
+    assert(LocalFrameSearchLevel > 0);
     assert(LocalFrameSearchRadius > 0.f);
     assert(MappubScaleRatio >= 1);
 }
 
 Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.)
-{
-}
+{}
 
 Se2::Se2(float _x, float _y, float _theta, double _time)
     : x(_x), y(_y), theta(normalize_angle(_theta)), timeStamp(_time)

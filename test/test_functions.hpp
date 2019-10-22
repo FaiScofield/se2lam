@@ -172,33 +172,58 @@ void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
     assert(alignedOdoms.size() == allImages.size());
 }
 
-Mat drawKPMatches(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef, const Mat& imgCur,
-                  const vector<int>& matchIdx12, const Mat& H12 = Mat())
+Mat drawKPMatches(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef,
+                  const Mat& imgCur, const vector<int>& matchIdx12)
 {
-    Mat H21, imgCurWarp, outImg;
-    if (H12.data) {
-        H21 = H12.inv(DECOMP_SVD);  // 内点数为0时H可能是空矩阵, 无法求逆.
-        warpPerspective(imgCur, imgCurWarp, H21, imgCur.size());
-        vconcat(imgCurWarp, imgRef, outImg);
-    } else {
-        vconcat(imgCur, imgRef, outImg);
-    }
+    Mat outImg;
+    vconcat(imgCur, imgRef, outImg);
 
-    for (size_t i = 0, iend = frameRef->mvKeyPoints.size(); i < iend; ++i) {
+    for (size_t i = 0, iend = frameRef->N; i < iend; ++i) {
         if (matchIdx12[i] < 0) {
             continue;
         } else {
-            Point2f p1, p2;
-            if (H12.data) {
-                Point2f p = frameCur->mvKeyPoints[matchIdx12[i]].pt;
-                Mat pt1 = (Mat_<double>(3, 1) << p.x, p.y, 1);
-                Mat pt2 = H21 * pt1;
-                pt2 /= pt2.at<double>(2);
-                p1 = Point2f(pt2.at<double>(0), pt2.at<double>(1));
-            } else {
-                p1 = frameCur->mvKeyPoints[matchIdx12[i]].pt;
-            }
-            p2 = frameRef->mvKeyPoints[i].pt + Point2f(0, imgCur.rows);
+            Point2f p1 = frameCur->mvKeyPoints[matchIdx12[i]].pt;
+            Point2f p2 = frameRef->mvKeyPoints[i].pt + Point2f(0, imgCur.rows);
+
+            circle(outImg, p1, 3, Scalar(0, 255, 0));
+            circle(outImg, p2, 3, Scalar(0, 255, 0));
+            line(outImg, p1, p2, Scalar(0, 0, 255));
+        }
+    }
+    return outImg;
+}
+
+Mat drawKPMatchesHA(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef, const Mat& imgCur,
+                  const vector<int>& matchIdx12, const Mat& HA12)
+{
+    Mat H_tmp = Mat::eye(3, 3, CV_64FC1), H21;
+
+    if (!HA12.data)  // H_3x3
+        cerr << "Empty H matrix!!" << endl;
+    if (HA12.rows == 2) {
+        HA12.copyTo(H_tmp.rowRange(0, 2));
+        H21 = H_tmp.inv(DECOMP_SVD);
+    } else {
+        H21 = HA12.inv(DECOMP_SVD);
+    }
+
+
+    Mat imgWarp, outImg;
+//    Mat H21 = H12.inv(DECOMP_SVD);
+    warpPerspective(imgCur, imgWarp, H21, imgCur.size());
+    vconcat(imgWarp, imgRef, outImg);
+
+    for (size_t i = 0, iend = frameRef->N; i < iend; ++i) {
+        if (matchIdx12[i] < 0) {
+            continue;
+        } else {
+            Point2f p = frameCur->mvKeyPoints[matchIdx12[i]].pt;
+            Mat ptCur = (Mat_<double>(3, 1) << p.x, p.y, 1);
+            Mat ptWap = H21 * ptCur;
+            ptWap /= ptWap.at<double>(2);
+
+            Point2f p1 = Point2f(ptWap.at<double>(0), ptWap.at<double>(1));
+            Point2f p2 = frameRef->mvKeyPoints[i].pt + Point2f(0, imgCur.rows);
 
             circle(outImg, p1, 3, Scalar(0, 255, 0));
             circle(outImg, p2, 3, Scalar(0, 255, 0));
@@ -230,11 +255,11 @@ Mat drawKPMatches(const PtrKeyFrame KFRef, const PtrKeyFrame KFCur, const Mat& i
  * @param kpCur     当前帧KP
  * @param matches12 参考帧到当前帧的匹配索引
  * @param H12       参考帧到当前帧的变换H/F矩阵
- * @param flag      0表示使用H矩阵, 1表示使用F矩阵
+ * @param flag      0表示使用F矩阵, 1表示使用H矩阵
  * @return          返回内点数
  */
 int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
-                         vector<int>& matches12, Mat& H12, const int flag = 0)
+                         vector<int>& matches12, Mat& H12, const int flag = 1)
 {
     assert(kpRef.size() == kpCur.size());
     assert(!matches12.empty());
@@ -257,26 +282,21 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
     size_t nPoints = ptRef.size();
     // 默认RANSAC法计算H矩阵. 天花板处于平面,最好用H矩阵, H_33 = 1
     if (flag) {
-        if (nPoints >= 8)
-            H12 = findFundamentalMat(ptRef, ptCur, FM_RANSAC, 2.0, 0.99, mask);
-        else
-            fprintf(stderr, "Too less points (%ld) for calculate F!\n", nPoints);
-    } else {
         if (nPoints >= 4)
-            H12 = findHomography(ptRef, ptCur, RANSAC, 2.0, mask);
+            H12 = findHomography(ptRef, ptCur, RANSAC, 3.0, mask);
         else
             fprintf(stderr, "Too less points (%ld) for calculate H!\n", nPoints);
+    } else {
+        if (nPoints >= 8)
+            H12 = findFundamentalMat(ptRef, ptCur, FM_RANSAC, 3.0, 0.99, mask);
+        else
+            fprintf(stderr, "Too less points (%ld) for calculate F!\n", nPoints);
     }
-
-    // Affine Transform
-//    vector<Point2f> ptR = {ptRef.begin(), ptRef.begin() + 3};
-//    vector<Point2f> ptC = {ptCur.begin(), ptCur.begin() + 3};
-//    H12 = getAffineTransform(ptR, ptC);  // 2x3
 
     int nInlier = 0;
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
         if (!mask[i])
-            matches12[idx[i]] = -2;
+            matches12[idx[i]] = -1;
         else
             nInlier++;
     }
@@ -285,7 +305,7 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
 }
 
 int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
-                         map<int, int>& matches12, Mat& H12, const int flag = 0)
+                         map<int, int>& matches12, Mat& H12, const int flag = 1)
 {
     assert(!matches12.empty());
 
@@ -305,21 +325,11 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
     size_t nPoints = ptRef.size();
     // 默认RANSAC法计算H矩阵. 天花板处于平面,最好用H矩阵, H_33 = 1
     if (flag) {
-        if (nPoints >= 8)
-            H12 = findFundamentalMat(ptRef, ptCur, FM_RANSAC, 2.0, 0.99, mask);
-        else
-            fprintf(stderr, "Too less points (%ld) for calculate F!\n", nPoints);
-    } else {
         if (nPoints >= 4)
-            H12 = findHomography(ptRef, ptCur, RANSAC, 2.0, mask);
+            H12 = findHomography(ptRef, ptCur, RANSAC, 3.0, mask);
         else
             fprintf(stderr, "Too less points (%ld) for calculate H!\n", nPoints);
     }
-
-    // Affine Transform
-//    vector<Point2f> ptR = {ptRef.begin(), ptRef.begin() + 3};
-//    vector<Point2f> ptC = {ptCur.begin(), ptCur.begin() + 3};
-//    H12 = getAffineTransform(ptR, ptC);  // 2x3
 
     int nInlier = 0;
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
@@ -332,292 +342,38 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
     return nInlier;
 }
 
-/**
- * @brief 从特征点匹配求homography（normalized DLT）
- *
- * @param vP1   归一化后的点, in reference frame
- * @param vP2   归一化后的点, in current frame
- * @return      单应矩阵
- * @see         Multiple View Geometry in Computer Vision - Algorithm 4.2 p109
- */
-cv::Mat ComputeH21(const vector<cv::Point2f>& vP1, const vector<cv::Point2f>& vP2)
+int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
+                         vector<int>& matches12, Mat& A12)
 {
-    const int N = vP1.size();
+    assert(kpRef.size() == kpCur.size());
+    assert(!matches12.empty());
 
-    cv::Mat A(2 * N, 9, CV_32F);  // 2N*9
+    vector<Point2f> ptRef, ptCur;
+    vector<int> idxRef;
+    idxRef.reserve(kpRef.size());
+    ptRef.reserve(kpRef.size());
+    ptCur.reserve(kpCur.size());
 
-    for (int i = 0; i < N; i++) {
-        const float u1 = vP1[i].x;
-        const float v1 = vP1[i].y;
-        const float u2 = vP2[i].x;
-        const float v2 = vP2[i].y;
-
-        A.at<float>(2 * i, 0) = 0.0;
-        A.at<float>(2 * i, 1) = 0.0;
-        A.at<float>(2 * i, 2) = 0.0;
-        A.at<float>(2 * i, 3) = -u1;
-        A.at<float>(2 * i, 4) = -v1;
-        A.at<float>(2 * i, 5) = -1;
-        A.at<float>(2 * i, 6) = v2 * u1;
-        A.at<float>(2 * i, 7) = v2 * v1;
-        A.at<float>(2 * i, 8) = v2;
-
-        A.at<float>(2 * i + 1, 0) = u1;
-        A.at<float>(2 * i + 1, 1) = v1;
-        A.at<float>(2 * i + 1, 2) = 1;
-        A.at<float>(2 * i + 1, 3) = 0.0;
-        A.at<float>(2 * i + 1, 4) = 0.0;
-        A.at<float>(2 * i + 1, 5) = 0.0;
-        A.at<float>(2 * i + 1, 6) = -u2 * u1;
-        A.at<float>(2 * i + 1, 7) = -u2 * v1;
-        A.at<float>(2 * i + 1, 8) = -u2;
+    for (int i = 0, iend = kpRef.size(); i < iend; ++i) {
+        if (matches12[i] < 0)
+            continue;
+        idxRef.push_back(i);
+        ptRef.push_back(kpRef[i].pt);
+        ptCur.push_back(kpCur[matches12[i]].pt);
     }
 
-    cv::Mat u, w, vt;
+    vector<unsigned char> mask;
+    A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0); // 2x3
 
-    cv::SVDecomp(A, w, u, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
-
-    return vt.row(8).reshape(0, 3);  // v的最后一列
-}
-
-/**
- * @brief 从特征点匹配求fundamental matrix（normalized 8点法）
- *
- * @param vP1   归一化后的点, in reference frame
- * @param vP2   归一化后的点, in current frame
- * @return      基础矩阵
- * @see         Multiple View Geometry in Computer Vision - Algorithm 11.1 p282 (中文版 p191)
- */
-cv::Mat ComputeF21(const vector<cv::Point2f>& vP1, const vector<cv::Point2f>& vP2)
-{
-    const int N = vP1.size();
-
-    cv::Mat A(N, 9, CV_32F);  // N*9
-
-    for (int i = 0; i < N; i++) {
-        const float u1 = vP1[i].x;
-        const float v1 = vP1[i].y;
-        const float u2 = vP2[i].x;
-        const float v2 = vP2[i].y;
-
-        A.at<float>(i, 0) = u2 * u1;
-        A.at<float>(i, 1) = u2 * v1;
-        A.at<float>(i, 2) = u2;
-        A.at<float>(i, 3) = v2 * u1;
-        A.at<float>(i, 4) = v2 * v1;
-        A.at<float>(i, 5) = v2;
-        A.at<float>(i, 6) = u1;
-        A.at<float>(i, 7) = v1;
-        A.at<float>(i, 8) = 1;
+    int nInlier = 0;
+    for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
+        if (!mask[i])
+            matches12[idxRef[i]] = -1;
+        else
+            nInlier++;
     }
 
-    cv::Mat u, w, vt;
-
-    cv::SVDecomp(A, w, u, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
-
-    cv::Mat Fpre = vt.row(8).reshape(0, 3);  // v的最后一列
-
-    cv::SVDecomp(Fpre, w, u, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
-
-    w.at<float>(2) = 0;  // 秩2约束，将第3个奇异值设为0
-
-    return u * cv::Mat::diag(w) * vt;
+    return nInlier;
 }
 
-/**
- * @brief 对给定的homography matrix打分
- *
- * @see
- * - Author's paper - IV. AUTOMATIC MAP INITIALIZATION （2）
- * - Multiple View Geometry in Computer Vision - symmetric transfer errors: 4.2.2 Geometric distance
- * - Multiple View Geometry in Computer Vision - model selection 4.7.1 RANSAC
-
-float CheckHomography(const cv::Mat& H21, const cv::Mat& H12, vector<bool>& vbMatchesInliers,
-                      float sigma)
-{
-    const int N = mvMatches12.size();
-
-    // |h11 h12 h13|
-    // |h21 h22 h23|
-    // |h31 h32 h33|
-    const float h11 = H21.at<float>(0, 0);
-    const float h12 = H21.at<float>(0, 1);
-    const float h13 = H21.at<float>(0, 2);
-    const float h21 = H21.at<float>(1, 0);
-    const float h22 = H21.at<float>(1, 1);
-    const float h23 = H21.at<float>(1, 2);
-    const float h31 = H21.at<float>(2, 0);
-    const float h32 = H21.at<float>(2, 1);
-    const float h33 = H21.at<float>(2, 2);
-
-    // |h11inv h12inv h13inv|
-    // |h21inv h22inv h23inv|
-    // |h31inv h32inv h33inv|
-    const float h11inv = H12.at<float>(0, 0);
-    const float h12inv = H12.at<float>(0, 1);
-    const float h13inv = H12.at<float>(0, 2);
-    const float h21inv = H12.at<float>(1, 0);
-    const float h22inv = H12.at<float>(1, 1);
-    const float h23inv = H12.at<float>(1, 2);
-    const float h31inv = H12.at<float>(2, 0);
-    const float h32inv = H12.at<float>(2, 1);
-    const float h33inv = H12.at<float>(2, 2);
-
-    vbMatchesInliers.resize(N);
-
-    float score = 0;
-
-    // 基于卡方检验计算出的阈值（假设测量有一个像素的偏差）
-    const float th = 5.991;
-
-    //信息矩阵，方差平方的倒数
-    const float invSigmaSquare = 1.0 / (sigma * sigma);
-
-    // N对特征匹配点
-    for (int i = 0; i < N; i++) {
-        bool bIn = true;
-
-        const cv::KeyPoint& kp1 = mvKeys1[mvMatches12[i].first];
-        const cv::KeyPoint& kp2 = mvKeys2[mvMatches12[i].second];
-
-        const float u1 = kp1.pt.x;
-        const float v1 = kp1.pt.y;
-        const float u2 = kp2.pt.x;
-        const float v2 = kp2.pt.y;
-
-        // Reprojection error in first image
-        // x2in1 = H12*x2
-        // 将图像2中的特征点单应到图像1中
-        // |u1|   |h11inv h12inv h13inv||u2|
-        // |v1| = |h21inv h22inv h23inv||v2|
-        // |1 |   |h31inv h32inv h33inv||1 |
-        const float w2in1inv = 1.0 / (h31inv * u2 + h32inv * v2 + h33inv);
-        const float u2in1 = (h11inv * u2 + h12inv * v2 + h13inv) * w2in1inv;
-        const float v2in1 = (h21inv * u2 + h22inv * v2 + h23inv) * w2in1inv;
-
-        // 计算重投影误差
-        const float squareDist1 = (u1 - u2in1) * (u1 - u2in1) + (v1 - v2in1) * (v1 - v2in1);
-
-        // 根据方差归一化误差
-        const float chiSquare1 = squareDist1 * invSigmaSquare;
-
-        if (chiSquare1 > th)
-            bIn = false;
-        else
-            score += th - chiSquare1;
-
-        // Reprojection error in second image
-        // x1in2 = H21*x1
-        // 将图像1中的特征点单应到图像2中
-        const float w1in2inv = 1.0 / (h31 * u1 + h32 * v1 + h33);
-        const float u1in2 = (h11 * u1 + h12 * v1 + h13) * w1in2inv;
-        const float v1in2 = (h21 * u1 + h22 * v1 + h23) * w1in2inv;
-
-        const float squareDist2 = (u2 - u1in2) * (u2 - u1in2) + (v2 - v1in2) * (v2 - v1in2);
-
-        const float chiSquare2 = squareDist2 * invSigmaSquare;
-
-        if (chiSquare2 > th)
-            bIn = false;
-        else
-            score += th - chiSquare2;
-
-        if (bIn)
-            vbMatchesInliers[i] = true;
-        else
-            vbMatchesInliers[i] = false;
-    }
-
-    return score;
-}
- */
-/**
- * @brief 对给定的fundamental matrix打分
- *
- * @see
- * - Author's paper - IV. AUTOMATIC MAP INITIALIZATION （2）
- * - Multiple View Geometry in Computer Vision - symmetric transfer errors: 4.2.2 Geometric distance
- * - Multiple View Geometry in Computer Vision - model selection 4.7.1 RANSAC
-
-float CheckFundamental(const cv::Mat& F21, vector<bool>& vbMatchesInliers, float sigma)
-{
-    const int N = mvMatches12.size();
-
-    const float f11 = F21.at<float>(0, 0);
-    const float f12 = F21.at<float>(0, 1);
-    const float f13 = F21.at<float>(0, 2);
-    const float f21 = F21.at<float>(1, 0);
-    const float f22 = F21.at<float>(1, 1);
-    const float f23 = F21.at<float>(1, 2);
-    const float f31 = F21.at<float>(2, 0);
-    const float f32 = F21.at<float>(2, 1);
-    const float f33 = F21.at<float>(2, 2);
-
-    vbMatchesInliers.resize(N);
-
-    float score = 0;
-
-    // 基于卡方检验计算出的阈值（假设测量有一个像素的偏差）
-    const float th = 3.841;
-    const float thScore = 5.991;
-
-    const float invSigmaSquare = 1.0 / (sigma * sigma);
-
-    for (int i = 0; i < N; i++) {
-        bool bIn = true;
-
-        const cv::KeyPoint& kp1 = mvKeys1[mvMatches12[i].first];
-        const cv::KeyPoint& kp2 = mvKeys2[mvMatches12[i].second];
-
-        const float u1 = kp1.pt.x;
-        const float v1 = kp1.pt.y;
-        const float u2 = kp2.pt.x;
-        const float v2 = kp2.pt.y;
-
-        // Reprojection error in second image
-        // l2=F21x1=(a2,b2,c2)
-        // F21x1可以算出x1在图像中x2对应的线l
-        const float a2 = f11 * u1 + f12 * v1 + f13;
-        const float b2 = f21 * u1 + f22 * v1 + f23;
-        const float c2 = f31 * u1 + f32 * v1 + f33;
-
-        // x2应该在l这条线上:x2点乘l = 0
-        const float num2 = a2 * u2 + b2 * v2 + c2;
-
-        const float squareDist1 = num2 * num2 / (a2 * a2 + b2 * b2);  // 点到线的几何距离 的平方
-
-        const float chiSquare1 = squareDist1 * invSigmaSquare;
-
-        if (chiSquare1 > th)
-            bIn = false;
-        else
-            score += thScore - chiSquare1;
-
-        // Reprojection error in second image
-        // l1 =x2tF21=(a1,b1,c1)
-
-        const float a1 = f11 * u2 + f21 * v2 + f31;
-        const float b1 = f12 * u2 + f22 * v2 + f32;
-        const float c1 = f13 * u2 + f23 * v2 + f33;
-
-        const float num1 = a1 * u1 + b1 * v1 + c1;
-
-        const float squareDist2 = num1 * num1 / (a1 * a1 + b1 * b1);
-
-        const float chiSquare2 = squareDist2 * invSigmaSquare;
-
-        if (chiSquare2 > th)
-            bIn = false;
-        else
-            score += thScore - chiSquare2;
-
-        if (bIn)
-            vbMatchesInliers[i] = true;
-        else
-            vbMatchesInliers[i] = false;
-    }
-
-    return score;
-}
- */
 #endif  // TEST_FUNCTIONS_HPP

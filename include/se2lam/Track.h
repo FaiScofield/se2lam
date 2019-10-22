@@ -116,7 +116,7 @@ private:
     Se2 mLastOdom;
 
     cv::Mat mK, mD;
-    cv::Mat mHomography;
+    cv::Mat mAffineMatrix;
     cv::Mat mImgOutMatch;
 
     bool mbFinishRequested;

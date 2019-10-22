@@ -31,6 +31,9 @@ LocalMapper::LocalMapper()
       mbFinishRequested(false), mbFinished(false)
 {
     mbPrintDebugInfo = Config::LocalPrint;
+    mnMaxLocalFrames = Config::MaxLocalFrameNum;
+    mnSearchLevel = Config::LocalFrameSearchLevel;
+    mfSearchRadius = Config::LocalFrameSearchRadius;
 }
 
 /**
@@ -480,7 +483,7 @@ void LocalMapper::printOptInfo(const SlamOptimizer &optimizer)
 void LocalMapper::updateLocalGraphInMap()
 {
     locker lock(mutexMapper);
-    mpMap->updateLocalGraph();
+    mpMap->updateLocalGraph(mnSearchLevel, mnMaxLocalFrames, mfSearchRadius);
 }
 
 //! 去除冗余关键帧
