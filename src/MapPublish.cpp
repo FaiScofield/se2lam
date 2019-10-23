@@ -23,7 +23,7 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f),
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.1f),
       mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
@@ -33,34 +33,34 @@ MapPublish::MapPublish(Map* pMap)
     mKFsNeg.ns = "KeyFramesNegative";
     mKFsNeg.id = 0;
     mKFsNeg.type = visualization_msgs::Marker::LINE_LIST;
-    mKFsNeg.scale.x = 0.05;
-    mKFsNeg.scale.y = 0.05;
+    mKFsNeg.scale.x = 0.1;
+    mKFsNeg.scale.y = 0.1;
     mKFsNeg.pose.orientation.w = 1.0;
     mKFsNeg.action = visualization_msgs::Marker::ADD;
     mKFsNeg.color.r = 0.0;
     mKFsNeg.color.g = 0.0;
     mKFsNeg.color.b = 0.0;
-    mKFsNeg.color.a = 1.0;
+    mKFsNeg.color.a = 0.5;
 
     // Local (Active) KFs, blue
     mKFsAct.header.frame_id = MAP_FRAME_ID;
     mKFsAct.ns = "KeyFramesActive";
     mKFsAct.id = 1;
     mKFsAct.type = visualization_msgs::Marker::LINE_LIST;
-    mKFsAct.scale.x = 0.05;
-    mKFsAct.scale.y = 0.05;
+    mKFsAct.scale.x = 0.1;
+    mKFsAct.scale.y = 0.1;
     mKFsAct.pose.orientation.w = 1.0;
     mKFsAct.action = visualization_msgs::Marker::ADD;
     mKFsAct.color.b = 1.0;
-    mKFsAct.color.a = 1.0;
+    mKFsAct.color.a = 0.5;
 
     // Configure Current Camera, red
     mKFNow.header.frame_id = MAP_FRAME_ID;
     mKFNow.ns = "Camera";
     mKFNow.id = 2;
     mKFNow.type = visualization_msgs::Marker::LINE_LIST;
-    mKFNow.scale.x = 0.05;
-    mKFNow.scale.y = 0.05;
+    mKFNow.scale.x = 0.1;
+    mKFNow.scale.y = 0.1;
     mKFNow.pose.orientation.w = 1.0;
     mKFNow.action = visualization_msgs::Marker::ADD;
     mKFNow.color.r = 1.0;
@@ -113,36 +113,36 @@ MapPublish::MapPublish(Map* pMap)
     mCovisGraph.ns = "CovisGraph";
     mCovisGraph.id = 6;
     mCovisGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mCovisGraph.scale.x = 0.05;
-    mCovisGraph.scale.y = 0.05;
+    mCovisGraph.scale.x = 0.03;
+    mCovisGraph.scale.y = 0.03;
     mCovisGraph.pose.orientation.w = 1.0;
     mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.color.r = 0.0;
     mCovisGraph.color.g = 1.0;
     mCovisGraph.color.b = 0.0;
-    mCovisGraph.color.a = 1.0;
+    mCovisGraph.color.a = 0.3;
 
     // Configure Feature Constraint Graph
     mFeatGraph.header.frame_id = MAP_FRAME_ID;
     mFeatGraph.ns = "FeatGraph";
     mFeatGraph.id = 7;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mFeatGraph.scale.x = 0.05;
-    mFeatGraph.scale.y = 0.05;
+    mFeatGraph.scale.x = 0.03;
+    mFeatGraph.scale.y = 0.03;
     mFeatGraph.pose.orientation.w = 1.0;
     mFeatGraph.action = visualization_msgs::Marker::ADD;
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
     mFeatGraph.color.b = 1.0;
-    mFeatGraph.color.a = 1.0;
+    mFeatGraph.color.a = 0.3;
 
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
     mVIGraph.ns = "VIGraph";
     mVIGraph.id = 8;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mVIGraph.scale.x = 0.1;
-    mVIGraph.scale.y = 0.1;
+    mVIGraph.scale.x = 0.06;
+    mVIGraph.scale.y = 0.06;
     mVIGraph.pose.orientation.w = 1.0;
     mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.color.r = 0.0;
@@ -156,13 +156,13 @@ MapPublish::MapPublish(Map* pMap)
     mOdomRawGraph.id = 9;
     mOdomRawGraph.type = visualization_msgs::Marker::LINE_LIST;
     mOdomRawGraph.action = visualization_msgs::Marker::ADD;
-    mOdomRawGraph.scale.x = 0.07;
-    mOdomRawGraph.scale.y = 0.07;
+    mOdomRawGraph.scale.x = 0.05;
+    mOdomRawGraph.scale.y = 0.05;
     mOdomRawGraph.pose.orientation.w = 1.0;
-    mOdomRawGraph.color.r = 0.95;
+    mOdomRawGraph.color.r = 0.8;
     mOdomRawGraph.color.g = 0.0;
     mOdomRawGraph.color.b = 0.0;
-    mOdomRawGraph.color.a = 0.7;
+    mOdomRawGraph.color.a = 0.75;
 
     // Cofigure MPs with no good Parallax, purple
     mMPsNoGoodPrl.header.frame_id = MAP_FRAME_ID;

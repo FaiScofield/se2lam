@@ -90,7 +90,7 @@ protected:
     //! 以下成员变量需加锁访问
     cv::Point3f mPos;   // 三维空间坐标
 
-    // first = 观测到此MP的KF, second = 在其KP中的索引, 按KFid从小到大排序
+    // first = 观测到此MP的KF, second = 在其KP中的索引
     std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
 
     PtrKeyFrame mMainKF;

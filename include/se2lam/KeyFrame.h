@@ -38,7 +38,8 @@ class Map;
 class MapPoint;
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
-class KeyFrame : public Frame
+
+class KeyFrame : public Frame, public std::enable_shared_from_this<KeyFrame>
 {
 public:
     KeyFrame();
@@ -55,12 +56,24 @@ public:
         }
     };
 
+    struct SortByValueGreater {
+        bool operator()(const std::pair<std::shared_ptr<KeyFrame>, int>& lhs,
+                        const std::pair<std::shared_ptr<KeyFrame>, int>& rhs) {
+            return lhs.second > rhs.second;
+        }
+    };
+
     void setNull(std::shared_ptr<KeyFrame>& pThis);
     bool isNull();
 
     std::set<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
+    std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
     void eraseCovisibleKF(const std::shared_ptr<KeyFrame> pKF);
     void addCovisibleKF(const std::shared_ptr<KeyFrame> pKF);
+    void addCovisibleKF(const std::shared_ptr<KeyFrame> pKF, int weight);
+    void sortCovisibleKFs();
+    void updateCovisibleKFs();
+    size_t countCovisibleKFs();
 
     //! NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
     void setViewMP(cv::Point3f pt3f, size_t idx, Eigen::Matrix3d info);
@@ -68,26 +81,17 @@ public:
 
     //! Functions for observation operations
     std::set<PtrMapPoint> getAllObsMPs(bool checkParallax = true);
-    // Return all observations as a std::map
-    std::map<PtrMapPoint, size_t> getObservations();
+    std::map<PtrMapPoint, size_t> getObservations();  // Return all observations as a std::map
+    size_t countObservations();  // Count how many observed MP
 
     void addObservation(PtrMapPoint pMP, size_t idx);
     void eraseObservation(const PtrMapPoint pMP);
     void eraseObservation(size_t idx);
-
-    size_t countObservations();  // Count how many observed MP
-
-    // Whether a MP is observed by this KF.
     bool hasObservation(const PtrMapPoint& pMP);
-    // Whether the index in image KeyPoints corresponds to an observed MP
     bool hasObservation(size_t idx);
 
-    // Get an observed MP by an index. 从图像特征点id获取观测点MP
     PtrMapPoint getObservation(size_t id);
-    // Get the corresponding index of an observed MP
     int getFeatureIndex(const PtrMapPoint& pMP);
-
-    // Set a new MP in location index (used in MP merge)
     void setObservation(const PtrMapPoint& pMP, size_t idx);
 
     void ComputeBoW(ORBVocabulary* _pVoc);
@@ -106,6 +110,7 @@ public:
     void setOdoMeasureTo(std::shared_ptr<KeyFrame> pKF, const cv::Mat& _mea, const cv::Mat& _info);
 
     void setMap(Map* pMap) { mpMap = pMap; }
+
 public:
     static unsigned long mNextIdKF;
 
@@ -140,6 +145,8 @@ protected:
     std::map<size_t, PtrMapPoint> mDualObservations;
 
     std::set<std::shared_ptr<KeyFrame>/*, KeyFrame::IdLessThan*/> mspCovisibleKFs;
+    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
+    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
 
 //    std::mutex mMutexImg; // 这两个在Frame里已经有了
 //    std::mutex mMutexPose;

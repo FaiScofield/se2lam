@@ -64,9 +64,10 @@ void LocalMapper::addNewKF(PtrKeyFrame &pKFNew, const vector<Point3f> &localMPs,
     //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     timer.start();
     mpMap->updateCovisibility(mpNewKF);
+//    mpNewKF->updateCovisibleKFs();
     double t2 = timer.count();
-    printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms\n",
-           mpNewKF->id, mpNewKF->mIdKF, t2);
+    printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF\n",
+           mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs());
 
     timer.start();
     {
@@ -151,18 +152,18 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
             Mat Tcw = mpNewKF->getPose();
-            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
+            Point3f Pw = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
                                            Config::Kcam * pMP->getMainKF()->getPose().rowRange(0, 3),
                                            Config::Kcam * Tcw.rowRange(0, 3));
-            Point3f posNewKF = cvu::se3map(Tcw, x3d);
-            if (posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
+            Point3f Pc = cvu::se3map(Tcw, Pw);
+            if (Pc.z > Config::UpperDepth || Pc.z < Config::LowerDepth)
                 continue;
-            if (!pMP->acceptNewObserve(posNewKF, mpNewKF->mvKeyPoints[i]))
+            if (!pMP->acceptNewObserve(Pc, mpNewKF->mvKeyPoints[i]))
                 continue;
 
             Eigen::Matrix3d infoNew, infoOld;
-            Track::calcSE3toXYZInfo(posNewKF, Tcw, pMP->getMainKF()->getPose(), infoNew, infoOld);
-            mpNewKF->setViewMP(posNewKF, i, infoNew);
+            Track::calcSE3toXYZInfo(Pc, Tcw, pMP->getMainKF()->getPose(), infoNew, infoOld);
+            mpNewKF->setViewMP(Pc, i, infoNew);
             mpNewKF->addObservation(pMP, i);
             pMP->addObservation(mpNewKF, i);
             nProj++;

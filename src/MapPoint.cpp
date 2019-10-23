@@ -335,13 +335,14 @@ void MapPoint::updateMainKFandDescriptor()
 
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
-//    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
+    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
     float dist = cv::norm(mMainKF->mvViewMPs[idx]);
     int nlevels = mMainKF->mnScaleLevels;
 
-    mMinDist = dist / mLevelScaleFactor;
+    //! 金字塔为1层时这里mMinDist和mMinDist会相等! 程序错误!
+//    mMinDist = dist / mLevelScaleFactor;
     mMaxDist = dist * mLevelScaleFactor;
-//    mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
+    mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
 }
 
 /**

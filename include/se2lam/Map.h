@@ -72,6 +72,7 @@ public:
                                       std::set<PtrMapPoint>& spMPs);
     static float compareViewMPs(const PtrKeyFrame& pKF, const std::set<PtrKeyFrame>& spKFs,
                                 std::set<PtrMapPoint>& spMPs, int k = 2);
+    static int getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
 
     //! For LocalMapper

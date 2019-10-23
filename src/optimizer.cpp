@@ -496,10 +496,10 @@ void addVertexXYZ(SlamOptimizer &opt, const g2o::Vector3D &xyz, int id, bool mar
 
 /**
  * @brief addEdgeSE3Expmap 添加相机位姿间的约束边, 连接两个相机的位姿节点VertexSE3Expmap
- * measure = Tc1c2 = Tbc.inv() * Tb1b2 * Tbc, C = SE3Quat(measure), _error = (T2.inv() * C * T1).log()
+ * measure = Tc1c2 = Tcb * Tb1b2 * Tbc, C = SE3Quat(measure), _error = (T2.inv() * C * T1).log()
  *
  * @param opt       优化器
- * @param measure   相机位姿误差
+ * @param measure   两KF间相机的位姿变换Tc1c2
  * @param id0       T1的id
  * @param id1       T2的id
  * @param info      信息矩阵

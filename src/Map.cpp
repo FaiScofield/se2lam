@@ -444,14 +444,16 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFCurr,
                          PtrKeyFrame& pKFLoop)
 {
-    locker lock1(mMutexLocalGraph);
-    locker lock2(mMutexGlobalGraph);
+    {
+        locker lock1(mMutexLocalGraph);
+        locker lock2(mMutexGlobalGraph);
 
-    pKFCurr->addCovisibleKF(pKFLoop);
-    pKFLoop->addCovisibleKF(pKFCurr);
-
+        pKFCurr->addCovisibleKF(pKFLoop);
+        pKFLoop->addCovisibleKF(pKFCurr);
+    }
     fprintf(stderr, "[ Map ][Info ] Merge loop close between KF#%ld and KF#%ld\n", pKFCurr->mIdKF,
             pKFLoop->mIdKF);
+
     for (auto iter = mapMatchMP.begin(), itend = mapMatchMP.end(); iter != itend; iter++) {
         size_t idKPCurr = iter->first;
         size_t idKPLoop = iter->second;
@@ -459,7 +461,7 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
         if (pKFCurr->hasObservation(idKPCurr) && pKFLoop->hasObservation(idKPLoop)) {
             PtrMapPoint pMPCurr = pKFCurr->getObservation(idKPCurr);
             PtrMapPoint pMPLoop = pKFLoop->getObservation(idKPLoop);
-            mergeMP(pMPLoop, pMPCurr);
+            mergeMP(pMPLoop, pMPCurr); // setnull 会锁住Map的mutex
         }
     }
 }
@@ -527,6 +529,20 @@ float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& spK
     return ratio;
 }
 
+int Map::getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2)
+{
+    set<PtrMapPoint> spMPs1 = pKF1->getAllObsMPs(false);
+    if (spMPs1.size() == 0)
+        return 0;
+
+    int count = 0;
+    for (auto iter = spMPs1.begin(); iter != spMPs1.end(); iter++) {
+        if (pKF2->hasObservation(*iter))
+            count++;
+    }
+
+    return count;
+}
 
 //! 此函数在LocalMap的removeOutlierChi2()函数中调用
 void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2UV*>>& vpEdgesAll,

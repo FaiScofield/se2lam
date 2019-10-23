@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "Frame.h"
 #include "GlobalMapper.h"
+#include "ORBmatcher.h"
 #include "Sensors.h"
 #include "cvutil.h"
 #include <g2o/types/sba/types_six_dof_expmap.h>
@@ -41,7 +42,7 @@ public:
     Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, double& timeImg);
 
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
-    static void calcSE3toXYZInfo(cv::Point3f xyz1, const cv::Mat& Tcw1, const cv::Mat& Tcw2,
+    static void calcSE3toXYZInfo(const cv::Point3f& Pc1, const cv::Mat& Tc1w, const cv::Mat& Tc2w,
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
     // for visulization message publisher
@@ -93,6 +94,7 @@ private:
     GlobalMapper* mpGlobalMapper;
     Sensors* mpSensors;
     ORBextractor* mpORBextractor;  // 这里有new
+    ORBmatcher* mpORBmatcher;
 
     // local map
     Frame mCurrentFrame;
