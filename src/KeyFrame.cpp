@@ -96,7 +96,7 @@ void KeyFrame::setNull(shared_ptr<KeyFrame> &pThis)
 
     mvKeyPoints.clear();
     mDescriptors.release();
-    if (bNeedVisulization)
+    if (bNeedVisualization)
         mImage.release();
 
     // Handle Feature based constraints
@@ -213,10 +213,11 @@ void KeyFrame::sortCovisibleKFs()
                                                        mCovisibleKFsWeight.end());
     std::sort(vpCovisbleKFsWeight.begin(), vpCovisbleKFsWeight.end(), SortByValueGreater());
 
+    size_t n = vpCovisbleKFsWeight.size();
     mvpCovisibleKFsSorted.clear();
-    mvpCovisibleKFsSorted.reserve(vpCovisbleKFsWeight.size());
-    for (const auto& ckf : vpCovisbleKFsWeight)
-        mvpCovisibleKFsSorted.push_back(ckf.first);
+    mvpCovisibleKFsSorted.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+        mvpCovisibleKFsSorted.push_back(vpCovisbleKFsWeight[i].first);
 }
 
 void KeyFrame::updateCovisibleKFs()
@@ -229,8 +230,8 @@ void KeyFrame::updateCovisibleKFs()
         if (!pMP || pMP->isNull())
             continue;
 
-        set<PtrKeyFrame> KFObs = pMP->getObservations();
-        for (auto mit = KFObs.begin(), mend = KFObs.end(); mit != mend; mit++) {
+        set<PtrKeyFrame> sKFObs = pMP->getObservations();
+        for (auto mit = sKFObs.begin(), mend = sKFObs.end(); mit != mend; mit++) {
             PtrKeyFrame pKFObs = *mit;
             if (pKFObs->mIdKF == mIdKF)
                 continue; // 除去自身，自己与自己不算共视

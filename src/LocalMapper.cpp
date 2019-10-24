@@ -179,16 +179,22 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
     int nAddNewMP = 0;
     assert(pPrefKF->N == localMPs.size());
     for (size_t i = 0, iend = localMPs.size(); i != iend; ++i) {
-        // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配(也没有对应的MP)，则给他们创造MP
+        // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配
         if (vMatched12[i] >= 0 && !pPrefKF->hasObservation(i)) {
+            // 情况1, 当前帧KP存在MP观测(可能是通过局部地图投影匹配得到的), 应与参考帧关联
             if (mpNewKF->hasObservation(vMatched12[i])) {
                 PtrMapPoint pMP = mpNewKF->getObservation(vMatched12[i]);
 
-                pMP->addObservation(pPrefKF, i);
+                Point3f Pcr = cvu::se3map(pPrefKF->getPose(), pMP->getPos());
+                Eigen::Matrix3d xyzinfo1, xyzinfo2;
+                Track::calcSE3toXYZInfo(Pcr, pPrefKF->getPose(), pMP->getMainKF()->getPose(), xyzinfo1, xyzinfo2);
+                pPrefKF->setViewMP(Pcr, i, xyzinfo1);
                 pPrefKF->addObservation(pMP, i);
+                pMP->addObservation(pPrefKF, i);
                 continue;
             }
 
+            // 情况2, 当前帧KP也没有对应的MP，这时就三角化为它们创造MP
             Point3f posW = cvu::se3map(cvu::inv(pPrefKF->getPose()), localMPs[i]);
 
             //! TODO to delete, for debug.

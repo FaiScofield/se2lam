@@ -80,7 +80,7 @@ public:
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateCovisibility(PtrKeyFrame& pNewKF);
     void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs,
-                                    int maxN = 20, float searchRadius = 5.f);
+                                    int maxN = 10, float searchRadius = 5.f);
 
     bool pruneRedundantKF();
     int removeLocalOutlierMP(const std::vector<std::vector<int>>& vnOutlierIdxAll);

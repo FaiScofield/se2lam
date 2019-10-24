@@ -209,7 +209,7 @@ void MapPoint::setPos(const Point3f& pt3f)
 }
 
 /**
- * @brief   根据观测方向及坐标合理性, 判断此MP是不是KF的一个合理观测, LocalMap里关联MP时调用
+ * @brief 根据观测方向及坐标合理性, 判断此MP是不是KF的一个合理观测, LocalMap里关联MP时调用
  * @param posKF  此MP在KF相机坐标系下的坐标, 即Pc
  * @param kp     此MP投影到KF后匹配上的特征点
  * @return
@@ -222,8 +222,8 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
     float cosAngle = cv::norm(posKF.dot(mNormalVector)) / (dist * cv::norm(mNormalVector));
     bool c1 = std::abs(mMainKF->mvKeyPoints[mObservations[mMainKF]].octave - kp.octave) <= 2;
     bool c2 = cosAngle >= 0.866f;  // no larger than 30 degrees
-//    bool c3 = dist >= mMinDist && dist <= mMaxDist;
-    bool c3 = true;
+    bool c3 = dist >= mMinDist && dist <= mMaxDist;
+//    bool c3 = true;
     return c1 && c2 && c3;
 }
 
@@ -335,7 +335,7 @@ void MapPoint::updateMainKFandDescriptor()
 
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
-    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
+    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave]; // 第0层值为1
     float dist = cv::norm(mMainKF->mvViewMPs[idx]);
     int nlevels = mMainKF->mnScaleLevels;
 
@@ -349,7 +349,7 @@ void MapPoint::updateMainKFandDescriptor()
  * @brief 视差不好的MP增加新的观测后会更新视差
  * 一旦MP视差合格后就不会再更新, 如果连续6帧KF后视差仍不好, 会抛弃该MP
  * @param pKF   能观测到此MP的KF指针
- * TODO 待更新为深度滤波器
+ * TODO 有改进空间, 可以用深度滤波器更新视差
  */
 void MapPoint::updateParallax(const PtrKeyFrame& pKF)
 {

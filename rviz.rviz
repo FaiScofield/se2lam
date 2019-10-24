@@ -5,7 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Marker1
-        - /Marker1/Namespaces1
       Splitter Ratio: 0.5
     Tree Height: 390
   - Class: rviz/Selection
@@ -38,14 +37,14 @@ Visualization Manager:
       Name: Marker
       Namespaces:
         Camera: true
-        CovisGraph: true
-        FeatGraph: true
+        CovisGraph: false
+        FeatGraph: false
         KeyFramesActive: true
         KeyFramesNegative: true
         MapPointsActive: false
         MapPointsNegative: false
         MapPointsNoGoodParallax: false
-        MapPointsNow: false
+        MapPointsNow: true
         OdomRawGraph: true
         VIGraph: true
       Queue Size: 100
@@ -78,7 +77,7 @@ Visualization Manager:
       Enabled: true
       Length: 3.33333302
       Name: Axes
-      Radius: 0.0350000001
+      Radius: 0.0799999982
       Reference Frame: se2lam/World
       Value: true
   Enabled: true
@@ -106,25 +105,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 65.6663513
+      Distance: 17.2271423
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -15.9641943
-        Y: 6.75906515
-        Z: -6.44457006
+        X: -2.50431323
+        Y: 0.895655096
+        Z: -1.23777592
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.54479635
+      Pitch: 1.05979764
       Target Frame: se2lam/World
       Value: Orbit (rviz)
-      Yaw: 1.56998134
+      Yaw: 1.40998137
     Saved: ~
 Window Geometry:
   Displays:

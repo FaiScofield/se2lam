@@ -525,9 +525,9 @@ bool Track::needNewKF()
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
         printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id);
-        mpLocalMapper
-            ->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧进来时就可以变成KF了
-        return bNeedNewKF;
+        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧就可以变成KF
+//        return bNeedNewKF;
+        return true;
     }
 
 

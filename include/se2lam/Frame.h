@@ -63,7 +63,7 @@ public:
 
 public:
     //! static variable
-    static bool bNeedVisulization;
+    static bool bNeedVisualization;
     static bool bIsInitialComputations;  // 首帧畸变校正后会重新计算图像边界,然后此flag取反
     static float minXUn;                 // 图像边界
     static float minYUn;

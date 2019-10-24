@@ -23,7 +23,7 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.1f),
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f),
       mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
@@ -120,7 +120,7 @@ MapPublish::MapPublish(Map* pMap)
     mCovisGraph.color.r = 0.0;
     mCovisGraph.color.g = 1.0;
     mCovisGraph.color.b = 0.0;
-    mCovisGraph.color.a = 0.3;
+    mCovisGraph.color.a = 0.5;
 
     // Configure Feature Constraint Graph
     mFeatGraph.header.frame_id = MAP_FRAME_ID;
@@ -134,7 +134,7 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
     mFeatGraph.color.b = 1.0;
-    mFeatGraph.color.a = 0.3;
+    mFeatGraph.color.a = 0.5;
 
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
