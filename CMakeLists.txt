@@ -11,8 +11,9 @@ IF (CMAKE_COMPILER_IS_GNUCXX )
     ADD_DEFINITIONS("-W -Wall -Wno-deprecated-declarations")  #-Werror  -Wno-unused-parameter
 ENDIF()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -O3 -march=native ")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3 -march=native -g -std=c++11") #-Werror -g -O
+# -march=native 参数不可用, 会使g2o出错.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -Wall -O3") #-Werror -g -O
 
 add_subdirectory(Thirdparty/DBoW2)
 add_subdirectory(Thirdparty/g2o-20160424)
@@ -34,10 +35,8 @@ else()
     MESSAGE("    ===> OpenCV Not Found!!!" )
 endif()
 
-set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
-#set(G2O_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/g2o-20160424/install)
+set(G2O_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/g2o-20160424/install)
 find_package(G2O REQUIRED)
-set(G2O_INCLUDE_DIR ${G2O_ROOT}/include)
 file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
 list(APPEND G2O_LIBS
     cxsparse cholmod
@@ -67,7 +66,7 @@ catkin_package(
         tf
         roscpp
         image_transport
-    )
+)
 include_directories(${catkin_INCLUDE_DIRS})
 
 list(APPEND LINK_LIBS
