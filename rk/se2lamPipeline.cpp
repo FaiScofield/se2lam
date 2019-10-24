@@ -15,8 +15,6 @@ using namespace Eigen;
 using namespace se2lam;
 namespace bf = boost::filesystem;
 
-const char* vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
-
 struct RK_IMAGE {
     RK_IMAGE(const string& s, const double& t) : fileName(s), timeStamp(t) {}
 
@@ -73,73 +71,6 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     files = allImages;
 }
 
-/*
-void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
-{
-    ifstream rec(odomFile);
-    if (!rec.is_open()) {
-        cerr << "[Main ][Error] Error in opening file: " << odomFile << endl;
-        rec.close();
-        ros::shutdown();
-        return;
-    }
-
-    odoData.clear();
-    string line;
-    while (std::getline(rec, line) && !line.empty()) {
-        istringstream iss(line);
-        Se2 odo;
-        iss >> odo.timeStamp >> odo.x >> odo.y >> odo.theta;  // theta 可能会比超过pi,使用前要归一化
-        odo.timeStamp *= 1e-6;
-        odo.x *= 1000.f;
-        odo.y *= 1000.f;
-        odoData.emplace_back(odo);
-    }
-    rec.close();
-
-    if (odoData.empty()) {
-        cerr << "[Main ][Error] Not odom data in the file!" << endl;
-        ros::shutdown();
-        return;
-    } else {
-        cout << "[Main ][Info ] Read " << odoData.size() << " odom datas from the file." << endl;
-    }
-}
-
-void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
-                   map<RK_IMAGE, vector<Se2>>& dataAligned)
-{
-    // 去除掉没有odom数据的图像
-    Se2 firstOdo = allOdoms[0];
-    auto iter = allImages.begin();
-    for (auto iend = allImages.end(); iter != iend; ++iter) {
-        if (iter->timeStamp < firstOdo.timeStamp)
-            continue;
-        else
-            break;
-    }
-    allImages.erase(allImages.begin(), iter);
-    cout << "[Main ][Info ] Cut some images for timestamp too earlier, now image size: "
-         << allImages.size() << endl;
-
-    // 数据对齐
-    auto ite = allOdoms.begin(), its = allOdoms.begin();
-    for (size_t i = 0, iend = allImages.size(); i < iend; ++i) {
-        double imgTime = allImages[i].timeStamp;
-
-        while (ite != allOdoms.end()) {
-            if (ite->timeStamp <= imgTime)
-                ite++;
-            else
-                break;
-        }
-        vector<Se2> odoDeq = vector<Se2>(its, ite);
-        its = ite;
-
-        dataAligned[allImages[i]] = odoDeq;
-    }
-}
-*/
 
 int main(int argc, char** argv)
 {
@@ -153,22 +84,16 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
+    const string vocFile = string(argv[1]) + "../se2_config/ORBvoc.bin";
+
     OdoSLAM system;
-    system.setVocFileBin(vocFile);
+    system.setVocFileBin(vocFile.c_str());
     system.setDataPath(argv[1]);
     system.start();
 
     string imageFolder = Config::DataPath + "/slamimg";
     vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
-
-//    string odomRawFile = Config::DataPath + "/OdomRaw.txt";
-//    vector<Se2> allOdoms;
-//    readOdomsRK(odomRawFile, allOdoms);
-
-//    map<RK_IMAGE, vector<Se2>> dataAligned;
-//    dataAlignment(allImages, allOdoms, dataAligned);
-//    assert(allImages.size() == dataAligned.size());
 
     string odomRawFile = Config::DataPath + "/odo_raw.txt"; // [mm]
     ifstream rec(odomRawFile);
@@ -197,15 +122,12 @@ int main(int argc, char** argv)
         iss >> x >> y >> theta;
 
         string fullImgName = allImages[i].fileName;
-//        double imgTime = allImages[i].timeStamp;
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
             cerr << "[Main ][Error] No image data for image " << fullImgName << endl;
             continue;
         }
 
-//        system.receiveOdoDatas(dataAligned[allImages[i]]);
-//        system.receiveImgData(img, imgTime);
         system.receiveOdoData(x, y, theta);
         system.receiveImgData(img);
 
