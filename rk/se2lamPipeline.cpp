@@ -15,7 +15,7 @@ using namespace Eigen;
 using namespace se2lam;
 namespace bf = boost::filesystem;
 
-const char* vocFile = "/home/vance/dataset/se2/ORBvoc.bin";
+const char* vocFile = "/home/lmp/wse2lam/data/ORBvoc.bin";
 
 struct RK_IMAGE {
     RK_IMAGE(const string& s, const double& t) : fileName(s), timeStamp(t) {}
@@ -147,18 +147,19 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "se2_pipeline");
     ros::start();
 
-    if (argc < 2) {
+    if (argc > 2) {
         cerr << "Usage: rosrun se2lam se2lamPipeline <dataPath>" << endl;
         ros::shutdown();
         exit(-1);
     }
 
+    argv[1] = "/home/lmp/klt_se2lam/mypicture/dibea6500_2";
     OdoSLAM system;
     system.setVocFileBin(vocFile);
     system.setDataPath(argv[1]);
     system.start();
 
-    string imageFolder = Config::DataPath + "/slamimg";
+    string imageFolder = Config::DataPath + "/image_0";
     vector<RK_IMAGE> allImages;
     readImagesRK(imageFolder, allImages);
 

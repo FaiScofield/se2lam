@@ -29,11 +29,13 @@ public:
     void setUpdated(bool val);
 
     void updateOdo(float x_, float y_, float theta_, double time_ = 0);
+    void updateImu(double theta_, double time_ = 0);
 //    void updateOdoSequence(std::vector<Se2>& odoDeque_);
     void updateImg(const cv::Mat& img_, double time_ = 0);
 
     // After readData(), img_updatd and odo_updated would be set false
     void readData(Se2& dataOdo_, cv::Mat& dataImg_);
+    void readData(Se2& dataOdo_, cv::Mat& dataImg_, double &Imu_theta);
 //    void readDataSequence(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_);
 //    void readDataWithTime(Se2& odo, cv::Mat& img, double& time);
 
@@ -45,16 +47,22 @@ public:
 protected:
     cv::Mat mImg;
     Se2 mOdo;
+
 //    std::vector<Se2> mvOdoSeq;
     double timeImg;
     double timeOdo;
+    double time_Imu;
+    double theta_Imu;
 
+    std::atomic_bool Imu_updated;
     std::atomic_bool imgUpdated;
     std::atomic_bool odoUpdated;
+
     std::condition_variable cndvSensorUpdate;
 
     std::mutex mMutexOdo;
     std::mutex mMutexImg;
+    std::mutex mutex_Imu;
 };
 }
 

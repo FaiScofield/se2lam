@@ -3,11 +3,11 @@
 #### Settings for my dataset, revise for specific dataset accordingly. #####
 
 # Tracking frequency
-fps: 5
+fps: 15
 
 # How many images, start and max
 img_start_idx: 30
-img_count: 1500
+img_count: 1900
 
 # Accepted feature depth bounds [mm]
 upper_depth: 3600.0

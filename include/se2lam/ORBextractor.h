@@ -51,6 +51,8 @@ public:
     void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
                     cv::OutputArray descriptors);
 
+    //获取给定特征点的描述子
+    void getdescrib(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
     int inline GetLevels() { return nlevels; }
 
     float inline GetScaleFactor() { return scaleFactor; }

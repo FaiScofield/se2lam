@@ -53,6 +53,9 @@ public:
     bool isFinished();
     void requestFinish();
 
+    //klt
+    void mCreateFrameFirstKlt(const cv::Mat& img, const double& Imu_theta, const Se2& odo);
+    void mTrack_klt(const cv::Mat &img, const Se2& odo, double Imu_theta);
 public:
     // Tracking states
     cvu::eTrackingState mState;
@@ -124,6 +127,37 @@ private:
 
     std::mutex mMutexForPub;
     std::mutex mMutexFinish;
+
+
+    //klt跟踪添加变量
+    Frame mRefFrame;
+    int index_img;
+    int imgRows;//图像尺寸
+    int imgCols;
+    bool interKeyFrame;
+    int MIN_DIST;//mask建立时的特征点周边半径
+    int MAX_CNT; //最大特征点数量
+    cv::Mat mask;//图像掩码
+    cv::Mat prev_img, cur_img, forw_img;//prev_img是预测上一次帧的图像数据，cur_img是光流跟踪的前一帧的图像数据，forw_img是光流跟踪的后一帧的图像数据
+    vector<cv::Point2f> n_pts;//每一帧中新提取的特征点
+    vector<cv::Point2f> prev_pts, cur_pts, forw_pts;//对应的图像特征点
+    vector<cv::Point2f> prev_un_pts, cur_un_pts;//归一化相机坐标系下的坐标
+    vector<cv::Point2f> pts_velocity;//当前帧相对前一帧特征点沿x,y方向的像素移动速度
+    vector<int> ids;//能够被跟踪到的特征点的id
+    vector<int> track_cnt;//当前帧forw_img中每个特征点被追踪的时间次数
+    vector<int> track_midx;//当前帧与关键帧匹配点的对应关系;
+    //klt跟踪添加函数
+    bool inBorder(const cv::Point2f &pt);//判断是否为边界点
+    void reduceVector(vector<cv::Point2f> &prev_pts, vector<cv::Point2f> &cur_pts,vector<cv::Point2f> &forw_pts,
+                      vector<int> &ids, vector<int> &track_cnt, vector<int> &track_midx, vector<uchar> status);//删除不需要的数据
+    void reduceVector(vector<cv::Point2f> &v, vector<uchar> status);
+    void rejectWithRansac();//Ransac删除误匹配点
+    void setMask();//设置特征点提取的mask区域
+    void addPoints();//更新跟踪点
+    void getRotatePoint(vector<cv::Point2f> Points, vector<cv::Point2f>& dstPoints, const cv::Point rotate_center, double angle);//获取绕旋转中心旋转后的点坐标
+    void predictPointsAndImag(double Ww,cv::Mat &rot_img,vector<cv::Point2f> &points_prev);//获取预测位置的图像和特征点
+    void drawMachesPoints();
+    void drawPredictPoints();
 };
 
 

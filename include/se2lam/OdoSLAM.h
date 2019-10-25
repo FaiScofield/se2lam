@@ -49,6 +49,11 @@ public:
         mpSensors->updateImg(img_, time_);
     }
 
+    inline void receiveImuTheta(double theta_, double ctime_)
+    {
+        mpSensors->updateImu(theta_, ctime_);
+    }
+
     void requestFinish();
     void waitForFinish();
 

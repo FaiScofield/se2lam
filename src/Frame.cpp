@@ -10,6 +10,7 @@
 #include "Track.h"
 #include "converter.h"
 #include "cvutil.h"
+#include "lineDetection.h"
 
 #include "Preprocess.h"
 
@@ -31,6 +32,175 @@ Frame::Frame()
 
 Frame::~Frame()
 {}
+
+/*
+* @跟踪过程中建立Frame
+* @Maple_liu
+* @Email:mingpei.liu@rock-chips.com
+* @2019.10.23
+*/
+Frame::Frame(const Mat &im, const Se2& odo, vector<cv::KeyPoint> mckeyPoints, ORBextractor *extractor, const Mat &K, const Mat &distCoef){
+
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
+    if (bIsInitialComputations) {
+        //! 计算去畸变后的图像边界
+        computeBoundUn(K, distCoef);
+
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
+
+        bIsInitialComputations = false;
+    }
+
+    id = nextId;
+    nextId++;
+    img = im.clone();
+    keyPoints = mckeyPoints;
+    //计算描述子
+    mpORBExtractor = extractor;
+    mpORBExtractor->getdescrib(img,keyPoints,mDescriptors);
+
+
+    N = keyPoints.size();
+    if(keyPoints.empty())
+        return;
+
+    //undistortKeyPoints(K, distCoef);
+    mvKeyPoints = keyPoints;
+
+    if (bNeedVisulization)
+        img.copyTo(mImage);
+    //Scale Levels Info
+    mnScaleLevels = 1;        // default 5
+    mfScaleFactor = 1.2;   // default 1.2
+
+    // 计算金字塔每层尺度和高斯噪声
+    mvScaleFactors.resize(mnScaleLevels);
+    mvLevelSigma2.resize(mnScaleLevels);
+    mvScaleFactors[0] = 1.0f;
+    mvLevelSigma2[0] = 1.0f;
+    for(int i=1; i<mnScaleLevels; i++)
+    {
+        mvScaleFactors[i] = mvScaleFactors[i-1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+    }
+
+    mvInvLevelSigma2.resize(mvLevelSigma2.size());
+    for(int i=0; i<mnScaleLevels; i++)
+        mvInvLevelSigma2[i] = 1.0/mvLevelSigma2[i];
+
+    odom = odo;
+}
+
+/*
+* @第一帧图像建立Frame
+* @Maple_liu
+* @Email:mingpei.liu@rock-chips.com
+* @2019.10.23
+*/
+Frame::Frame(const Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extractor, const Mat &K, const Mat &distCoef){
+
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
+    if (bIsInitialComputations) {
+        //! 计算去畸变后的图像边界
+        computeBoundUn(K, distCoef);
+
+        assert(maxXUn != minXUn && maxYUn != minYUn);
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
+
+        bIsInitialComputations = false;
+        bNeedVisulization = Config::NeedVisualization;
+    }
+
+    MIN_DIST = 0;//mask建立时的特征点周边半径
+    MAX_CNT = 1000; //最大特征点数量
+    cv::Mat unimg;
+    //如果图像是RGB将其转换成灰度图
+    if (im.channels() != 1)
+        cv::cvtColor(im, img, cv::COLOR_RGB2GRAY);
+    else
+    {
+        unimg = im.clone();
+    }
+
+    undistort(unimg, img, Config::Kcam, Config::Dcam);
+    //标签
+    id = nextId;
+    nextId++;
+    //第一帧图像，将其赋值给第一帧图像
+    //cur和forw分别是LK光流跟踪的前后两帧，forw才是真正的＂当前＂帧，cur实际上是上一帧，而pre是上一次发布的帧，也就是rejectWithF()函数
+    //如果当前帧的图像数据flow_img为空，说明当前是第一次读入图像数据
+    //将读入的图像赋给当前帧flow_img
+    //同时，还将读入的图像赋给prev_img,cur_img,这是为了避免后面使用到这些数据时，它们是空的
+    prev_img = cur_img = forw_img = img;
+    //特征点提取
+//    Preprocess pre;
+//    Mat sharpImage1 = pre.sharpping(img,10);
+//    Mat gammaImage1 = pre.GaMma(sharpImage1,0.7);
+//    Mat sharpImage = pre.sharpping(img,8);
+//    Mat gammaImage = pre.GaMma(sharpImage,1.8);\
+
+
+    cv::Mat imgGray;
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(img, imgGray);
+    Mat mask = getLineMask(imgGray, false);
+    cv::goodFeaturesToTrack(imgGray, n_pts, MAX_CNT, 0.01, MIN_DIST, mask);//mask提点
+//
+//    detectFeaturePointsCeil(gammaImage1,mask);//mask_ceil提点
+    //将新检测到的特征点n_pts添加到forw_pts中，id初始化－１,track_cnt初始化为１
+    addPoints();
+
+
+    keyPoints.resize(forw_pts.size());
+    for (int i = 0;i<forw_pts.size();i++)
+    {
+        keyPoints[i].pt = forw_pts[i];
+        keyPoints[i].octave = 0;
+        track_midx.push_back(i);
+    }
+
+
+    //计算描述子
+    mpORBExtractor = extractor;
+    mpORBExtractor->getdescrib(img,keyPoints,mDescriptors);
+
+
+    N = keyPoints.size();
+    if(keyPoints.empty())
+        return;
+
+    //undistortKeyPoints(K, distCoef);
+    mvKeyPoints = keyPoints;
+
+    if (bNeedVisulization)
+        img.copyTo(mImage);
+
+    //Scale Levels Info
+    mnScaleLevels = 1;        // default 5
+    mfScaleFactor = 1.2;   // default 1.2
+
+    // 计算金字塔每层尺度和高斯噪声
+    mvScaleFactors.resize(mnScaleLevels);
+    mvLevelSigma2.resize(mnScaleLevels);
+    mvScaleFactors[0] = 1.0f;
+    mvLevelSigma2[0] = 1.0f;
+    for(int i=1; i<mnScaleLevels; i++)
+    {
+        mvScaleFactors[i] = mvScaleFactors[i-1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+    }
+
+    mvInvLevelSigma2.resize(mvLevelSigma2.size());
+    for(int i=0; i<mnScaleLevels; i++)
+        mvInvLevelSigma2[i] = 1.0/mvLevelSigma2[i];
+
+    odom = odo;
+    //Tcw = cv::Mat::eye(4,4,CV_32FC1);
+    //Tcr = cv::Mat::eye(4,4,CV_32FC1);
+}
 
 Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const Mat& K,
              const Mat& distCoef) : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
@@ -185,6 +355,22 @@ Frame::Frame(const Frame& f)
       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
       Trb(f.Trb)
 {
+    //klt
+    prev_img = f.prev_img;
+    cur_img = f.cur_img;
+    n_pts = f.n_pts;
+    prev_pts = f.prev_pts;
+    cur_pts = f.cur_pts;
+    forw_pts = f.forw_pts;
+    ids = f.ids;
+    track_cnt = f.track_cnt;
+    track_midx = f.track_midx;
+
+    f.img.copyTo(img);
+    keyPoints = f.keyPoints;
+    keyPointsUn = f.keyPointsUn;
+
+
     if (bNeedVisulization)
         f.mImage.copyTo(mImage);
 
@@ -198,6 +384,22 @@ Frame::Frame(const Frame& f)
 
 Frame& Frame::operator=(const Frame& f)
 {
+    //klt
+    prev_img = f.prev_img;
+    cur_img = f.cur_img;
+    n_pts = f.n_pts;
+    prev_pts = f.prev_pts;
+    cur_pts = f.cur_pts;
+    forw_pts = f.forw_pts;
+    ids = f.ids;
+    track_cnt = f.track_cnt;
+    track_midx = f.track_midx;
+
+    f.img.copyTo(img);
+    keyPoints = f.keyPoints;
+    keyPointsUn = f.keyPointsUn;
+
+
     mpORBExtractor = f.mpORBExtractor;
 
     if (bNeedVisulization)
@@ -404,4 +606,21 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     return vIndices;
 }
 
+   /*
+   * @更新klt跟踪的特征点及标签
+   * @Maple_liu
+   * @Email:mingpei.liu@rock-chips.com
+   * @2019.10.23
+   */
+void Frame::addPoints()
+{
+    for (auto &p : n_pts)
+    {
+        forw_pts.push_back(p);
+        prev_pts.push_back(p);
+        cur_pts.push_back(p);
+        ids.push_back(id);
+        track_cnt.push_back(1);
+    }
+}
 }  // namespace se2lam

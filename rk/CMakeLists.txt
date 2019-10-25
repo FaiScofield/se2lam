@@ -6,7 +6,7 @@ target_link_libraries(rkOdomToSE2
 )
 
 
-add_executable(rkDataToRosbag rkDataToRosbag.cpp)
+add_executable(rkDataToRosbag rkDataToRosbag.cpp se2lamKltGyroTrack.cpp)
 target_link_libraries(rkDataToRosbag
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
@@ -14,10 +14,19 @@ target_link_libraries(rkDataToRosbag
 
 add_executable(se2lamPipeline se2lamPipeline.cpp)
 target_link_libraries(se2lamPipeline
+    linedesc lsd_161
     se2lam
     ${LINK_LIBS}
     ${G2O_LIBS}
 )
+
+add_executable(se2lamKltGyroTrack se2lamKltGyroTrack.cpp)
+target_link_libraries(se2lamKltGyroTrack
+        linedesc lsd_161
+        se2lam
+        ${LINK_LIBS}
+        ${G2O_LIBS}
+        )
 
 
 #find_package(PythonLibs 2.7)

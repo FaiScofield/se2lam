@@ -718,6 +718,29 @@ static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Ma
         computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
 }
 
+/***
+   * @param image:输入图像
+   * @param keypoints:待求描述子的特征点集
+   * @param descriptors:输出描述子
+   * @Maple_liu
+   * @Email:mingpei.liu@rock-chips.com
+   * @2019.10.23
+   */
+void ORBextractor::getdescrib(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors) {
+
+    vector<Point> pattern;
+    //复制训练模板
+    const int npoints = 512;
+    const Point* pattern0 = (const Point*)bit_pattern_31_;
+    pattern.reserve(npoints);
+    std::copy(pattern0, pattern0 + npoints, std::back_inserter(pattern));
+
+    descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+
+    for (size_t i = 0; i < keypoints.size(); i++)
+        computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
+}
+
 void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                               OutputArray _descriptors)
 {

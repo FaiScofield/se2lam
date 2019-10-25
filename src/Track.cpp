@@ -14,7 +14,8 @@
 #include "cvutil.h"
 #include "optimizer.h"
 #include <ros/ros.h>
-
+#include "lineDetection.h"
+#include "Preprocess.h"
 
 namespace se2lam
 {
@@ -46,6 +47,13 @@ Track::Track()
 
     mbPrint = Config::GlobalPrint;
     mbNeedVisualization = Config::NeedVisualization;
+
+    //klt跟踪添加
+    imgRows = 240;//图像尺寸
+    imgCols = 320;
+    interKeyFrame = false;
+    MIN_DIST = 0;//mask建立时的特征点周边半径
+    MAX_CNT = 1000; //最大特征点数量
 }
 
 Track::~Track()
@@ -53,6 +61,13 @@ Track::~Track()
     delete mpORBextractor;
 }
 
+    //setMask用到的结构体
+struct pair_mask
+{
+    cv::Point2f pt;//跟踪的点
+    int id;//所在图像的id
+    int index;//与关键帧的匹配对序列
+};
 void Track::run()
 {
     if (Config::LocalizationOnly)
@@ -63,7 +78,6 @@ void Track::run()
 
     WorkTimer timer;
     double imgTime = 0.;
-
     ros::Rate rate(Config::FPS * 5);
     while (ros::ok()) {
         bool sensorUpdated = mpSensors->update();
@@ -74,17 +88,29 @@ void Track::run()
 
             Mat img;
             Se2 odo;
-            mpSensors->readData(odo, img);
-
+            double Imu_theta = 0;
+//            mpSensors->readData(odo, img);
+            mpSensors->readData(odo,img,Imu_theta);
             {  // 计算位姿时不做可视化, 防止数据竞争
 //                locker lock(mMutexForPub);
-                if (mState == cvu::FIRST_FRAME) {
-                    createFirstFrame(img, imgTime, odo);
-                } else if (mState == cvu::OK) {
-                    trackReferenceKF(img, imgTime, odo);
-                } else {
+//                if (mState == cvu::FIRST_FRAME) {
+//                    createFirstFrame(img, imgTime, odo);
+//                } else if (mState == cvu::OK) {
+//                    trackReferenceKF(img, imgTime, odo);
+//                } else {
+//                    relocalization(img, imgTime, odo);
+//                }
+
+                //KLT跟踪
+                locker lock(mMutexForPub);
+//                bool noFrame = !(Frame::nextId);
+                if (mState == cvu::FIRST_FRAME)
+                    mCreateFrameFirstKlt(img, Imu_theta,odo); // 为初始帧创建帧信息
+                else if (mState == cvu::OK)
+                    mTrack_klt(img, odo, Imu_theta);       // 非初始帧则进行tracking,计算位姿
+                else
                     relocalization(img, imgTime, odo);
-                }
+
             }
             mpMap->setCurrentFramePose(mCurrentFrame.getPose());
             mLastOdom = odo;
@@ -102,6 +128,238 @@ void Track::run()
 
     cerr << "[Track][Info ] Exiting tracking .." << endl;
     setFinish();
+}
+
+
+// 创建首帧
+void Track::mCreateFrameFirstKlt(const Mat& img, const double& Imu_theta, const Se2& odo)
+{
+    mCurrentFrame = Frame(img, odo, Imu_theta, mpORBextractor, mK, mD);
+
+    if (mCurrentFrame.mvKeyPoints.size() > 100) {
+        cout << "========================================================" << endl;
+        cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
+             << "And the start odom is: " << odo << endl;
+        cout << "========================================================" << endl;
+
+        mCurrentFrame.setPose(Se2(0, 0, 0));
+        mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
+        mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map,没有给LocalMapper
+        mpMap->updateLocalGraph();       // 首帧添加到LocalMap里
+
+        resetLocalTrack();
+
+        mState = cvu::OK;
+    } else {
+        cout << "[Track][Warni] Failed to create first frame for too less keyPoints: "
+             << mCurrentFrame.mvKeyPoints.size() << endl;
+        Frame::nextId = 1;
+
+        mState = cvu::FIRST_FRAME;
+    }
+}
+
+//klt跟踪
+void Track::mTrack_klt(const Mat &img, const Se2& odo, double Imu_theta){
+
+    WorkTimer timer;
+    timer.start();
+    //mRefFrame = mFrame;
+
+    cv::Mat gray,unimg;
+    //如果图像是RGB将其转换成灰度图
+    if (img.channels() != 1)
+        cv::cvtColor(img, unimg, cv::COLOR_RGB2GRAY);
+    else
+    {
+        unimg = img.clone();
+    }
+
+    undistort(unimg, gray, Config::Kcam, Config::Dcam);
+    //如果是第一帧图像，将其赋值给第一帧图像
+    if (forw_img.empty())
+    {
+        //cur和forw分别是LK光流跟踪的前后两帧，forw才是真正的＂当前＂帧，cur实际上是上一帧，而pre是上一次发布的帧，也就是rejectWithF()函数
+        //如果当前帧的图像数据flow_img为空，说明当前是第一次读入图像数据
+        //将读入的图像赋给当前帧flow_img
+        //同时，还将读入的图像赋给prev_img,cur_img,这是为了避免后面使用到这些数据时，它们是空的
+        prev_img = mRefFrame.prev_img;
+        cur_img = mRefFrame.cur_img;
+        forw_img = gray;
+        n_pts = mRefFrame.n_pts;
+        prev_pts = mRefFrame.prev_pts;
+        cur_pts = mRefFrame.cur_pts;
+        forw_pts = mRefFrame.forw_pts;
+        ids = mRefFrame.ids;
+        track_cnt = mRefFrame.track_cnt;
+        track_midx = mRefFrame.track_midx;
+    }
+    else
+    {
+        //否则，说明之前就已经有图像读入
+        //所以只需要更新当前帧forw_img的数据
+        forw_img = gray;
+        //如果添加了关键帧
+        if(interKeyFrame)
+        {
+            interKeyFrame = false;
+            ids.clear();
+            ids.resize(mRefFrame.keyPoints.size(),mRefFrame.id);//重置ids
+            track_midx.clear();//重置跟踪标签关键帧与当前帧的匹配关系
+            for(int i = 0; i<mRefFrame.N;i++)
+                track_midx.push_back(i);
+            track_cnt.clear();
+            track_cnt.resize(mRefFrame.keyPoints.size(),1);//重置跟踪次数
+        }
+    }
+
+    cv::Mat rot_img;
+    vector<cv::Point2f> points_prev;
+    predictPointsAndImag(Imu_theta, rot_img, points_prev);
+    prev_pts = points_prev;//预测点
+    if (cur_pts.size() > 0)
+    {
+        vector<uchar> status;
+        vector<float> err;
+        cv::calcOpticalFlowPyrLK(rot_img, forw_img, points_prev, forw_pts, status, err, cv::Size(21, 21), 0);
+
+        //将位于图像边界外的点标记为0
+        for (int i = 0; i < int(forw_pts.size()); i++)
+            if (status[i] && !inBorder(forw_pts[i]))
+                status[i] = 0;
+        //根据status,把跟踪失败的点剔除
+        //不仅要从当前帧数据forw_pts中剔除，而且还要从cur_un_pts,prev_pts和cur_pts中删除
+        //prev_pts和cur_pts中的特征点是一一对应的
+        //记录特征点id的ids,和记录特征点被跟踪次数的track_cnt也要剔除
+        reduceVector(prev_pts, cur_pts, forw_pts, ids, track_cnt, track_midx, status);
+    }
+
+    //通过Ransac剔除outliers
+    rejectWithRansac();
+
+    //光流追踪成功.特征点被成功跟中的次数就加一
+    //数值代表被追中的次数．数值越大，说明被追踪的就越久
+    for (auto &n : track_cnt)
+        n++;
+
+    //绘制匹配图
+//    drawMachesPoints();
+//    drawPredictPoints();
+
+    //设置mask
+    setMask();//保证相邻的特征点之间要相隔３０个像素，设置mask
+    //计算是否需要提取新的特征点
+    int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
+    if (n_max_cnt > 50)
+    {
+        if(mask.empty())
+            cout << "mask is empty " << endl;
+        if (mask.type() != CV_8UC1)
+            cout << "mask type wrong " << endl;
+        if (mask.size() != forw_img.size())
+            cout << "wrong size " << endl;
+//        Preprocess pre;
+//        Mat sharpImage1 = pre.sharpping(forw_img,10);
+//        Mat gammaImage1 = pre.GaMma(sharpImage1,0.7);
+
+        cv::Mat imgGray;
+        //!  限制对比度自适应直方图均衡
+        Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+        clahe->apply(forw_img, imgGray);
+        Mat maskline = getLineMask(imgGray, false);
+        mask = mask.mul(maskline);
+        cv::goodFeaturesToTrack(imgGray, n_pts, n_max_cnt, 0.01, MIN_DIST, mask);
+    }
+    else
+        n_pts.clear();
+
+    //将新检测到的特征点n_pts添加到forw_pts中，id初始化－１,track_cnt初始化为１
+//    index_img = mFrame.id;
+    addPoints();
+    //当下一帧图像到来时，当前帧数据就成为了上一帧发布的数据
+    prev_img = cur_img;
+    //把当前帧的数据forw_img,forw_pts赋给上一帧cur_img,cur_pts
+    cur_img = forw_img;
+    cur_pts = forw_pts;
+
+
+    //统计当前帧与关键帧匹配点的个数
+    int mRef_kpt = 0;
+    for(auto &n : ids)
+        if(n == mRefFrame.id)
+            mRef_kpt++;
+        else
+            continue;
+
+    //获取当前帧的特征点
+    vector<cv::KeyPoint> mckeyPoints;
+    mckeyPoints.resize(forw_pts.size());
+    for (int i = 0;i<forw_pts.size();i++)
+    {
+        mckeyPoints[i].pt = forw_pts[i];
+        mckeyPoints[i].octave = 0;
+    }
+    //更行当前帧与关键帧的匹配关系
+    mvMatchIdx.resize(mRefFrame.keyPoints.size(),-1); //与关键帧匹配关系
+    for(int i = 0; i< mRef_kpt; i++)
+    {
+        if(track_midx[i] < 0)
+            cout<<"IDError"<<endl;
+        else
+            mvMatchIdx[track_midx[i]] = i;
+    }
+    //跟新Frame
+    mCurrentFrame = Frame(img, odo, mckeyPoints, mpORBextractor, Config::Kcam, Config::Dcam);
+    mnMatchSum = mRef_kpt;
+
+    // 利用基础矩阵F计算匹配内点，内点数大于10才能继续
+    mnInliers = removeOutliers();        // H更新
+    cout << "[Track] ORBmatcher get valid/tatal matches " << mnInliers
+         << "/" << mRef_kpt << endl;
+    updateFramePose();
+    if (mnInliers>10) {                     // 内点数大于10则三角化计算MP
+        mnTrackedOld = doTriangulate();  // 更新viewMPs
+        drawMatchesForPub(true);
+        if (mbPrint)
+            printf("[Track][Info ] #%ld 与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
+                   mCurrentFrame.id, mnTrackedOld, mnInliers, mnMatchSum);
+    } else {
+        drawMatchesForPub(false);
+        if (mbPrint)
+            fprintf(stderr, "[Track][Warni] #%ld 与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
+                    mCurrentFrame.id, mnTrackedOld, mnMatchSum);
+    }
+
+    N1 += mnTrackedOld;
+    N2 += mnInliers;
+    N3 += mnMatchSum;
+    if (mbPrint && mCurrentFrame.id % 5 == 0) {  // 每隔50帧输出一次平均匹配情况
+        float sum = mCurrentFrame.id - 1.0;
+        printf("[Track][Info ] #%ld 与参考帧匹配平均点数: tracked/matched/matchedSum = "
+               "%.2f/%.2f/%.2f .\n",
+               mCurrentFrame.id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
+    }
+
+    // Need new KeyFrame decision
+    if (needNewKF()) {
+        interKeyFrame = true;
+        PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
+
+        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
+
+        //! TODO 预计分量，这里暂时没用上
+        mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
+        pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
+
+        // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
+        // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
+        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdx, mvbGoodPrl);
+
+        mpReferenceKF = pKF;
+        resetLocalTrack();
+    }
+
+    timer.stop();
 }
 
 // 创建首帧
@@ -250,6 +508,7 @@ void Track::resetLocalTrack()
 {
     KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);  // cv::KeyPoint转cv::Point2f
 
+    mRefFrame = mCurrentFrame;
     // 更新当前Local MP为参考帧观测到的MP
     mLocalMPs = mpReferenceKF->mvViewMPs;
     mnGoodPrl = 0;
@@ -483,7 +742,7 @@ int Track::removeOutliers()
     pt2.reserve(mCurrentFrame.N);
     idx.reserve(mpReferenceKF->N);
 
-    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
+    for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
         idx.push_back(i);
@@ -533,8 +792,9 @@ bool Track::needNewKF()
         cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
+        bool c7 = mnMatchSum < 10;  // 相机的平移量足够大
 
-        bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+        bNeedKFByOdo = c5 || c6 || c7;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
     }
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
@@ -591,10 +851,9 @@ int Track::doTriangulate()
     // 相机1和2的投影矩阵
     cv::Mat Proj1 = Config::PrjMtrxEye;                 // P1 = K * cv::Mat::eye(3, 4, CV_32FC1)
     cv::Mat Proj2 = Config::Kcam * Tcr.rowRange(0, 3);  // P2 = K * Tc2c1(3*4)
-
     // 1.遍历参考帧的KP
     int nTrackedOld(0), nGoodDepth(0), nBadDepth(0);
-    for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
+    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
 
@@ -626,9 +885,9 @@ int Track::doTriangulate()
             mvMatchIdx[i] = -1;
         }
     }
-    printf("[Track][Info ] #%ld 1.三角化生成了%d个点且%d个具有良好视差, "
-           "因深度不符合预期而剔除的匹配点对有%d个\n",
-           mCurrentFrame.id, nGoodDepth, mnGoodPrl, nBadDepth);
+//    printf("[Track][Info ] #%ld 1.三角化生成了%d个点且%d个具有良好视差, "
+//           "因深度不符合预期而剔除的匹配点对有%d个\n",
+//           mCurrentFrame.id, nGoodDepth, mnGoodPrl, nBadDepth);
 
     return nTrackedOld;
 }
@@ -843,4 +1102,216 @@ if (!bMatch) {
 }
 */
 
+bool Track::inBorder(const cv::Point2f &pt)
+{
+    const int BORDER_SIZE = 3;
+    int img_x = cvRound(pt.x);
+    int img_y = cvRound(pt.y);
+    return BORDER_SIZE <= img_x && img_x < imgCols - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < imgRows - BORDER_SIZE;
+}
+
+void Track::reduceVector(vector<cv::Point2f> &prev_pts, vector<cv::Point2f> &cur_pts,
+                            vector<cv::Point2f> &forw_pts, vector<int> &ids, vector<int> &track_cnt, vector<int> &track_midx, vector<uchar> status)
+{
+    int j = 0;
+    for (int i = 0; i < int(ids.size()); i++)
+        if (status[i])
+        {
+            prev_pts[j] = prev_pts[i];
+            cur_pts[j] = cur_pts[i];
+            forw_pts[j] = forw_pts[i];
+            ids[j] = ids[i];
+            track_midx[j] = track_midx[i];
+            track_cnt[j++] = track_cnt[i];
+        }
+    prev_pts.resize(j);
+    cur_pts.resize(j);
+    forw_pts.resize(j);
+    ids.resize(j);
+    track_midx.resize(j);
+    track_cnt.resize(j);
+}
+
+void Track::reduceVector(vector<cv::Point2f> &v, vector<uchar> status)
+{
+    int j = 0;
+    for (int i = 0; i < int(v.size()); i++)
+        if (status[i])
+            v[j++] = v[i];
+    v.resize(j);
+}
+
+
+void Track::rejectWithRansac()
+{
+    if (forw_pts.size() >= 8)
+    {
+        //保存计算的单应性矩阵
+        cv::Mat homography;
+        //保存点对是否保留的标志
+        vector<unsigned char> inliersMask(cur_pts.size());
+        //匹配点对进行RANSAC过滤
+        homography = cv::findHomography(cur_pts, forw_pts, cv::RANSAC, 5, inliersMask);
+
+        reduceVector(prev_pts, cur_pts, forw_pts, ids, track_cnt, track_midx, inliersMask);
+//        reduceVector_ceil(prev_pts, cur_pts, forw_pts, ids, track_cnt, track_midx, num_ceilpoints,ceil_lable, inliersMask);
+    }
+}
+
+
+//对于跟踪点进行排序并去除密集点
+void Track::setMask()
+{
+    mask = cv::Mat(imgRows, imgCols, CV_8UC1, cv::Scalar(255));
+    pair_mask filt_mask;
+    // prefer to keep features that are tracked for long time
+    //构造（cn,pts,id）序列
+    vector<pair<int, pair_mask>> cnt_pts_id;
+
+    for (unsigned int i = 0; i < forw_pts.size(); i++)
+    {
+        filt_mask.id = ids[i];
+        filt_mask.pt = forw_pts[i];
+        filt_mask.index = track_midx[i];
+        cnt_pts_id.push_back(make_pair(track_cnt[i], filt_mask));
+    }
+
+
+    //对光流跟踪到的特征点forw_pts，按照被跟踪到的次数cnt从大到小排序
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair_mask> &a, const pair<int, pair_mask> &b)
+    {
+        return a.first > b.first;
+    });
+
+    //清空cnt,pts,id并重新存入
+    forw_pts.clear();
+    ids.clear();
+    track_cnt.clear();
+    track_midx.clear();
+
+    for (auto &it : cnt_pts_id)
+    {
+        if (mask.at<uchar>(it.second.pt) == 255)
+        {
+            //当前特征点位置对应的mask值为２５５,则保留当前特征点，将对应的特征点位置pts,id,被跟踪次数cnt分别存入
+            forw_pts.push_back(it.second.pt);
+            ids.push_back(it.second.id);
+            track_cnt.push_back(it.first);
+            track_midx.push_back(it.second.index);
+            //在mask中将当前特征点周围半径为MIN_DIST的区域设置为0．后面不再选取该区域内的点（使跟踪点不集中在一个区域上）
+            cv::circle(mask, it.second.pt, MIN_DIST, 0, -1);
+        }
+    }
+}
+
+
+void Track::addPoints()
+{
+    for (auto &p : n_pts)
+    {
+        forw_pts.push_back(p);
+        ids.push_back(mRefFrame.nextId);
+        track_cnt.push_back(1);
+        track_midx.push_back(-1);
+    }
+}
+
+void Track::predictPointsAndImag(double Ww,cv::Mat &rot_img,vector<cv::Point2f> &points_prev)
+{
+    //利用陀螺仪信息预测位置
+    double theta = Ww;  //预测旋转角度
+    if (abs(theta) > 0.001)      //发生旋转时
+    {
+        points_prev.clear();
+        //计算旋转中心
+        cv::Point rotate_center;
+        rotate_center.x = 160.5827 - 0.01525;
+        rotate_center.y = 117.7329 - 3.6984;
+        getRotatePoint(cur_pts, points_prev, rotate_center, theta);
+        //旋转图像
+        cv::Mat affine_matrix = getRotationMatrix2D(rotate_center, theta * 180 / CV_PI, 1.0);//求得旋转矩阵
+        warpAffine(cur_img, rot_img, affine_matrix, cur_img.size());
+    }
+    else      //直行时
+    {
+        rot_img = cur_img.clone();  //直行的情况，可以根据运动速度进行预测
+        points_prev = cur_pts;
+    }
+
+}
+
+//绘制相邻两帧匹配点对
+void Track::drawMachesPoints()
+{
+    vector<cv::DMatch> goodmatches;
+    vector<cv::KeyPoint>laskeypoints, currentkeypoints;
+    for (int i = 0; i < cur_pts.size(); i++)
+    {
+        cv::KeyPoint ls, cur;
+        ls.pt.x = cur_pts[i].x;
+        ls.pt.y = cur_pts[i].y;
+        cur.pt.x = forw_pts[i].x;
+        cur.pt.y = forw_pts[i].y;
+        cv::DMatch dmatches(i, i, 1);
+        goodmatches.push_back(dmatches);
+        laskeypoints.push_back(ls);
+        currentkeypoints.push_back(cur);
+    }
+    cv::Mat matcheImage;
+    drawMatches(cur_img, laskeypoints, forw_img, currentkeypoints, goodmatches, matcheImage);
+    //string savename = save_image + to_string(num) + ".bmp";
+    //cv::imwrite(savename, matcheImage);
+    //num++;
+    cv::imshow("matches", matcheImage);
+    cv::waitKey();
+}
+
+//绘制相邻两帧预测点对
+void Track::drawPredictPoints()
+{
+    vector<cv::DMatch> goodmatches;
+    vector<cv::KeyPoint>laskeypoints, currentkeypoints;
+    for (int i = 0; i < cur_pts.size(); i++)
+    {
+        cv::KeyPoint ls, cur;
+        ls.pt.x = cur_pts[i].x;
+        ls.pt.y = cur_pts[i].y;
+        cur.pt.x = prev_pts[i].x;
+        cur.pt.y = prev_pts[i].y;
+        cv::DMatch dmatches(i, i, 1);
+        goodmatches.push_back(dmatches);
+        laskeypoints.push_back(ls);
+        currentkeypoints.push_back(cur);
+    }
+    cv::Mat matcheImage;
+    drawMatches(cur_img, laskeypoints, forw_img, currentkeypoints, goodmatches, matcheImage);
+    //string savename = save_image + to_string(num) + ".bmp";
+    //cv::imwrite(savename, matcheImage);
+    //num++;
+    cv::imshow("matches", matcheImage);
+    cv::waitKey();
+}
+
+
+//根据旋转中心确定特征点预测位置
+void Track::getRotatePoint(vector<cv::Point2f> Points, vector<cv::Point2f>& dstPoints, const cv::Point rotate_center, double angle) {
+
+    cv::Point2f prpoint;
+    double x1 = 0, y1 = 0;
+    double row = double(imgRows);
+    for (size_t i = 0; i < Points.size(); i++)
+    {
+        x1 = Points[i].x;
+        y1 = row - Points[i].y;
+        double x2 = rotate_center.x;
+        double y2 = row - rotate_center.y;
+        double x = cvRound((x1 - x2) * cos(angle) - (y1 - y2) * sin(angle) + x2);
+        double y = cvRound((x1 - x2) * sin(angle) + (y1 - y2) * cos(angle) + y2);
+        y = row - y;
+        prpoint.x = x;
+        prpoint.y = y;
+        dstPoints.push_back(prpoint);
+    }
+    return;
+}
 }  // namespace se2lam

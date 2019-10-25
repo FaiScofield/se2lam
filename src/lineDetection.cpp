@@ -87,6 +87,64 @@ cv::Mat getLineMask(const cv::Mat image, std::vector<lineSort_S> &linefeatures, 
     mask = imgOut.clone();
     return mask;
 }
+
+/***
+   *
+   * @param image:输入图像
+   * @param extentionLine:是否将线段扩扩展为线
+   * @Maple_liu
+   * @Email:mingpei.liu@rock-chips.com
+   * @2019.10.23
+   */
+cv::Mat getLineMask(const cv::Mat image, bool extentionLine) {
+    std::vector<lineSort_S> linefeatures;
+    lineDetection linedetect;
+    struct img_line imageline;
+    cv::Mat img = image.clone();
+    cv::Mat roiImage = img(linedetect.roiX, linedetect.roiY);
+    img.copyTo(imageline.imgGray);
+    //提取线特征
+    linedetect.LineDetect(roiImage, 20.0, 40.0, imageline.linesTh1, imageline.linesTh2, linefeatures);
+    //获取mask
+    cv::Mat mask;
+    cv::Mat imgOut = cv::Mat::zeros(image.rows, image.cols, CV_8UC1);
+    cv::Point2f star, end;
+
+    for (int i = 0; i < imageline.linesTh1.size() / 4; i++) {
+        star.x = imageline.linesTh1(0, i);
+        star.y = imageline.linesTh1(1, i);
+        end.x = imageline.linesTh1(2, i);
+        end.y = imageline.linesTh1(3, i);
+        double k = double(end.y - star.y) / double(end.x - star.x);
+        //cout<<"k="<<k<<endl;
+        double b = star.y - k * star.x;
+        //将线段扩展为直线
+        if(extentionLine)
+        {
+            if(linefeatures[i].length>80)
+            {
+                if (k < 1) {
+                    star.x = 0;
+                    star.y = int(b);
+                    end.x = int(image.cols - 1);
+                    end.y = int(k * end.x + b);
+                } else {
+                    star.x = int(-b / k);
+                    star.y = 0;
+                    end.x = int((image.rows - b - 1) / k);
+                    end.y = image.rows - 1;
+                }
+                linefeatures[i].star = star;
+                linefeatures[i].end = end;
+            }
+
+        }
+        line(imgOut, star, end,cv::Scalar(255, 255, 255),2, CV_AA);
+    }
+    mask = imgOut.clone();
+    return mask;
+}
+
 /***
 *利用霍夫变换检测直线
 *@param img:输入图像

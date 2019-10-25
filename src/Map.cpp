@@ -30,8 +30,7 @@ Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 Map::~Map()
 {}
 
-void Map::insertKF(PtrKeyFrame& pKF)
-{
+void Map::insertKF(se2lam::PtrKeyFrame &pKF) {
     locker lock(mMutexGlobalGraph);
     printf("[ Map ][Info ] #%ld(KF#%ld) 当前新KF插入到地图里了!\n", pKF->id, pKF->mIdKF);
     pKF->setMap(this);

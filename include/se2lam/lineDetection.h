@@ -1,14 +1,15 @@
 //
 // Created by lmp on 19-7-27.
 //
+
+#include <opencv/cv.hpp>
+#include <iostream>
+#include <Eigen/Eigen>
+#include <unsupported/Eigen/NonLinearOptimization>
+#include <Eigen/StdVector>
+#include <Eigen/StdList>
 #include "Thirdparty/line_descriptor/include/line_descriptor.hpp"
 #include "Thirdparty/lsd_161/lsd.h"
-#include <Eigen/Eigen>
-#include <Eigen/StdList>
-#include <Eigen/StdVector>
-#include <iostream>
-#include <opencv/cv.hpp>
-#include <unsupported/Eigen/NonLinearOptimization>
 
 namespace se2lam
 {
@@ -32,6 +33,7 @@ struct lineSort_S {
 };
 
 cv::Mat getLineMask(const cv::Mat image, std::vector<lineSort_S> &linefeatures, bool extentionLine);
+cv::Mat getLineMask(const cv::Mat image, bool extentionLine);
 
 #define UNUSE_LINE_FILTER
 #define USE_EDLINE
