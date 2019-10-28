@@ -411,7 +411,7 @@ void LocalMapper::run()
         rate.sleep();
     }
 
-    cout << "[Local][Info ] Exiting Localmapper .." << endl;
+    cerr << "[Local][Info ] Exiting Localmapper..." << endl;
 
     setFinish();
 }

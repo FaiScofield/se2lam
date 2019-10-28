@@ -188,7 +188,7 @@ void OdoSLAM::wait(OdoSLAM* system)
 
     system->mbFinished = true;
 
-    cerr << "[Syste][Info ] System is cleared .." << endl;
+    cerr << "[Syste][Info ] System is cleared!" << endl;
 }
 
 void OdoSLAM::saveMap()
@@ -261,7 +261,7 @@ void OdoSLAM::sendRequestFinish()
 
 void OdoSLAM::checkAllExit()
 {
-    cout << "[Syste][Info ] Checking for all thread exited..." << endl;
+    cerr << "[Syste][Info ] Checking for all thread exited..." << endl;
 
     if (Config::LocalizationOnly) {
         while (1) {
@@ -298,7 +298,7 @@ void OdoSLAM::waitForFinish()
             std::this_thread::sleep_for(std::chrono::microseconds(2));
         }
     }
-    cerr << "[Syste][Info ] Wait for finish thread finished..." << endl;
+    cerr << "[Syste][Info ] Waiting for finish thread finished..." << endl;
     std::this_thread::sleep_for(std::chrono::microseconds(20));
 }
 

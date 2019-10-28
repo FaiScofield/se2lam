@@ -161,7 +161,7 @@ void GlobalMapper::run()
 
         rate.sleep();
     }
-    cout << "[Globa][Info ] Exiting globalmapper .." << endl;
+    cerr << "[Globa][Info ] Exiting globalmapper..." << endl;
 
     setFinish();
 }

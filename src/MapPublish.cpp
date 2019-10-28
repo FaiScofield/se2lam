@@ -691,7 +691,7 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cout << "[MapPu][Info ] Exiting Mappublish .." << endl;
+    cerr << "[MapPu][Info ] Exiting Mappublish..." << endl;
 
     nh.shutdown();
 

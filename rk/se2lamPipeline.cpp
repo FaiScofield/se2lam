@@ -219,7 +219,7 @@ int main(int argc, char** argv)
 
     ros::shutdown();
 
-    cout << "[Main ][Info ] System shutdown..." << endl;
-    cout << "[Main ][Info ] Exit test..." << endl;
+    cerr << "[Main ][Info ] System shutdown..." << endl;
+    cerr << "[Main ][Info ] Exit test..." << endl;
     return 0;
 }

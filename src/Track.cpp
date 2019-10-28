@@ -101,7 +101,7 @@ void Track::run()
         rate.sleep();
     }
 
-    cerr << "[Track][Info ] Exiting tracking .." << endl;
+    cerr << "[Track][Info ] Exiting tracking..." << endl;
     setFinish();
 }
 
