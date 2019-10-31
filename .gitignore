@@ -6,11 +6,8 @@ Makefile
 odoslam.cbp
 CMakeLists.txt.user
 Makefile
-Thirdparty/DBoW2/build/
-Thirdparty/DBoW2/lib/*
-Thirdparty/g2o-20160424/build/
-Thirdparty/g2o-20160424/install/
+Thirdparty/
 *.bag
 **/*voc.bin
 *.rviz
-
+.vscode/
