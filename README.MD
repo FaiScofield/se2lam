@@ -2,8 +2,9 @@ se2lam
 ---
 On-SE(2) Localization and Mapping for Ground Vehicles by Fusing Odometry and Vision
 
+---
 ### Cross Compilaion
-Set **"CROSS_COMPILE"** to **"TRUE"** when using cross compilation.
+Set **"CROSS_COMPILE"** to **"TRUE"** in **CMakeLists.txt** flie when using cross compilation.
 
 Dependencies are successfully cross-compiled and stored in **"dependencies"** directory.
 
