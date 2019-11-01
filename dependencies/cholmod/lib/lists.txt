@@ -1,0 +1,11 @@
+# SuiteSparse libs for Cholmod
+libamd.so
+libcamd.so
+libccolamd.so
+libcholmod.so
+libcolamd.so
+libcxsparse.so
+
+# Libs for SuiteSparse compilation
+libblas.so
+liblapack.so

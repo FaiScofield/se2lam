@@ -5,6 +5,9 @@
 /* -----------------------------------------------------------------------------
  * CHOLMOD/Include/cholmod_partition.h.
  * Copyright (C) 2005-2013, Univ. of Florida.  Author: Timothy A. Davis
+ * CHOLMOD/Include/cholmod_partition.h is licensed under Version 2.1 of the GNU
+ * Lesser General Public License.  See lesser.txt for a text of the license.
+ * CHOLMOD is also available under other licenses; contact authors for details.
  * -------------------------------------------------------------------------- */
 
 /* CHOLMOD Partition module.
@@ -18,7 +21,7 @@
  * cholmod_nested_dissection	CHOLMOD nested dissection ordering
  * cholmod_metis		METIS nested dissection ordering (METIS_NodeND)
  * cholmod_bisect		graph partitioner (currently based on METIS)
- * cholmod_metis_bisector	direct interface to METIS_ComputeVertexSeparator
+ * cholmod_metis_bisector	direct interface to METIS_NodeComputeSeparator
  *
  * Requires the Core and Cholesky modules, and three packages: METIS, CAMD,
  * and CCOLAMD.  Optionally used by the Cholesky module.
@@ -119,21 +122,16 @@ SuiteSparse_long cholmod_l_bisect (cholmod_sparse *, SuiteSparse_long *,
 /* -------------------------------------------------------------------------- */
 
 /* Find a set of nodes that bisects the graph of A or AA' (direct interface
- * to METIS_ComputeVertexSeperator). */
+ * to METIS_NodeComputeSeparator). */
 
 SuiteSparse_long cholmod_metis_bisector	/* returns separator size */
 (
     /* ---- input ---- */
     cholmod_sparse *A,	/* matrix to bisect */
-    int *Anw,		/* size A->nrow, node weights, can be NULL, */
-                        /* which means the graph is unweighted. */ 
-    int *Aew,		/* size nz, edge weights (silently ignored). */
-                        /* This option was available with METIS 4, but not */
-                        /* in METIS 5.  This argument is now unused, but */
-                        /* it remains for backward compatibilty, so as not */
-                        /* to change the API for cholmod_metis_bisector. */
+    int *Anw,		/* size A->nrow, node weights */
+    int *Aew,		/* size nz, edge weights */
     /* ---- output --- */
-    int *Partition,	/* size A->nrow */
+    int *Partition,	/* size A->nrow.  see cholmod_bisect above. */
     /* --------------- */
     cholmod_common *Common
 ) ;

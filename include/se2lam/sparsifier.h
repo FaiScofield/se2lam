@@ -7,7 +7,7 @@
 #ifndef SPARSIFIER_H
 #define SPARSIFIER_H
 
-#include <g2o/types/sba/types_six_dof_expmap.h>
+#include "g2o/types/sba/types_six_dof_expmap.h"
 #include <vector>
 
 struct MeasSE3XYZ {

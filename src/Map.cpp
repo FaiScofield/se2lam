@@ -1214,14 +1214,14 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
            mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nEdges);
     // check optimizer
 
-    //    auto edges = optimizer.edges();
-    //    for (size_t i = 0; i < nEdges; ++i) {
-    //        auto v1 = edges[i]->vertices()[0];  // KF
-    //        auto v2 = edges[i]->vertices()[1];  // MP
-    //        fprintf(stderr, "[TEST] edge %ld vertex1.KFid = %ld, vertex2.MPid = %ld, oberservation
-    //        = %d\n",
-    //                i, v1)
-    //    }
+//    auto edges = optimizer.edges();
+//    for (size_t i = 0; i < nEdges; ++i) {
+//        auto v1 = edges[i]->vertices()[0];  // KF
+//        auto v2 = edges[i]->vertices()[1];  // MP
+//        fprintf(stderr, "[TEST] edge %ld vertex1.KFid = %ld, vertex2.MPid = %ld, oberservation
+//        = %d\n",
+//                i, v1)
+//    }
 }
 
 void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs,

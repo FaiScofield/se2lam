@@ -9,8 +9,9 @@
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find se2lam)/rviz.rviz" />-->
 
     <!--- Run Pipeline -->
-    <node pkg="se2lam" type="se2lamPipeline" name="se2lamPipeline" args="~/dataset/dibeaDataSet/dibea6500VI_1/" output="screen"/>
+    <node pkg="se2lam" type="se2lamPipeline" name="se2lamPipeline" args="/userdata/dateset/dibea6500VI_1/" output="screen"/>
 
 
 </launch>
+
 

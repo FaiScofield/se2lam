@@ -1,8 +1,8 @@
 /**
- * This file is part of se2lam
- *
- * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
- */
+* This file is part of se2lam
+*
+* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+*/
 
 #include "MapPoint.h"
 #include "Config.h"
@@ -19,11 +19,11 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 
-// bool MPIdLessThan::operator()(const std::shared_ptr<MapPoint>& lhs, const
-// std::shared_ptr<MapPoint>& rhs) const
+//bool MPIdLessThan::operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const
 //{
 //    return lhs->mId < rhs->mId;
 //}
+
 
 unsigned long MapPoint::mNextId = 1;
 
@@ -169,8 +169,7 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
     WorkTimer timer;
     updateMainKFandDescriptor();
     updateParallax(pKF);
-    //    printf("[MapPoint][Timer] MP#%ld 添加观测后更新描述子和视差共耗时: %.2fms\n", mId,
-    //    timer.count());
+//    printf("[MapPoint][Timer] MP#%ld 添加观测后更新描述子和视差共耗时: %.2fms\n", mId, timer.count());
 
     if (mbNull && mObservations.size() > 0)
         mbNull = false;
@@ -224,7 +223,7 @@ bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp)
     bool c1 = std::abs(mMainKF->mvKeyPoints[mObservations[mMainKF]].octave - kp.octave) <= 2;
     bool c2 = cosAngle >= 0.866f;  // no larger than 30 degrees
     bool c3 = dist >= mMinDist && dist <= mMaxDist;
-    //    bool c3 = true;
+//    bool c3 = true;
     return c1 && c2 && c3;
 }
 
@@ -296,10 +295,7 @@ void MapPoint::updateMainKFandDescriptor()
     }
 
     if (vDes.empty()) {
-        fprintf(stderr,
-                "[MapPoint] Set this MP#%ld to null because no desciptors in "
-                "updateMainKFandDescriptor()\n",
-                mId);
+        fprintf(stderr, "[MapPoint] Set this MP#%ld to null because no desciptors in updateMainKFandDescriptor()\n", mId);
         setNull();
         return;
     }
@@ -339,12 +335,12 @@ void MapPoint::updateMainKFandDescriptor()
 
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
-    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];  // 第0层值为1
+    mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave]; // 第0层值为1
     float dist = cv::norm(mMainKF->mvViewMPs[idx]);
     int nlevels = mMainKF->mnScaleLevels;
 
     //! 金字塔为1层时这里mMinDist和mMinDist会相等! 程序错误!
-    // mMinDist = dist / mLevelScaleFactor;
+//    mMinDist = dist / mLevelScaleFactor;
     mMaxDist = dist * mLevelScaleFactor;
     mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
 }
@@ -366,7 +362,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
         PtrKeyFrame pKFj = it->first;
         if (!pKFj)
             continue;
-        if (pKF->mIdKF - pKFj->mIdKF > 10)  // 6
+        if (pKF->mIdKF - pKFj->mIdKF > 10)   // 6
             break;
         if (updateParallaxCheck(pKFj, pKF))
             break;
@@ -378,7 +374,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
 }
 
 //! Update measurements in KFs. 更新约束和信息矩阵
-bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2)
+bool MapPoint::updateParallaxCheck(const PtrKeyFrame &pKF1, const PtrKeyFrame &pKF2)
 {
     if (pKF1->mIdKF == pKF2->mIdKF)
         return false;
@@ -471,7 +467,7 @@ void MapPoint::mergedInto(const shared_ptr<MapPoint>& pMP)
     //! NOTE 不能直接setNull(), 此函数会删除mObservations里KF的观测, 观测已经更新, 不可删除
     //! 故要在上面的循环体中先删除mObservations的元素
     fprintf(stderr, "[MapPoint] A MP#%ld is merged by #%ld, now it's obervations count = %ld\n",
-            mId, pMP->mId, mObservations.size());
+           mId, pMP->mId, mObservations.size());
     setNull();
 }
 
