@@ -1,3 +1,20 @@
+# - Try to find SuiteSparse
+# Once done this will define
+#
+#  SUITESPARSE_FOUND            - system has SUITESPARSE
+#  SUITESPARSE_INCLUDE_DIRS     - the SUITESPARSE include directory
+#  SUITESPARSE_LIBRARIES        - Link these to use SUITESPARSE
+#  SUITESPARSE_SPQR_LIBRARY     - name of spqr library (necessary due to error in debian package)
+#  SUITESPARSE_SPQR_LIBRARY_DIR - name of spqr library (necessary due to error in debian package)
+#  SUITESPARSE_LIBRARY_DIR      - Library main directory containing suitesparse libs
+#  SUITESPARSE_LIBRARY_DIRS     - all Library directories containing suitesparse libs
+#  SUITESPARSE_SPQR_VALID       - automatic identification whether or not spqr package is installed correctly
+
+IF (SUITESPARSE_INCLUDE_DIRS)
+  # Already in cache, be silent
+  SET(SUITESPARSE_FIND_QUIETLY TRUE)
+ENDIF (SUITESPARSE_INCLUDE_DIRS)
+
 FIND_PATH(CHOLMOD_INCLUDE_DIR NAMES cholmod.h amd.h camd.h
     PATHS
     ${SUITE_SPARSE_ROOT}/include

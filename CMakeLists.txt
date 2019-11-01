@@ -1,6 +1,7 @@
 ################################################################################
 # 全局变量, 是否指定G2O和OpenCV的路径
 ################################################################################
+set(CROSS_COMPILE FALSE)
 set(CUSTOM_G2O FALSE)
 set(CUSTOM_OpenCV FALSE)
 
@@ -18,12 +19,12 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message("===> CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
+# -march=native 参数不可用, 会使g2o出错.
 if(CMAKE_COMPILER_IS_GNUCXX )
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-    add_definitions("-W -Wall -Wno-deprecated-declarations") #-Werror -Wno-unused-parameter
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -g -ggdb")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")
 endif()
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations")
 
 ################################################################################
 # 设置相关依赖包
@@ -35,7 +36,6 @@ find_package(catkin REQUIRED COMPONENTS
     geometry_msgs
     nav_msgs
     roscpp
-    rospy
     tf
     roslib
     cv_bridge
@@ -53,8 +53,8 @@ catkin_package(
 include_directories(${catkin_INCLUDE_DIRS})
 
 ## Standard packages
-#find_package(CSparse REQUIRED)
-#find_package(Cholmod REQUIRED)
+find_package(CSparse REQUIRED)
+find_package(Cholmod REQUIRED)
 find_package(Eigen REQUIRED)
 
 ## Boost
@@ -83,27 +83,39 @@ else()
 endif()
 
 ## G2O
-if(CUSTOM_G2O)
-    set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
-    find_package(G2O REQUIRED)
-    file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
-    list(APPEND G2O_LIBS cholmod cxsparse)
+if(CROSS_COMPILE)
+    set(Cholmod_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/cholmod/include")
+    set(G2O_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/g2o/include")
+    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/dbow2/include")
+    file(GLOB DBOW2_LIBS "${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/*.so")
+    file(GLOB G2O_LIBS 
+        "${PROJECT_SOURCE_DIR}/dependencies/g2o/lib/*.so"
+        "${PROJECT_SOURCE_DIR}/dependencies/cholmod/lib/*.so"
+        )
 else()
-    find_package(G2O REQUIRED)
-    list(APPEND G2O_LIBS
-        cholmod cxsparse
-        g2o_cli g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d g2o_core
-        g2o_interface g2o_solver_csparse g2o_solver_structure_only g2o_types_sba
-        g2o_types_slam3d g2o_csparse_extension g2o_solver_dense g2o_stuff
-        g2o_types_sclam2d g2o_parser g2o_solver_pcg g2o_types_data g2o_types_sim3
-    )
-endif()
-if (G2O_FOUND)
-    message("===> G2O Information: Root: ${G2O_ROOT}")
-    message("===> G2O Information: Include Dir: ${G2O_INCLUDE_DIR}" )
-    message("===> G2O Information: Libs Dir: ${G2O_LIBS}" )
-else()
-    message("===> G2O Not Found!!!" )
+    set(DBOW2_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so)
+    if(CUSTOM_G2O)
+        set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
+        find_package(G2O REQUIRED)
+        file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
+        list(APPEND G2O_LIBS cholmod cxsparse)
+    else()
+        find_package(G2O REQUIRED)
+        list(APPEND G2O_LIBS
+            cholmod cxsparse
+            g2o_cli g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d g2o_core
+            g2o_interface g2o_solver_csparse g2o_solver_structure_only g2o_types_sba
+            g2o_types_slam3d g2o_csparse_extension g2o_solver_dense g2o_stuff
+            g2o_types_sclam2d g2o_parser g2o_solver_pcg g2o_types_data g2o_types_sim3
+        )
+    endif()
+    if (G2O_FOUND)
+        message("===> G2O Information: Root: ${G2O_ROOT}")
+        message("===> G2O Information: Include Dir: ${G2O_INCLUDE_DIR}" )
+        message("===> G2O Information: Libs Dir: ${G2O_LIBS}" )
+    else()
+        message("===> G2O Not Found!!!" )
+    endif()
 endif()
 
 ################################################################################
@@ -116,12 +128,10 @@ include_directories(
     ${EIGEN_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
-#    ${CSPARSE_INCLUDE_DIR}
-#    ${Cholmod_INCLUDE_DIR}
+    ${Cholmod_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
-    /usr/include/suitesparse # for cholmod
+    ${DBOW2_INCLUDE_DIR}
 )
-
 list(APPEND LINK_LIBS
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
@@ -139,7 +149,8 @@ add_library(se2lam
 target_link_libraries(se2lam
     ${LINK_LIBS}
     ${G2O_LIBS}
-    ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so
+    ${DBOW2_LIBS}
+    # -ltinyxml2  # 交叉编译中ROS需要
 )
 
 ################################################################################
@@ -147,4 +158,16 @@ target_link_libraries(se2lam
 ################################################################################
 add_subdirectory(Thirdparty/DBoW2)
 add_subdirectory(rk)
-add_subdirectory(test)
+
+################################################################################
+# Install setting for ROS
+################################################################################
+install(TARGETS ${PROJECT_NAME}
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+install(FILES launch/run_pipeline.launch
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+
+

@@ -20,7 +20,7 @@ max_angular_speed: 200    # 200 degree/s
 # For feature detection
 scale_factor: 1.2   # > 1
 feature_sigma: 0.5  # useless for now
-max_level: 1        # 1 level for upward camera
+max_level: 5        # 1 level for upward camera
 max_feature_num: 500
 
 
@@ -40,9 +40,9 @@ odo_y_uncertain: 0.01
 odo_theta_uncertain: 0.01
 
 # For odometry noise (in a moment) (unit: mm, rad)
-odo_x_steady_noise: 1.0
-odo_y_steady_noise: 1.0
-odo_theta_steady_noise: 0.005
+odo_x_steady_noise: 0.3
+odo_y_steady_noise: 0.3
+odo_theta_steady_noise: 0.002
 
 # For plane motion constraint
 plane_motion_xrot_info: 1e6
@@ -65,7 +65,7 @@ gm_dcl_min_score_best: 0.05
 ## 1 if use previously saved map, 0 if not
 use_prev_map: 0
 ## 1 if save map when exit, o if not
-save_new_map: 1
+save_new_map: 0
 ## 1 if disable SLAM and do localization only (use_prev_map must be 1), 0 if do SLAM
 localization_only: 0
 ## map file config
