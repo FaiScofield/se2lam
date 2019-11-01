@@ -11,3 +11,4 @@ Makefile
 *.bag
 **/*voc.bin
 *.rviz
+.vscode
