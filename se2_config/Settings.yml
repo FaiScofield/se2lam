@@ -7,7 +7,7 @@ fps: 15
 
 # How many images, start and max
 img_start_idx: 30
-img_count: 1900
+img_count: 1500
 
 # Accepted feature depth bounds [mm]
 upper_depth: 3600.0

@@ -18,9 +18,11 @@
 #include "MapPublish.h"
 #include "Localizer.h"
 #include "Sensors.h"
+#include "TrackKlt.h"
 
 namespace  se2lam {
 
+//#define UseKlt
 class OdoSLAM {
 
 public:
@@ -49,9 +51,9 @@ public:
         mpSensors->updateImg(img_, time_);
     }
 
-    inline void receiveImuTheta(double theta_, double ctime_)
+    inline void receiveImuTheta(double theta_, double ctime_, bool useCeil_)
     {
-        mpSensors->updateImu(theta_, ctime_);
+        mpSensors->updateImu(theta_, ctime_, useCeil_);
     }
 
     void requestFinish();
@@ -69,7 +71,12 @@ private:
     GlobalMapper* mpGlobalMapper;
     FramePublish* mpFramePub;
     MapPublish* mpMapPub;
+//    Track* mpTrack;
+#ifdef UseKlt
+    TrackKlt* mpTrack;
+#else
     Track* mpTrack;
+#endif
     MapStorage* mpMapStorage;
     Localizer* mpLocalizer;
     Sensors* mpSensors;

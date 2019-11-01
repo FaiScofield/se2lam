@@ -984,7 +984,7 @@ bool Localizer::TrackLocalMap()
 
     int numMPCurr = mpKFCurr->countObservations();
     if (numMPCurr > 30) {
-//                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
     }
 
     UpdateCovisKFCurr();

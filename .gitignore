@@ -8,6 +8,8 @@ CMakeLists.txt.user
 Makefile
 Thirdparty/DBoW2/build/
 Thirdparty/DBoW2/lib/*
+*build/
 *.bag
 **/*voc.bin
 *.rviz
+.vscode

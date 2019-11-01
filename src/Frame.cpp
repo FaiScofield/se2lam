@@ -54,11 +54,11 @@ Frame::Frame(const Mat &im, const Se2& odo, vector<cv::KeyPoint> mckeyPoints, OR
 
     id = nextId;
     nextId++;
-    img = im.clone();
+    mImg = im.clone();
     keyPoints = mckeyPoints;
     //计算描述子
     mpORBExtractor = extractor;
-    mpORBExtractor->getdescrib(img,keyPoints,mDescriptors);
+    mpORBExtractor->getdescrib(mImg,keyPoints,mDescriptors);
 
 
     N = keyPoints.size();
@@ -69,7 +69,7 @@ Frame::Frame(const Mat &im, const Se2& odo, vector<cv::KeyPoint> mckeyPoints, OR
     mvKeyPoints = keyPoints;
 
     if (bNeedVisulization)
-        img.copyTo(mImage);
+        mImg.copyTo(mImage);
     //Scale Levels Info
     mnScaleLevels = 1;        // default 5
     mfScaleFactor = 1.2;   // default 1.2
@@ -98,7 +98,7 @@ Frame::Frame(const Mat &im, const Se2& odo, vector<cv::KeyPoint> mckeyPoints, OR
 * @Email:mingpei.liu@rock-chips.com
 * @2019.10.23
 */
-Frame::Frame(const Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extractor, const Mat &K, const Mat &distCoef){
+Frame::Frame(const Mat &im, const Se2& odo, bool Ceil, ORBextractor *extractor, const Mat &K, const Mat &distCoef){
 
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputations) {
@@ -113,18 +113,21 @@ Frame::Frame(const Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extr
         bNeedVisulization = Config::NeedVisualization;
     }
 
-    MIN_DIST = 0;//mask建立时的特征点周边半径
-    MAX_CNT = 1000; //最大特征点数量
+    mnMinDist = 0;//mask建立时的特征点周边半径
+    mnMaxCnt = 1000; //最大特征点数量
+    mnCeilColSize = 80;//分块尺寸
+    mnCeilRowSize = 60;
+    mvCeilPointsNum.resize(16,0);
     cv::Mat unimg;
     //如果图像是RGB将其转换成灰度图
     if (im.channels() != 1)
-        cv::cvtColor(im, img, cv::COLOR_RGB2GRAY);
+        cv::cvtColor(im, mImg, cv::COLOR_RGB2GRAY);
     else
     {
         unimg = im.clone();
     }
 
-    undistort(unimg, img, Config::Kcam, Config::Dcam);
+    undistort(unimg, mImg, Config::Kcam, Config::Dcam);
     //标签
     id = nextId;
     nextId++;
@@ -132,40 +135,47 @@ Frame::Frame(const Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extr
     //cur和forw分别是LK光流跟踪的前后两帧，forw才是真正的＂当前＂帧，cur实际上是上一帧，而pre是上一次发布的帧，也就是rejectWithF()函数
     //如果当前帧的图像数据flow_img为空，说明当前是第一次读入图像数据
     //将读入的图像赋给当前帧flow_img
-    //同时，还将读入的图像赋给prev_img,cur_img,这是为了避免后面使用到这些数据时，它们是空的
-    prev_img = cur_img = forw_img = img;
+    //同时，还将读入的图像赋给mPrevImg,mCurImg,这是为了避免后面使用到这些数据时，它们是空的
+    mPrevImg = mCurImg = mForwImg = mImg;
     //特征点提取
 //    Preprocess pre;
 //    Mat sharpImage1 = pre.sharpping(img,10);
 //    Mat gammaImage1 = pre.GaMma(sharpImage1,0.7);
 //    Mat sharpImage = pre.sharpping(img,8);
-//    Mat gammaImage = pre.GaMma(sharpImage,1.8);\
-
+//    Mat gammaImage = pre.GaMma(sharpImage,1.8);
 
     cv::Mat imgGray;
-    //!  限制对比度自适应直方图均衡
-    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-    clahe->apply(img, imgGray);
-    Mat mask = getLineMask(imgGray, false);
-    cv::goodFeaturesToTrack(imgGray, n_pts, MAX_CNT, 0.01, MIN_DIST, mask);//mask提点
-//
-//    detectFeaturePointsCeil(gammaImage1,mask);//mask_ceil提点
-    //将新检测到的特征点n_pts添加到forw_pts中，id初始化－１,track_cnt初始化为１
+//    //!  限制对比度自适应直方图均衡
+//    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+//    clahe->apply(mImg, imgGray);
+    Preprocess pre;
+    Mat sharpImage1 = pre.sharpping(mForwImg,11);
+    imgGray = pre.GaMma(sharpImage1,0.7);
+    Mat sharpImage = pre.sharpping(mImg,8);
+    Mat imgLine = pre.GaMma(sharpImage,1.8);
+
+    Mat mask = getLineMask(imgLine, false);
+    if(Ceil)
+        detectFeaturePointsCeil(imgGray,mask);//mask_ceil提点
+    else
+        cv::goodFeaturesToTrack(imgGray, mvNewPts, mnMaxCnt, 0.01, mnMinDist, mask);//mask提点
+
+    //将新检测到的特征点mvNewPts添加到mForwPts中，id初始化－１,mvTrackNum初始化为１
     addPoints();
 
 
-    keyPoints.resize(forw_pts.size());
-    for (int i = 0;i<forw_pts.size();i++)
+    keyPoints.resize(mvForwPts.size());
+    for (int i = 0;i<mvForwPts.size();i++)
     {
-        keyPoints[i].pt = forw_pts[i];
+        keyPoints[i].pt = mvForwPts[i];
         keyPoints[i].octave = 0;
-        track_midx.push_back(i);
+        mvTrackIdx.push_back(i);
     }
 
 
     //计算描述子
     mpORBExtractor = extractor;
-    mpORBExtractor->getdescrib(img,keyPoints,mDescriptors);
+    mpORBExtractor->getdescrib(mImg,keyPoints,mDescriptors);
 
 
     N = keyPoints.size();
@@ -176,7 +186,7 @@ Frame::Frame(const Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extr
     mvKeyPoints = keyPoints;
 
     if (bNeedVisulization)
-        img.copyTo(mImage);
+        mImg.copyTo(mImage);
 
     //Scale Levels Info
     mnScaleLevels = 1;        // default 5
@@ -356,17 +366,19 @@ Frame::Frame(const Frame& f)
       Trb(f.Trb)
 {
     //klt
-    prev_img = f.prev_img;
-    cur_img = f.cur_img;
-    n_pts = f.n_pts;
-    prev_pts = f.prev_pts;
-    cur_pts = f.cur_pts;
-    forw_pts = f.forw_pts;
-    ids = f.ids;
-    track_cnt = f.track_cnt;
-    track_midx = f.track_midx;
+    mPrevImg = f.mPrevImg;
+    mCurImg = f.mCurImg;
+    mvNewPts = f.mvNewPts;
+    mvPrevPts = f.mvPrevPts;
+    mvCurPts = f.mvCurPts;
+    mvForwPts = f.mvForwPts;
+    mvIds = f.mvIds;
+    mvTrackNum = f.mvTrackNum;
+    mvTrackIdx = f.mvTrackIdx;
+    mvCeilPointsNum = f.mvCeilPointsNum;
+    mvCeilLable = f.mvCeilLable;
 
-    f.img.copyTo(img);
+    f.mImg.copyTo(mImg);
     keyPoints = f.keyPoints;
     keyPointsUn = f.keyPointsUn;
 
@@ -385,17 +397,19 @@ Frame::Frame(const Frame& f)
 Frame& Frame::operator=(const Frame& f)
 {
     //klt
-    prev_img = f.prev_img;
-    cur_img = f.cur_img;
-    n_pts = f.n_pts;
-    prev_pts = f.prev_pts;
-    cur_pts = f.cur_pts;
-    forw_pts = f.forw_pts;
-    ids = f.ids;
-    track_cnt = f.track_cnt;
-    track_midx = f.track_midx;
+    mPrevImg = f.mPrevImg;
+    mCurImg = f.mCurImg;
+    mvNewPts = f.mvNewPts;
+    mvPrevPts = f.mvPrevPts;
+    mvCurPts = f.mvCurPts;
+    mvForwPts = f.mvForwPts;
+    mvIds = f.mvIds;
+    mvTrackNum = f.mvTrackNum;
+    mvTrackIdx = f.mvTrackIdx;
+    mvCeilPointsNum = f.mvCeilPointsNum;
+    mvCeilLable = f.mvCeilLable;
 
-    f.img.copyTo(img);
+    f.mImg.copyTo(mImg);
     keyPoints = f.keyPoints;
     keyPointsUn = f.keyPointsUn;
 
@@ -614,13 +628,74 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
    */
 void Frame::addPoints()
 {
-    for (auto &p : n_pts)
+    for (auto &p : mvNewPts)
     {
-        forw_pts.push_back(p);
-        prev_pts.push_back(p);
-        cur_pts.push_back(p);
-        ids.push_back(id);
-        track_cnt.push_back(1);
+        mvForwPts.push_back(p);
+        mvPrevPts.push_back(p);
+        mvCurPts.push_back(p);
+        mvIds.push_back(id);
+        mvTrackNum.push_back(1);
+    }
+}
+
+//将图像分块
+void Frame::ceilImage(cv::Mat frame, vector<cv::Mat>& ceil_Image)
+{
+    cv::Mat image_cut, roi_img;
+    int m = frame.cols / mnCeilColSize;
+    int n = frame.rows / mnCeilRowSize;
+    for (int j = 0; j < n; j++)
+    {
+        for (int i = 0; i < m; i++)
+        {
+            cv::Rect rect(i * mnCeilColSize, j * mnCeilRowSize, mnCeilColSize, mnCeilRowSize);
+            image_cut = cv::Mat(frame, rect);
+            roi_img = image_cut.clone();
+            ceil_Image.push_back(roi_img);
+        }
+    }
+}
+
+//图像分块内进行特征点提取
+void Frame::detectFeaturePointsCeil(cv::Mat frame, cv::Mat mask)
+{
+    vector<cv::Mat> ceil_Image,ceil_mask;
+    vector<vector<cv::Point2f>> ceilFeature(16);
+    ceilImage(frame, ceil_Image);
+    ceilImage(mask, ceil_mask);
+    for (int i = 0; i < 16; i++)
+    {
+        ceilFeature[i].clear();
+        if(mvCeilPointsNum[i]<50)
+        {
+            cv::goodFeaturesToTrack(ceil_Image[i], ceilFeature[i], 100, 0.01, mnMinDist, ceil_mask[i]);
+            mvCeilPointsNum[i] = mvCeilPointsNum[i] + ceilFeature[i].size();
+            //num = num + num_ceil_points[i];
+            for (int j = 0; j < ceilFeature[i].size(); j++)
+            {
+                if (i < 4)
+                {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * i;
+                }
+                else if (i >= 4 && i < 8)
+                {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 4);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize;
+                }
+                else if (i >= 8 && i < 12)
+                {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 8);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize * 2;
+                }
+                else
+                {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 12);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize * 3;
+                }
+                mvNewPts.push_back(ceilFeature[i][j]);
+                mvCeilLable.push_back(i);
+            }
+        }
     }
 }
 }  // namespace se2lam

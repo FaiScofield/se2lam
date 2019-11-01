@@ -14,7 +14,7 @@
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
-
+#include "TrackKlt.h"
 namespace se2lam
 {
 
@@ -31,7 +31,12 @@ public:
 
     void setFramePub(FramePublish* pFP) { mpFramePub = pFP; }
     void setMap(Map* pMap) { mpMap = pMap; }
+
+#ifdef UseKlt
+    void setTracker(TrackKlt* pTrack) { mpTracker = pTrack; }
+#else
     void setTracker(Track* pTrack) { mpTracker = pTrack; }
+#endif
     void setLocalMapper(LocalMapper* pLocal) { mpLocalMapper = pLocal; }
     void setLocalizer(Localizer* pLocalize) { mpLocalizer = pLocalize; }
 
@@ -52,7 +57,11 @@ public:
     LocalMapper* mpLocalMapper;
     Localizer* mpLocalizer;
     FramePublish* mpFramePub;
-    Track* mpTracker;
+#ifdef UseKlt
+        TrackKlt* mpTracker;
+#else
+        Track* mpTracker;
+#endif
 
 private:
     bool checkFinish();

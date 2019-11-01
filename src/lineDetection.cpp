@@ -139,7 +139,7 @@ cv::Mat getLineMask(const cv::Mat image, bool extentionLine) {
             }
 
         }
-        line(imgOut, star, end,cv::Scalar(255, 255, 255),2, CV_AA);
+        line(imgOut, star, end,cv::Scalar(255, 255, 255),4, CV_AA);
     }
     mask = imgOut.clone();
     return mask;

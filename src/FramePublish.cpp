@@ -13,7 +13,7 @@
 #include <image_transport/image_transport.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
-
+#include "TrackKlt.h"
 namespace se2lam
 {
 
@@ -26,12 +26,22 @@ FramePublish::FramePublish()
 {
 }
 
-FramePublish::FramePublish(Track* pTR, GlobalMapper* pGM)
-{
-    mpTrack = pTR;
-    mpGM = pGM;
-    mbIsLocalize = false;
-}
+#ifdef UseKlt
+    FramePublish::FramePublish(TrackKlt* pTR, GlobalMapper* pGM)
+    {
+        mpTrack = pTR;
+        mpGM = pGM;
+        mbIsLocalize = false;
+    }
+#else
+    FramePublish::FramePublish(Track* pTR, GlobalMapper* pGM)
+    {
+        mpTrack = pTR;
+        mpGM = pGM;
+        mbIsLocalize = false;
+    }
+#endif
+
 
 FramePublish::~FramePublish()
 {

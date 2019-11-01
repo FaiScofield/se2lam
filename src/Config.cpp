@@ -31,7 +31,7 @@ float Config::fy;
 float Config::cx;
 float Config::cy;
 
-int Config::FPS = 10;
+int Config::FPS = 15;
 int Config::ImgStartIndex = 0;
 int Config::ImgCount = 2000;
 

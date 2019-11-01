@@ -106,7 +106,7 @@ add_library(se2lam
     include/se2lam/lineDetection.h
     src/lineDetection.cpp
     src/Preprocess.cpp
-        src/readImageImu.cpp include/se2lam/readImageImu.h)
+        src/readImageImu.cpp include/se2lam/readImageImu.h src/TrackKlt.cpp include/se2lam/TrackKlt.h)
 target_link_libraries(se2lam
     linedesc
     ${LINK_LIBS}
@@ -116,4 +116,4 @@ target_link_libraries(se2lam
 
 
 add_subdirectory(rk)
-add_subdirectory(test)
+#add_subdirectory(test)

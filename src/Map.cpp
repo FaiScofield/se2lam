@@ -380,7 +380,7 @@ void Map::updateLocalGraph()
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
     timer.start();
-    int searchLevel = 3;  // 3
+    int searchLevel = 3;  // 原始3，1029修改
     while (searchLevel > 0) {
         std::set<PtrKeyFrame> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; ++i) {

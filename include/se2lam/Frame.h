@@ -41,23 +41,13 @@ public:
     Frame& operator=(const Frame& f);
     ~Frame();
 
-
     //klt_gyro 10.23日添加
-    Frame(const cv::Mat &im, const Se2& odo, double Imu_theta, ORBextractor *extractor, const cv::Mat &K, const cv::Mat &distCoef);//首帧创建Frame
+    Frame(const cv::Mat &im, const Se2& odo, bool Ceil, ORBextractor *extractor, const cv::Mat &K, const cv::Mat &distCoef);//首帧创建Frame
     Frame(const cv::Mat &im, const Se2& odo, std::vector<cv::KeyPoint> mckeyPoints, ORBextractor *extractor, const cv::Mat &K, const cv::Mat &distCoef);//跟踪过程中创建Frame
-    //klt补充变量
-    int MIN_DIST;//mask建立时的特征点周边半径
-    int MAX_CNT; //最大特征点数量
-    cv::Mat img,prev_img, cur_img, forw_img;//prev_img是预测上一次帧的图像数据，cur_img是光流跟踪的前一帧的图像数据，forw_img是光流跟踪的后一帧的图像数据
-    std::vector<cv::Point2f> n_pts;//每一帧中新提取的特征点
-    std::vector<cv::Point2f> prev_pts, cur_pts, forw_pts;//对应的图像特征点
-    std::vector<int> ids;//能够被跟踪到的特征点的id
-    std::vector<int> track_cnt;//当前帧forw_img中每个特征点被追踪的时间次数
-    std::vector<int> track_midx;//当前帧与关键帧匹配点的对应关系;
     //klt补充函数
     void addPoints();//更新跟踪点
-
-
+    void detectFeaturePointsCeil(cv::Mat frame, cv::Mat mask);
+    void ceilImage(cv::Mat frame, std::vector<cv::Mat>& ceil_Image);
 
     void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
 //    void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
@@ -89,12 +79,6 @@ public:
     cv::Mat Tcw;    //
     Se2 Trb;     // ref KF to body
     Se2 Twb;     // world to body
-//    // Scale Pyramid Info
-//    int mnScaleLevels;
-//    float mfScaleFactor;
-//    std::vector<float> mvScaleFactors;
-//    std::vector<float> mvLevelSigma2;
-//    std::vector<float> mvInvLevelSigma2;
 
     //! static variable
     static bool bNeedVisulization;
@@ -128,6 +112,18 @@ public:
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
 
+    //klt补充变量
+    int mnCeilColSize;//分块尺寸
+    int mnCeilRowSize;
+    std::vector<int> mvCeilPointsNum, mvCeilLable;
+    int mnMinDist;//mask建立时的特征点周边半径
+    int mnMaxCnt; //最大特征点数量
+    cv::Mat mImg,mPrevImg, mCurImg, mForwImg;//prev_img是预测上一次帧的图像数据，cur_img是光流跟踪的前一帧的图像数据，forw_img是光流跟踪的后一帧的图像数据
+    std::vector<cv::Point2f> mvNewPts;//每一帧中新提取的特征点
+    std::vector<cv::Point2f> mvPrevPts, mvCurPts, mvForwPts;//对应的图像特征点
+    std::vector<int> mvIds;//能够被跟踪到的特征点的id
+    std::vector<int> mvTrackNum;//当前帧forw_img中每个特征点被追踪的时间次数
+    std::vector<int> mvTrackIdx;//当前帧与关键帧匹配点的对应关系;
     //! 以下信息需要加锁访问/修改
 protected:
     // 位姿信息

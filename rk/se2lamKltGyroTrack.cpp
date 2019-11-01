@@ -92,8 +92,9 @@ int main(int argc, char **argv)
 
         system.receiveOdoData(outImuData.x, outImuData.y, outImuData.theta);
         system.receiveImgData(gray);
-        system.receiveImuTheta(outImuData.dtheta,ctime);
-
+#ifdef UseKlt
+        system.receiveImuTheta(outImuData.dtheta,ctime, true);//ture时采用分块，false时采用全局
+#endif
         rate.sleep();
 
         ptime = ctime;

@@ -11,10 +11,15 @@
 #include <vector>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
-
+#define UseKlt
 namespace se2lam {
 
-class Track;
+
+#ifdef UseKlt
+    class TrackKlt;
+#else
+    class Track;
+#endif
 class GlobalMapper;
 class Localizer;
 
@@ -22,7 +27,11 @@ class FramePublish{
 public:
 
     FramePublish();
-    FramePublish(Track* pTR, GlobalMapper* pGM);
+#ifdef UseKlt
+        FramePublish(TrackKlt* pTR, GlobalMapper* pGM);
+#else
+        FramePublish(Track* pTR, GlobalMapper* pGM);
+#endif
     ~FramePublish();
 
     void run();
@@ -44,7 +53,11 @@ public:
 
 private:
 
-    Track* mpTrack;
+#ifdef UseKlt
+        TrackKlt* mpTrack;
+#else
+        Track* mpTrack;
+#endif
     GlobalMapper* mpGM;
 
     std::vector<cv::KeyPoint> kp, kpRef;

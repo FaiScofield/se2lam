@@ -53,7 +53,7 @@ void Sensors::updateOdo(float x_, float y_, float theta_, double time_)
     odoUpdated = true;
 }
 
-void Sensors::updateImu(double theta_, double time_)
+void Sensors::updateImu(double theta_, double time_, bool useCeil_)
 {
     std::unique_lock<std::mutex> lock(mutex_Imu);
 
@@ -61,6 +61,7 @@ void Sensors::updateImu(double theta_, double time_)
     {
         cndvSensorUpdate.wait(lock);
     }
+    use_ceil = useCeil_;
     theta_Imu = theta_;
     time_Imu = time_;
     Imu_updated = true;
@@ -95,12 +96,13 @@ void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
     cndvSensorUpdate.notify_all();
 }
 
-void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_, double &Imu_theta)
+void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_, double &Imu_theta, bool &useCeil)
 {
     std::unique_lock<std::mutex> lock1(mMutexImg);
     std::unique_lock<std::mutex> lock2(mMutexOdo);
     std::unique_lock<std::mutex> lock3(mutex_Imu);
 
+    useCeil = use_ceil;
     Imu_theta = theta_Imu;
     dataOdo_ = mOdo;
     mImg.copyTo(dataImg_);

@@ -6,7 +6,7 @@ target_link_libraries(rkOdomToSE2
 )
 
 
-add_executable(rkDataToRosbag rkDataToRosbag.cpp se2lamKltGyroTrack.cpp)
+add_executable(rkDataToRosbag rkDataToRosbag.cpp )
 target_link_libraries(rkDataToRosbag
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
