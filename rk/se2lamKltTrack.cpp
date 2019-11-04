@@ -1,11 +1,10 @@
-/**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+//
+// Created by lmp on 19-10-23.
+//
 
-#include "Config.h"
+#include "Frame.h"
 #include "OdoSLAM.h"
+#include "ReadImageImu.h"
 #include <boost/filesystem.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -51,10 +50,8 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
         if (bf::is_regular_file(iter->status())) {
             // format: /frameRaw12987978101.jpg
             string s = iter->path().string();
-            size_t i = s.find_last_of('w');
-            size_t j = s.find_last_of('.');
-            if (i == string::npos || j == string::npos)
-                continue;
+            auto i = s.find_last_of('w');
+            auto j = s.find_last_of('.');
             auto t = atoll(s.substr(i + 1, j - i - 1).c_str());
             allImages.emplace_back(RK_IMAGE(s, t * 1e-6));
         }
@@ -73,22 +70,21 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     files = allImages;
 }
 
-
 int main(int argc, char** argv)
 {
     //! ROS Initialize
-    ros::init(argc, argv, "se2_pipeline");
+    ros::init(argc, argv, "se2lam_KltTrack");
     ros::start();
 
     if (argc > 2) {
-        cerr << "Usage: rosrun se2lam se2lamPipeline <dataPath>" << endl;
+        cerr << "Usage: rosrun se2lam se2lam_KltTrack <dataPath>" << endl;
         ros::shutdown();
-        exit(-1);
+        return -1;
     }
 
     const string vocFile = string(argv[1]) + "../se2_config/ORBvoc.bin";
 
-    OdoSLAM system;
+    se2lam::OdoSLAM system;
     system.setVocFileBin(vocFile.c_str());
     system.setDataPath(argv[1]);
     system.start();
@@ -107,6 +103,7 @@ int main(int argc, char** argv)
     }
 
     float x, y, theta;
+    float lastTheta = 0.f;
     string line;
     size_t m = static_cast<size_t>(Config::ImgStartIndex);
     size_t n = static_cast<size_t>(Config::ImgCount);
@@ -130,20 +127,24 @@ int main(int argc, char** argv)
             continue;
         }
 
+        double dTheta = normalizeAngle(lastTheta - theta);
         system.receiveOdoData(x, y, theta);
         system.receiveImgData(img);
+        system.receiveImuTheta(dTheta, allImages[i].timeStamp, true);  // 分快or全局
+
+        lastTheta = theta;
 
         rate.sleep();
     }
-    cerr << "[Main ][Info ] Finish se2lamPipeline..." << endl;
+    cout << "Finish test..." << endl;
 
-    rec.close();
-    system.requestFinish();  // 让系统给其他线程发送结束指令
+    system.requestFinish();
     system.waitForFinish();
 
     ros::shutdown();
 
-    cerr << "[Main ][Info ] System shutdown..." << endl;
-    cerr << "[Main ][Info ] Exit test..." << endl;
+    cout << "Rec close..." << endl;
+    rec.close();
+    cout << "Exit test..." << endl;
     return 0;
 }

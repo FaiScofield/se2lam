@@ -7,6 +7,7 @@
 
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
+#pragma once
 
 #include "Config.h"
 #include "Frame.h"
@@ -173,4 +174,5 @@ typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
 
 }  // namespace se2lam
+
 #endif

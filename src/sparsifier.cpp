@@ -6,19 +6,14 @@
 
 #include "sparsifier.h"
 
+namespace se2lam
+{
+
 using namespace std;
 
 Sparsifier::Sparsifier()
 {}
 
-
-// compute Hessian from edge XYZ2UV
-//void Sparsifier::HessianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, MeasXYZ2UV measure,
-//                               g2o::CameraParameters* pCamParam,
-//                               Eigen::Matrix<double, 9, 9>  & H )
-//{
-//    // ...
-//}
 
 // compute Jacobian matrix of image measurement (UV) w.r.t. KF (SE3) and MP (XYZ)
 // state vector of KF (SE3) is defined as (x;y;z;qx;qy;qz), from toMinimalVector()
@@ -272,7 +267,7 @@ void Sparsifier::InfoSE3(const g2o::SE3Quat KF1, const g2o::SE3Quat KF2, const E
 //    cerr << "I_final:" << endl << I << endl;
 }
 
-
+} // namespace se2lam
 
 
 

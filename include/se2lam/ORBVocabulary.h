@@ -43,6 +43,6 @@ namespace se2lam
 typedef DBoW2::TemplatedVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>
   ORBVocabulary;
 
-} //namespace ORB_SLAM
+} // namespace se2lam
 
 #endif // ORBVOCABULARY_H

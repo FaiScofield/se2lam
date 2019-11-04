@@ -10,6 +10,9 @@
 #include "g2o/types/sba/types_six_dof_expmap.h"
 #include <vector>
 
+namespace se2lam
+{
+
 struct MeasSE3XYZ {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     g2o::Vector3D z;
@@ -39,8 +42,9 @@ class Sparsifier
 public:
     Sparsifier();
 
-//    static void HessianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, MeasXYZ2UV measure,
-//                              g2o::CameraParameters* pCamParam, Eigen::Matrix<double, 9, 9>& H);
+    //    static void HessianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, MeasXYZ2UV measure,
+    //                              g2o::CameraParameters* pCamParam, Eigen::Matrix<double, 9, 9>&
+    //                              H);
 
     static void JacobianXYZ2UV(g2o::SE3Quat KF, g2o::Vector3D MP, g2o::CameraParameters* pCamParam,
                                Eigen::Matrix<double, 2, 9>& J);
@@ -63,5 +67,7 @@ public:
     static void InfoSE3(const g2o::SE3Quat KF1, const g2o::SE3Quat KF2,
                         const Eigen::Matrix<double, 12, 12>& info, Eigen::Matrix<double, 6, 6>& H);
 };
+
+}  // namespace se2lam
 
 #endif  // SPARSIFIER_H

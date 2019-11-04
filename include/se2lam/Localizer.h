@@ -135,7 +135,7 @@ protected:
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
 };
-}
 
+}  // namespace se2lam
 
 #endif  // LOCALIZE_H

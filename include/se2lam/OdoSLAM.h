@@ -7,22 +7,26 @@
 #ifndef ODOSLAM_H
 #define ODOSLAM_H
 
-#include "cvutil.h"
-#include "Track.h"
-#include "LocalMapper.h"
-#include "GlobalMapper.h"
-#include "Map.h"
 #include "Config.h"
-#include "MapStorage.h"
 #include "FramePublish.h"
-#include "MapPublish.h"
+#include "GlobalMapper.h"
+#include "LocalMapper.h"
 #include "Localizer.h"
+#include "Map.h"
+#include "MapPublish.h"
+#include "MapStorage.h"
 #include "Sensors.h"
+#include "Track.h"
+#include "TrackKlt.h"
+#include "cvutil.h"
 
-namespace  se2lam {
+namespace se2lam
+{
 
-class OdoSLAM {
+#define USEKLT
 
+class OdoSLAM
+{
 public:
     OdoSLAM();
 
@@ -30,7 +34,7 @@ public:
 
     void setDataPath(const char* strDataPath);
 
-    void setVocFileBin(const char *strVoc);
+    void setVocFileBin(const char* strVoc);
 
     void start();
 
@@ -44,9 +48,14 @@ public:
 //        mpSensors->updateOdoSequence(odoDeque_);
 //    }
 
-    inline void receiveImgData(const cv::Mat &img_, double time_ = 0.)
+    inline void receiveImgData(const cv::Mat& img_, double time_ = 0.)
     {
         mpSensors->updateImg(img_, time_);
+    }
+
+    inline void receiveImuTheta(double theta_, double ctime_, bool useCeil_)
+    {
+        mpSensors->updateImu(theta_, ctime_, useCeil_);
     }
 
     void requestFinish();
@@ -64,7 +73,12 @@ private:
     GlobalMapper* mpGlobalMapper;
     FramePublish* mpFramePub;
     MapPublish* mpMapPub;
+//    Track* mpTrack;
+#ifdef USEKLT
+    TrackKlt* mpTrack;
+#else
     Track* mpTrack;
+#endif
     MapStorage* mpMapStorage;
     Localizer* mpLocalizer;
     Sensors* mpSensors;
@@ -84,7 +98,6 @@ private:
     static void wait(OdoSLAM* system);
 };
 
-}
+}  // namespace se2lam
 
-
-#endif // ODOSLAM_H
+#endif  // ODOSLAM_H

@@ -8,6 +8,7 @@
 #include "GlobalMapper.h"
 #include "Localizer.h"
 #include "Track.h"
+#include "TrackKlt.h"
 #include "cvutil.h"
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -26,12 +27,22 @@ FramePublish::FramePublish()
 {
 }
 
+#ifdef USEKLT
+FramePublish::FramePublish(TrackKlt* pTR, GlobalMapper* pGM)
+{
+    mpTrack = pTR;
+    mpGM = pGM;
+    mbIsLocalize = false;
+}
+#else
 FramePublish::FramePublish(Track* pTR, GlobalMapper* pGM)
 {
     mpTrack = pTR;
     mpGM = pGM;
     mbIsLocalize = false;
 }
+#endif
+
 
 FramePublish::~FramePublish()
 {

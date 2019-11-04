@@ -11,7 +11,6 @@ set(CUSTOM_OpenCV FALSE)
 cmake_minimum_required(VERSION 2.8.3)
 project(se2lam)
 
-################################################################################
 # 设置编译选项参数
 ################################################################################
 if(NOT CMAKE_BUILD_TYPE)
@@ -21,7 +20,7 @@ message("===> CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 # -march=native 参数不可用, 会使g2o出错.
 if(CMAKE_COMPILER_IS_GNUCXX )
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -g -ggdb")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -ggdb") # -g
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")
 endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations")
@@ -30,6 +29,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations"
 # 设置相关依赖包
 ################################################################################
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
+
+#add_subdirectory(Thirdparty/DBoW2)
+#add_subdirectory(Thirdparty/lsd_161)
+#add_subdirectory(Thirdparty/line_descriptor)
+include_directories(
+#    ${PROJECT_SOURCE_DIR}/Thirdparty
+#    ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161
+#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include
+#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include/line_descriptor
+#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/src
+    ${PROJECT_SOURCE_DIR}/dependencies
+)
 
 ## ROS packages setting
 find_package(catkin REQUIRED COMPONENTS
@@ -53,8 +64,6 @@ catkin_package(
 include_directories(${catkin_INCLUDE_DIRS})
 
 ## Standard packages
-find_package(CSparse REQUIRED)
-find_package(Cholmod REQUIRED)
 find_package(Eigen REQUIRED)
 
 ## Boost
@@ -84,16 +93,34 @@ endif()
 
 ## G2O
 if(CROSS_COMPILE)
+    set(LineDescriptor_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/include")
+    set(LineDescriptor_LIBS ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/lib/liblinedesc.so)
+    set(LSD161_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/lsd_161/include")
+    set(LSD161_LIBS ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/lib/liblsd_161.so)
+    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/dbow2/include")
+    set(DBOW2_LIBS ${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/libDBoW2se2lam.so)
+
     set(Cholmod_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/cholmod/include")
     set(G2O_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/g2o/include")
-    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/dbow2/include")
-    file(GLOB DBOW2_LIBS "${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/*.so")
-    file(GLOB G2O_LIBS 
+    file(GLOB G2O_LIBS
         "${PROJECT_SOURCE_DIR}/dependencies/g2o/lib/*.so"
         "${PROJECT_SOURCE_DIR}/dependencies/cholmod/lib/*.so"
         )
 else()
+#    find_package(CSparse REQUIRED)
+    find_package(Cholmod REQUIRED)
+    if(Cholmod_FOUND)
+        message("===> Cholmod Information: Include Dir: ${Cholmod_INCLUDE_DIR}" )
+    else()
+        include_directories(/usr/include/suitesparse)
+    endif()
+    set(LineDescriptor_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include")
+    set(LineDescriptor_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.so)
+    set(LSD161_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161")
+    set(LSD161_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161/lib/liblsd_161.so)
+    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/dbow2/include")
     set(DBOW2_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so)
+
     if(CUSTOM_G2O)
         set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
         find_package(G2O REQUIRED)
@@ -131,11 +158,15 @@ include_directories(
     ${Cholmod_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
     ${DBOW2_INCLUDE_DIR}
+    ${LSD161_INCLUDE_DIR}
+    ${LineDescriptor_INCLUDE_DIR}
 )
+
 list(APPEND LINK_LIBS
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
 )
+
 
 ################################################################################
 # Build a lib
@@ -146,17 +177,17 @@ add_library(se2lam
     ${DIR_SRCS}
     ${IncFiles}
 )
+
 target_link_libraries(se2lam
     ${LINK_LIBS}
     ${G2O_LIBS}
     ${DBOW2_LIBS}
+    ${LSD161_LIBS}
+    ${LineDescriptor_LIBS}
     # -ltinyxml2  # 交叉编译中ROS需要
 )
 
-################################################################################
-# 子目录要放在最后
-################################################################################
-add_subdirectory(Thirdparty/DBoW2)
+# 子目录
 add_subdirectory(rk)
 
 ################################################################################
@@ -167,7 +198,6 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-install(FILES launch/run_pipeline.launch
-        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+install(FILES launch/run_pipeline.launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 

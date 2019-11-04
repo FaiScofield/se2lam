@@ -31,7 +31,7 @@ float Config::fy;
 float Config::cx;
 float Config::cy;
 
-int Config::FPS = 10;
+int Config::FPS = 15;
 int Config::ImgStartIndex = 0;
 int Config::ImgCount = 2000;
 
@@ -289,7 +289,7 @@ Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.)
 {}
 
 Se2::Se2(float _x, float _y, float _theta, double _time)
-    : x(_x), y(_y), theta(normalize_angle(_theta)), timeStamp(_time)
+    : x(_x), y(_y), theta(normalizeAngle(_theta)), timeStamp(_time)
 {}
 
 Se2::Se2(const Se2& that) : x(that.x), y(that.y), theta(that.theta), timeStamp(that.timeStamp)
@@ -311,7 +311,7 @@ Se2 Se2::operator+(const Se2& that) const
     float s = std::sin(theta);
     float _x = x + that.x * c - that.y * s;
     float _y = y + that.x * s + that.y * c;
-    float _theta = normalize_angle(theta + that.theta);
+    float _theta = normalizeAngle(theta + that.theta);
     return Se2(_x, _y, _theta);
 }
 
@@ -320,7 +320,7 @@ Se2 Se2::operator-(const Se2& that) const
 {
     float dx = x - that.x;
     float dy = y - that.y;
-    float dth = normalize_angle(theta - that.theta);
+    float dth = normalizeAngle(theta - that.theta);
 
     float c = std::cos(that.theta);
     float s = std::sin(that.theta);
@@ -349,7 +349,7 @@ cv::Mat Se2::toCvSE3() const
 Se2& Se2::fromCvSE3(const cv::Mat& mat)
 {
     float yaw = std::atan2(mat.at<float>(1, 0), mat.at<float>(0, 0));
-    theta = normalize_angle(yaw);
+    theta = normalizeAngle(yaw);
     x = mat.at<float>(0, 3);
     y = mat.at<float>(1, 3);
     return *this;

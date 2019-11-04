@@ -7,15 +7,17 @@
 
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
+#pragma once
 
-#include <mutex>
 #include <map>
 #include <memory>
-#include <set>
+#include <mutex>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include <set>
 
-namespace se2lam{
+namespace se2lam
+{
 
 class KeyFrame;
 class Map;
@@ -32,7 +34,7 @@ public:
     bool acceptNewObserve(cv::Point3f posKF, const cv::KeyPoint kp);
     std::set<PtrKeyFrame> getObservations();
     // Do pKF.setViewMP() before use this
-    void addObservation(const PtrKeyFrame &pKF, size_t idx);
+    void addObservation(const PtrKeyFrame& pKF, size_t idx);
     void addObservations(const std::map<PtrKeyFrame, size_t>& obsCandidates);
     void eraseObservation(const PtrKeyFrame& pKF);
     void eraseObservations(const std::map<PtrKeyFrame, size_t>& obsCandidates);
@@ -44,7 +46,7 @@ public:
     cv::Mat getDescriptor();
     PtrKeyFrame getMainKF();
 
-//    float getInvLevelSigma2(const PtrKeyFrame &pKF);
+    //    float getInvLevelSigma2(const PtrKeyFrame &pKF);
 
     int getOctave(const PtrKeyFrame& pKF);
     int getIndexInKF(const PtrKeyFrame& pKF);
@@ -56,13 +58,15 @@ public:
     void setGoodPrl(bool value) { mbGoodParallax = value; }
 
     bool isNull() { return mbNull; }
-    void setNull(std::shared_ptr<MapPoint> &pThis);
+    void setNull(std::shared_ptr<MapPoint>& pThis);
 
     cv::Point3f getPos();
     void setPos(const cv::Point3f& pt3f);
 
     struct IdLessThan {
-        bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const {
+        bool operator()(const std::shared_ptr<MapPoint>& lhs,
+                        const std::shared_ptr<MapPoint>& rhs) const
+        {
             return lhs->mId < rhs->mId;
         }
     };
@@ -71,7 +75,6 @@ public:
     void mergedInto(const std::shared_ptr<MapPoint>& pMP);
     void setMap(Map* pMap) { mpMap = pMap; }
 
-public:
     int mMainOctave;
     float mLevelScaleFactor;
 
@@ -82,13 +85,13 @@ protected:
     //! 内部使用的成员函数, 不需要加锁, 因为调用它的函数已经加了锁
     void setNull();
     void updateParallax(const PtrKeyFrame& pKF);
-    void updateMainKFandDescriptor(); // 更新mainKF,desccriptor,normalVector
+    void updateMainKFandDescriptor();  // 更新mainKF,desccriptor,normalVector
     bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
 
     Map* mpMap;
 
     //! 以下成员变量需加锁访问
-    cv::Point3f mPos;   // 三维空间坐标
+    cv::Point3f mPos;  // 三维空间坐标
 
     // first = 观测到此MP的KF, second = 在其KP中的索引
     std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
@@ -100,7 +103,7 @@ protected:
     bool mbNull;
     bool mbGoodParallax;
 
-    float mMinDist; // Scale invariance distances
+    float mMinDist;  // Scale invariance distances
     float mMaxDist;
 
     std::mutex mMutexPos;
@@ -110,6 +113,6 @@ protected:
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 
-} //namespace se2lam
+}  // namespace se2lam
 
-#endif // MAPPOINT_H
+#endif  // MAPPOINT_H

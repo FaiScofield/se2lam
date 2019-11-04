@@ -8,21 +8,31 @@
 #ifndef FRAMEPUBLISH_H
 #define FRAMEPUBLISH_H
 
+#include "Track.h"
+#include "TrackKlt.h"
 #include <vector>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
+#define USEKLT
+
 namespace se2lam {
 
+#ifdef USEKLT
+class TrackKlt;
+#else
 class Track;
+#endif
 class GlobalMapper;
 class Localizer;
 
-class FramePublish{
+class FramePublish {
 public:
 
     FramePublish();
+    FramePublish(TrackKlt* pTR, GlobalMapper* pGM);
     FramePublish(Track* pTR, GlobalMapper* pGM);
+
     ~FramePublish();
 
     void run();
@@ -44,7 +54,12 @@ public:
 
 private:
 
+#ifdef USEKLT
+    TrackKlt* mpTrack;
+#else
     Track* mpTrack;
+#endif
+
     GlobalMapper* mpGM;
 
     std::vector<cv::KeyPoint> kp, kpRef;
@@ -54,7 +69,6 @@ private:
     cv::Mat mImgOut;
 
     cv::Mat mImgMatch;
-
 };
 
 

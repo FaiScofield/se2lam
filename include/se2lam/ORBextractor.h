@@ -48,21 +48,19 @@ public:
     ~ORBextractor() {}
 
     // Compute the ORB features and descriptors on an image
-    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &keypoints,
+    void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& keypoints,
                     cv::OutputArray descriptors);
 
-    int inline GetLevels() { return nlevels; }
+    int inline getLevels() { return nlevels; }
+    float inline getScaleFactor() { return scaleFactor; }
 
-    float inline GetScaleFactor() { return scaleFactor; }
+    // 获取给定特征点的描述子
+    void getDescriptor(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints,
+                       cv::Mat& descriptors);
 
 protected:
-    void ComputePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());
-    void ComputeKeyPoints(std::vector<std::vector<cv::KeyPoint>> &allKeypoints);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint>> &allKeypoints);
-    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint> &vToDistributeKeys,
-                                                const int &minX, const int &maxX, const int &minY,
-                                                const int &maxY, const int &nFeatures,
-                                                const int &level);
+    void computePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());
+    void computeKeyPoints(std::vector<std::vector<cv::KeyPoint>>& allKeypoints);
 
     std::vector<cv::Point> pattern;
 

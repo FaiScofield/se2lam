@@ -99,27 +99,50 @@ Point3f se3map(const Mat& T, const Point3f& P)
     return (R * P + t);
 }
 
-// void normalizeYawAngle(se2lam::Se2 &odom)
-//{
-//    if (odom.theta < -M_PI)
-//        odom.theta += M_PI;
-//    else if (odom.theta > M_PI)
-//        odom.theta -= M_PI;
-//}
 
-// Gamma变换 gamma = 1.2 越小越亮
-cv::Mat gamma(const cv::Mat& grayImg, float gamma)
+// Sobel算子边缘检测
+cv::Mat sobelEdgeDetection(const cv::Mat& img)
 {
-    cv::Mat imgGamma, imgOut;
-    grayImg.convertTo(imgGamma, CV_32F, 1.0 / 255, 0);
-    pow(imgGamma, gamma, imgOut);
-    imgOut.convertTo(imgOut, CV_8U, 255, 0);
+    cv::Mat grad_x, grad_y;
+    cv::Mat abs_grad_x, abs_grad_y, dst;
+    Sobel(img, grad_x, CV_16S, 1, 0, 3, 1, 1);
+    convertScaleAbs(grad_x, abs_grad_x);
+    // imshow("X方向Sobel", abs_grad_x);
 
-    return imgOut;
+    Sobel(img, grad_y, CV_16S, 0, 1, 3, 1, 1);
+    convertScaleAbs(grad_y, abs_grad_y);
+    // imshow("Y方向Sobel", abs_grad_y);
+
+    // 整合到一起
+    addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, dst);
+    return dst;
 }
 
-// Laplace边缘锐化 scale = 6~10  越小越强
-cv::Mat sharpping(const cv::Mat& img, float scale)
+// Gamma变换
+cv::Mat gmmaTransform(const cv::Mat& grayImg, double gamma)
+{
+    cv::Mat dstImg;
+    cv::Mat imgGamma = grayImg;
+    if (grayImg.type() != CV_32F)
+        grayImg.convertTo(imgGamma, CV_32F, 1.0 / 255, 0);
+
+    cv::pow(imgGamma, gamma, dstImg);
+    dstImg.convertTo(dstImg, CV_8UC1, 255, 0);
+
+    return dstImg;
+}
+
+// Canny边缘检测
+cv::Mat edgeCannyDetection(const cv::Mat& src, int thresholdL, int thresholdT)
+{
+    cv::Mat edge;
+    // blur(src, edge, Size(17, 17));
+    cv::Canny(src, edge, thresholdL, thresholdT, 3);
+    return edge;
+}
+
+// Laplace边缘锐化, scale = 6~10  越小越强
+cv::Mat edgeSharpping(const cv::Mat img, float scale)
 {
     cv::Mat imgOut;
 
@@ -127,10 +150,9 @@ cv::Mat sharpping(const cv::Mat& img, float scale)
                     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
 
     kern = kern / scale;
-    cv::filter2D(img, imgOut, img.depth(), kern);
 
+    cv::filter2D(img, imgOut, img.depth(), kern);
     return imgOut;
 }
-
 
 }  // namespace scv

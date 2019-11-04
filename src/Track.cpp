@@ -45,15 +45,18 @@ Track::Track()
     mD = Config::Dcam;
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
 
+
     mbPrint = Config::GlobalPrint;
     mbNeedVisualization = Config::NeedVisualization;
 }
+
 
 Track::~Track()
 {
     delete mpORBextractor;
     delete mpORBmatcher;
 }
+
 
 void Track::run()
 {
@@ -77,9 +80,11 @@ void Track::run()
             Mat img;
             Se2 odo;
             mpSensors->readData(odo, img);
+            double t1 = timer.count();
 
-            {   // 计算位姿时不做可视化, 防止数据竞争
-//                locker lock(mMutexForPub);
+            timer.start();
+            {  // 计算位姿时不做可视化, 防止数据竞争
+                // locker lock(mMutexForPub);
                 if (mState == cvu::FIRST_FRAME) {
                     createFirstFrame(img, imgTime, odo);
                 } else if (mState == cvu::OK) {
@@ -91,8 +96,10 @@ void Track::run()
             mpMap->setCurrentFramePose(mCurrentFrame.getPose());
             mLastOdom = odo;
 
-            timer.stop();
-            fprintf(stdout, "[Track][Timer] #%ld 当前帧前段追踪总耗时: %.2fms\n", mCurrentFrame.id, timer.time);
+            double t2 = timer.count();
+            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端读取数据耗时: %.2fms\n", mCurrentFrame.id, t1);
+            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端取点追踪耗时: %.2fms\n", mCurrentFrame.id, t2);
+            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端进程总耗时: %.2fms\n", mCurrentFrame.id, t1 + t2);
         }
 
         if (checkFinish())
@@ -101,7 +108,7 @@ void Track::run()
         rate.sleep();
     }
 
-    cerr << "[Track][Info ] Exiting tracking..." << endl;
+    cerr << "[Track][Info ] Exiting tracking .." << endl;
     setFinish();
 }
 
@@ -113,7 +120,7 @@ void Track::createFirstFrame(const Mat& img, const double& imgTime, const Se2& o
     if (mCurrentFrame.mvKeyPoints.size() > 200) {
         cout << "========================================================" << endl;
         cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
-             << "And the start odom is: " << odo << endl;
+                << "And the start odom is: " << odo << endl;
         cout << "========================================================" << endl;
 
         mCurrentFrame.setPose(Se2(0, 0, 0));
@@ -126,7 +133,7 @@ void Track::createFirstFrame(const Mat& img, const double& imgTime, const Se2& o
         mState = cvu::OK;
     } else {
         cout << "[Track][Warni] Failed to create first frame for too less keyPoints: "
-             << mCurrentFrame.mvKeyPoints.size() << endl;
+                << mCurrentFrame.mvKeyPoints.size() << endl;
         Frame::nextId = 1;
 
         mState = cvu::FIRST_FRAME;
@@ -210,6 +217,7 @@ void Track::updateFramePose()
 
     // preintegration 预积分
     //! TODO 这里并没有使用上预积分？都是局部变量，且实际一帧图像仅对应一帧Odom数据
+/*
     Eigen::Map<Vector3d> meas(preSE2.meas);
     Se2 odok = mCurrentFrame.odom - mLastOdom;
     Vector2d odork(odok.x, odok.y);
@@ -228,7 +236,9 @@ void Track::updateFramePose()
     Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
+*/
 }
+
 
 //! 当前帧设为KF时才执行，将当前KF变参考帧，将当前帧的KP转到mPrevMatched中.
 void Track::resetLocalTrack()
@@ -247,6 +257,7 @@ void Track::resetLocalTrack()
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
 }
+
 
 //! 可视化用，数据拷贝
 size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
@@ -299,11 +310,6 @@ void Track::drawFrameForPub(Mat& imgLeft)
         }
     }
     vconcat(imgUp, imgDown, imgLeft);
-
-    char strMatches[64];
-    std::snprintf(strMatches, 64, "F: %ld-%ld, M: %d/%d", mpReferenceKF->id, mCurrentFrame.id,
-                  mnInliers, mnMatchSum);
-    putText(imgLeft, strMatches, Point(50, 15), 1, 1, Scalar(0, 0, 255), 2);
 }
 
 void Track::drawMatchesForPub(bool warp)
@@ -322,10 +328,8 @@ void Track::drawMatchesForPub(bool warp)
         cvtColor(imgRef, imgRef, CV_GRAY2BGR);
 
     // 所有KP先上蓝色
-    drawKeypoints(imgCur, mCurrentFrame.mvKeyPoints, imgCur, Scalar(255, 0, 0),
-                  DrawMatchesFlags::DRAW_OVER_OUTIMG);
-    drawKeypoints(imgRef, mpReferenceKF->mvKeyPoints, imgRef, Scalar(255, 0, 0),
-                  DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgCur, mCurrentFrame.mvKeyPoints, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgRef, mpReferenceKF->mvKeyPoints, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
     if (warp) {
         A12 = Mat::eye(3, 3, CV_64FC1);
@@ -392,6 +396,7 @@ void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Inf
     float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
     float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
 
+
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
     float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
     for (int i = 0; i < 6; ++i)
@@ -452,6 +457,7 @@ void Track::calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2
     info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
 }
 
+
 /**
  * @brief   根据仿射矩阵A剔除外点，利用了RANSAC算法
  * @return  返回内点数
@@ -464,7 +470,8 @@ int Track::removeOutliers()
     ptRef.reserve(mpReferenceKF->N);
     ptCur.reserve(mCurrentFrame.N);
 
-    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
+    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i)
+     {
         if (mvMatchIdx[i] < 0)
             continue;
         idxRef.push_back(i);
@@ -521,7 +528,8 @@ bool Track::needNewKF()
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
-    if (mpLocalMapper->acceptNewKF()) {
+    if (mpLocalMapper->acceptNewKF())
+    {
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
         printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id);
@@ -529,7 +537,6 @@ bool Track::needNewKF()
 //        return bNeedNewKF;
         return true;
     }
-
 
 //    int nMPObs = mpReferenceKF->countObservations();  // 注意初始帧观测数为0
 //    bool c1 = (float)mnTrackedOld > nMPObs * 0.5f;   // 2.关联MP数不能太多(要小于50%)
@@ -549,7 +556,6 @@ bool Track::needNewKF()
 //               mCurrentFrame.id);
 //        return false;
 //    }
-
 
     return false;
 }
@@ -671,3 +677,4 @@ void Track::relocalization(const cv::Mat& img, const double& imgTime, const Se2&
 
 
 }  // namespace se2lam
+

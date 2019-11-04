@@ -15,7 +15,7 @@
 namespace se2lam
 {
 
-inline double normalize_angle(double theta)
+inline double normalizeAngle(double theta)
 {
     if (theta >= -M_PI && theta < M_PI)
         return theta;

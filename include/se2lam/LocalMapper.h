@@ -7,6 +7,7 @@
 
 #ifndef LOCALMAPPER_H
 #define LOCALMAPPER_H
+#pragma once
 
 #include "Map.h"
 #include "Track.h"
@@ -78,12 +79,13 @@ protected:
     int mnMaxLocalFrames;  // 0表示无上限
     int mnSearchLevel;
     float mfSearchRadius;
-    //    bool mbStopped;
-    //    bool mbStopRequested;
-    //    bool mbNotStop;
-    //    std::mutex mMutexStop;
-};
-}
 
+//    bool mbStopped;
+//    bool mbStopRequested;
+//    bool mbNotStop;
+//    std::mutex mMutexStop;
+};
+
+} // namespace se2lam
 
 #endif  // LOCALMAPPER_H

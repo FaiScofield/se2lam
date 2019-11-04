@@ -3,7 +3,7 @@ project( line-descriptor )
 cmake_minimum_required(VERSION 2.7)
 set(OpenCV_DIR)
 
-find_package(OpenCV 3.3.1 REQUIRED core features2d calib3d highgui imgcodecs imgproc)
+find_package(OpenCV 3.3.1 REQUIRED core features2d calib3d highgui imgcodecs imgproc video)
 if(OpenCV_FOUND)
     message(STATUS "The OpenCV lib is found!")
     message(STATUS "OpenCV library status:")

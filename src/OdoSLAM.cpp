@@ -94,7 +94,11 @@ void OdoSLAM::start()
     // Construct the system
     mpMap = new Map;
     mpSensors = new Sensors;
+#ifdef USEKLT
+    mpTrack = new TrackKlt;
+#else
     mpTrack = new Track;
+#endif
     mpLocalMapper = new LocalMapper;
     mpGlobalMapper = new GlobalMapper;
     mpFramePub = new FramePublish(mpTrack, mpGlobalMapper);
@@ -151,7 +155,11 @@ void OdoSLAM::start()
         mpMapPub->mbIsLocalize = false;
         mpFramePub->mbIsLocalize = false;
 
+#ifdef USEKLT
+        thread threadTracker(&TrackKlt::run, mpTrack);
+#else
         thread threadTracker(&Track::run, mpTrack);
+#endif
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
         thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
         if (Config::NeedVisualization) {

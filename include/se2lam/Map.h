@@ -7,6 +7,7 @@
 
 #ifndef MAP_H
 #define MAP_H
+#pragma once
 
 #include "Config.h"
 #include "KeyFrame.h"
@@ -26,14 +27,16 @@ class LocalMapper;
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
-//class MPIdLessThan {
-//public:
-//    bool operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const;
+// class MPIdLessThan {
+// public:
+//    bool operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs)
+//    const;
 //};
 
-//class KFIdLessThan {
-//public:
-//    bool operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs) const;
+// class KFIdLessThan {
+// public:
+//    bool operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs)
+//    const;
 //};
 
 
@@ -79,8 +82,8 @@ public:
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateCovisibility(PtrKeyFrame& pNewKF);
-    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs,
-                                    int maxN = 10, float searchRadius = 5.f);
+    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
+                                    float searchRadius = 5.f);
 
     bool pruneRedundantKF();
     int removeLocalOutlierMP(const std::vector<std::vector<int>>& vnOutlierIdxAll);
@@ -105,7 +108,6 @@ public:
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
     bool UpdateFeatGraph(const PtrKeyFrame& _pKF);
 
-public:
     cv::SparseMat mFtrBasedGraph;
     cv::SparseMat mOdoBasedGraph;
     std::unordered_map<int, SE3Constraint> mFtrBasedEdges;
@@ -122,8 +124,6 @@ protected:
     //! Global Map
     std::set<PtrMapPoint, MapPoint::IdLessThan> mspMPs;  // 全局地图点集合，以id升序排序
     std::set<PtrKeyFrame, KeyFrame::IdLessThan> mspKFs;  // 全局关键帧集合，以id升序排序
-//    std::set<PtrMapPoint> mspMPs;  // 全局地图点集合，以id升序排序
-//    std::set<PtrKeyFrame> mspKFs;  // 全局关键帧集合，以id升序排序
 
     //! Local Map
     //! updateLocalGraph()和pruneRedundantKF()会更新此变量, 都是LocalMapper在调用. 根据id升序排序

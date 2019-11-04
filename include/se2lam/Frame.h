@@ -7,6 +7,7 @@
 
 #ifndef FRAME_H
 #define FRAME_H
+#pragma once
 
 #include "Config.h"
 #include "ORBextractor.h"
@@ -41,8 +42,19 @@ public:
     Frame& operator=(const Frame& f);
     ~Frame();
 
+    // klt_gyro 10.23日添加
+    Frame(const cv::Mat& im, const Se2& odo, bool Ceil, ORBextractor* extractor, const cv::Mat& K,
+          const cv::Mat& distCoef);  //首帧创建Frame
+    Frame(const cv::Mat& im, const Se2& odo, std::vector<cv::KeyPoint> mckeyPoints,
+          ORBextractor* extractor, const cv::Mat& K,
+          const cv::Mat& distCoef);  //跟踪过程中创建Frame
+    // klt补充函数
+    void addPoints();  //更新跟踪点
+    void detectFeaturePointsCeil(const cv::Mat& frame, const cv::Mat& mask);
+    void ceilImage(const cv::Mat& frame, std::vector<cv::Mat>& ceil_Image);
+
     void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
-//    void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
+    //    void undistortKeyPoints(const cv::Mat& K, const cv::Mat& D);
 
     Se2 getTwb();
     cv::Mat getTcr();
@@ -61,7 +73,15 @@ public:
     void copyImgTo(cv::Mat& imgRet) { mImage.copyTo(imgRet); }
     void copyDesTo(cv::Mat& desRet) { mDescriptors.copyTo(desRet); }
 
-public:
+    // KLT添加
+    std::vector<cv::KeyPoint> keyPoints;
+    std::vector<cv::KeyPoint> keyPointsUn;
+    // pose info: pose to ref KF, pose to World, odometry raw.
+    cv::Mat Tcr;  //
+    cv::Mat Tcw;  //
+    Se2 Trb;      // ref KF to body
+    Se2 Twb;      // world to body
+
     //! static variable
     static bool bNeedVisualization;
     static bool bIsInitialComputations;  // 首帧畸变校正后会重新计算图像边界,然后此flag取反
@@ -94,13 +114,27 @@ public:
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
 
+    // klt补充变量
+    int mnCeilColSize;  //分块尺寸
+    int mnCeilRowSize;
+    std::vector<int> mvCeilPointsNum, mvCeilLable;
+    int mnMinDist;  // mask建立时的特征点周边半径
+    int mnMaxCnt;   //最大特征点数量
+    cv::Mat mImg, mPrevImg, mCurImg,
+        mForwImg;                                             // prev_img是预测上一次帧的图像数据，cur_img是光流跟踪的前一帧的图像数据，forw_img是光流跟踪的后一帧的图像数据
+    std::vector<cv::Point2f> mvNewPts;                        //每一帧中新提取的特征点
+    std::vector<cv::Point2f> mvPrevPts, mvCurPts, mvForwPts;  //对应的图像特征点
+    std::vector<int> mvIds;                                   //能够被跟踪到的特征点的id
+    std::vector<int> mvTrackNum;  //当前帧forw_img中每个特征点被追踪的时间次数
+    std::vector<int> mvTrackIdx;  //当前帧与关键帧匹配点的对应关系;
+
     //! 以下信息需要加锁访问/修改
 protected:
     // 位姿信息
-    cv::Mat Tcr;  // Current Camera frame to Reference Camera frame, 三角化和此有关
-    cv::Mat Tcw;  // Current Camera frame to World frame
-    Se2 Trb;      // reference KF body to current frame body
-    Se2 Twb;      // world to body
+    //    cv::Mat Tcr;  // Current Camera frame to Reference Camera frame, 三角化和此有关
+    //    cv::Mat Tcw;  // Current Camera frame to World frame
+    //    Se2 Trb;      // reference KF body to current frame body
+    //    Se2 Twb;      // world to body
 
     std::mutex mMutexPose;
 };
@@ -108,4 +142,5 @@ protected:
 typedef std::shared_ptr<Frame> PtrFrame;
 
 }  // namespace se2lam
+
 #endif  // FRAME_H

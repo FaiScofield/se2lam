@@ -20,6 +20,7 @@
 
 namespace g2o
 {
+
 typedef Eigen::Matrix<double, 2, 3> Matrix23d;
 typedef Eigen::Matrix<double, 3, 2> Matrix32d;
 
@@ -110,6 +111,7 @@ public:
     virtual bool read(std::istream& is) { return true; }
     virtual bool write(std::ostream& os) const { return true; }
 };
-}
 
-#endif
+} // namespace se2lam
+
+#endif // EDGE_SE2_XYZ_H

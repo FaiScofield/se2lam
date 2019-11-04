@@ -190,11 +190,6 @@ void MapPoint::addObservations(const map<PtrKeyFrame, size_t>& obsCandidates)
         mbNull = false;
 }
 
-// float MapPoint::getInvLevelSigma2(const PtrKeyFrame& pKF)
-//{
-//    int index = mObservations[pKF];
-//    return pKF->mvInvLevelSigma2[index];
-//}
 
 Point3f MapPoint::getPos()
 {
@@ -488,6 +483,5 @@ int MapPoint::getIndexInKF(const PtrKeyFrame& pKF)
     else
         return -1;
 }
-
 
 }  // namespace se2lam

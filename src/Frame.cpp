@@ -7,6 +7,7 @@
 
 #include "Frame.h"
 #include "KeyFrame.h"
+#include "LineDetection.h"
 #include "Track.h"
 #include "converter.h"
 #include "cvutil.h"
@@ -25,13 +26,188 @@ float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;
 float Frame::gridElementWidthInv, Frame::gridElementHeightInv;
 
 Frame::Frame()
-{}
+{
+}
 
 Frame::~Frame()
-{}
+{
+}
+
+/*
+* @跟踪过程中建立Frame
+* @Maple_liu
+* @Email:mingpei.liu@rock-chips.com
+* @2019.10.23
+*/
+Frame::Frame(const Mat& imgGray, const Se2& odo, vector<cv::KeyPoint> mckeyPoints,
+             ORBextractor* extractor, const Mat& K, const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
+{
+
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
+    if (bIsInitialComputations) {
+        //! 计算去畸变后的图像边界
+        computeBoundUn(K, distCoef);
+
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
+
+        bIsInitialComputations = false;
+    }
+
+    id = nextId++;
+
+    Mat imgUn, imgClahed;
+
+    //! 输入图像去畸变
+//    assert(imgGray.channels() == 1);
+//    undistort(imgGray, imgGray, K, distCoef);
+
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(imgGray, imgClahed);
+
+    mImg = imgClahed.clone();
+    keyPoints = mckeyPoints;
+    mvKeyPoints = keyPoints;
+
+    //! 计算描述子
+    mpORBExtractor->getDescriptor(mImg, keyPoints, mDescriptors);
+
+    N = mvKeyPoints.size();
+    if (mvKeyPoints.empty())
+        return;
+
+    if (bNeedVisualization)
+        mImg.copyTo(mImage);
+
+    //! Scale Levels Info
+    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
+    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
+
+    //! 计算金字塔每层尺度和高斯噪声
+    mvScaleFactors.resize(mnScaleLevels);
+    mvLevelSigma2.resize(mnScaleLevels);
+    mvScaleFactors[0] = 1.0f;
+    mvLevelSigma2[0] = 1.0f;
+    for (int i = 1; i < mnScaleLevels; i++) {
+        mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+    }
+
+    mvInvLevelSigma2.resize(mvLevelSigma2.size());
+    for (int i = 0; i < mnScaleLevels; i++)
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
+}
+
+/*
+* @第一帧图像建立Frame
+* @Maple_liu
+* @Email:mingpei.liu@rock-chips.com
+* @2019.10.23
+*/
+Frame::Frame(const Mat& imgGray, const Se2& odo, bool Ceil, ORBextractor* extractor, const Mat& K,
+             const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
+{
+
+    //! 首帧会根据k和d重新计算图像边界, 只计算一次
+    if (bIsInitialComputations) {
+        //! 计算去畸变后的图像边界
+        computeBoundUn(K, distCoef);
+
+        assert(maxXUn != minXUn && maxYUn != minYUn);
+        gridElementWidthInv = FRAME_GRID_COLS / (maxXUn - minXUn);
+        gridElementHeightInv = FRAME_GRID_ROWS / (maxYUn - minYUn);
+
+        bIsInitialComputations = false;
+        bNeedVisualization = Config::NeedVisualization;
+    }
+
+    id = nextId++;
+
+    Mat imgUn, imgClahed;
+
+    //! 输入图像去畸变
+    assert(imgGray.channels() == 1);
+    undistort(imgGray, imgUn, K, distCoef);
+
+    //!  限制对比度自适应直方图均衡
+    Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
+    clahe->apply(imgUn, imgClahed);
+
+    //! 光流相关参数设置
+    mnMinDist = 0;       // mask建立时的特征点周边半径
+    mnMaxCnt = 1000;     //最大特征点数量
+    mnCeilColSize = 80;  //分块尺寸
+    mnCeilRowSize = 60;
+    mvCeilPointsNum.resize(16, 0);
+    mImg = imgClahed;
+
+    //! 第一帧图像，将其赋值给第一帧图像
+    // cur和forw分别是LK光流跟踪的前后两帧，forw才是真正的＂当前＂帧，cur实际上是上一帧，而pre是上一次发布的帧，也就是rejectWithF()函数
+    //如果当前帧的图像数据flow_img为空，说明当前是第一次读入图像数据
+    //将读入的图像赋给当前帧flow_img
+    //同时，还将读入的图像赋给mPrevImg,mCurImg,这是为了避免后面使用到这些数据时，它们是空的
+    mPrevImg = mCurImg = mForwImg = mImg;
+
+
+//    Preprocess pre;
+//    Mat sharpImage1 = pre.sharpping(mForwImg, 11);
+//    imgGray = pre.GaMma(sharpImage1, 0.7);
+//    Mat sharpImage = pre.sharpping(mImg, 8);
+//    Mat imgLine = pre.GaMma(sharpImage, 1.8);
+
+    //! 直线上特征点提取
+    Mat mask = getLineMask(imgClahed, false);
+    if (Ceil)
+        detectFeaturePointsCeil(imgClahed, mask);  // mask_ceil提点
+    else
+        cv::goodFeaturesToTrack(imgClahed, mvNewPts, mnMaxCnt, 0.01, mnMinDist, mask);  // mask提点
+
+    //! 将新检测到的特征点mvNewPts添加到mForwPts中，id初始化－１,mvTrackNum初始化为１
+    addPoints();
+
+    keyPoints.resize(mvForwPts.size());
+    for (int i = 0; i < mvForwPts.size(); i++) {
+        keyPoints[i].pt = mvForwPts[i];
+        keyPoints[i].octave = 0;
+        mvTrackIdx.push_back(i);
+    }
+    mvKeyPoints = keyPoints;
+
+    //! 计算描述子
+    mpORBExtractor->getDescriptor(mImg, keyPoints, mDescriptors);
+
+    N = mvKeyPoints.size();
+    if (mvKeyPoints.empty())
+        return;
+
+    if (bNeedVisualization)
+        mImg.copyTo(mImage);
+
+    //! Scale Levels Info
+    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
+    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
+
+    //! 计算金字塔每层尺度和高斯噪声
+    mvScaleFactors.resize(mnScaleLevels);
+    mvLevelSigma2.resize(mnScaleLevels);
+    mvScaleFactors[0] = 1.0f;
+    mvLevelSigma2[0] = 1.0f;
+    for (int i = 1; i < mnScaleLevels; i++) {
+        mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
+        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+    }
+
+    mvInvLevelSigma2.resize(mvLevelSigma2.size());
+    for (int i = 0; i < mnScaleLevels; i++)
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
+}
 
 Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const Mat& K,
-             const Mat& distCoef) : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
+             const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputations) {
@@ -48,30 +224,32 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
 
     id = nextId++;
 
+    Mat imgUn, imgClahed;
+
     //! 输入图像去畸变
     assert(imgGray.channels() == 1);
-    undistort(imgGray, imgGray, K, distCoef);
+    undistort(imgGray, imgUn, K, distCoef);
 
     //!  限制对比度自适应直方图均衡
     Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-    clahe->apply(imgGray, imgGray);
+    clahe->apply(imgUn, imgClahed);
 
     //! 提取特征点
-    (*mpORBExtractor)(imgGray, cv::Mat(), mvKeyPoints, mDescriptors);
+    (*mpORBExtractor)(imgClahed, cv::Mat(), mvKeyPoints, mDescriptors);
 
     N = mvKeyPoints.size();
     if (mvKeyPoints.empty())
         return;
 
     if (bNeedVisualization)
-        imgGray.copyTo(mImage);
+        imgClahed.copyTo(mImage);
 
     //    mvpMapPoints = vector<PtrMapPoint>(N, static_cast<PtrMapPoint>(nullptr));
     //    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
-    mnScaleLevels = mpORBExtractor->GetLevels();       // default 1
-    mfScaleFactor = mpORBExtractor->GetScaleFactor();  // default 1.2
+    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
+    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
 
     //! 计算金字塔每层尺度和高斯噪声
     mvScaleFactors.resize(mnScaleLevels);
@@ -143,8 +321,8 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
     //    mvbOutlier = vector<bool>(N, false);
 
     //! Scale Levels Info
-    mnScaleLevels = mpORBExtractor->GetLevels();       // default 5
-    mfScaleFactor = mpORBExtractor->GetScaleFactor();  // default 1.2
+    mnScaleLevels = mpORBExtractor->getLevels();       // default 5
+    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
 
     //! 计算金字塔每层尺度和高斯噪声
     mvScaleFactors.resize(mnScaleLevels);
@@ -183,6 +361,23 @@ Frame::Frame(const Frame& f)
       mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
       Trb(f.Trb)
 {
+    // klt
+    mPrevImg = f.mPrevImg;
+    mCurImg = f.mCurImg;
+    mvNewPts = f.mvNewPts;
+    mvPrevPts = f.mvPrevPts;
+    mvCurPts = f.mvCurPts;
+    mvForwPts = f.mvForwPts;
+    mvIds = f.mvIds;
+    mvTrackNum = f.mvTrackNum;
+    mvTrackIdx = f.mvTrackIdx;
+    mvCeilPointsNum = f.mvCeilPointsNum;
+    mvCeilLable = f.mvCeilLable;
+
+    f.mImg.copyTo(mImg);
+    keyPoints = f.keyPoints;
+    keyPointsUn = f.keyPointsUn;
+
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
 
@@ -196,6 +391,24 @@ Frame::Frame(const Frame& f)
 
 Frame& Frame::operator=(const Frame& f)
 {
+    // klt
+    mPrevImg = f.mPrevImg;
+    mCurImg = f.mCurImg;
+    mvNewPts = f.mvNewPts;
+    mvPrevPts = f.mvPrevPts;
+    mvCurPts = f.mvCurPts;
+    mvForwPts = f.mvForwPts;
+    mvIds = f.mvIds;
+    mvTrackNum = f.mvTrackNum;
+    mvTrackIdx = f.mvTrackIdx;
+    mvCeilPointsNum = f.mvCeilPointsNum;
+    mvCeilLable = f.mvCeilLable;
+
+    f.mImg.copyTo(mImg);
+    keyPoints = f.keyPoints;
+    keyPointsUn = f.keyPointsUn;
+
+
     mpORBExtractor = f.mpORBExtractor;
 
     if (bNeedVisualization)
@@ -214,8 +427,8 @@ Frame& Frame::operator=(const Frame& f)
     if (!f.Tcw.empty())
         setPose(f.Tcw);
 
-    //    mvpMapPoints = f.mvpMapPoints;
-    //    mvbOutlier = f.mvbOutlier;
+//    mvpMapPoints = f.mvpMapPoints;
+//    mvbOutlier = f.mvbOutlier;
 
     mnScaleLevels = f.mnScaleLevels;
     mfScaleFactor = f.mfScaleFactor;
@@ -284,16 +497,6 @@ void Frame::setTrb(const Se2& _Trb)
     Trb = _Trb;
 }
 
-//! 这个函数没用了
-// void Frame::undistortKeyPoints(const Mat& K, const Mat& D)
-//{
-//    mvKeyPoints = mvKeyPoints;
-//    if (D.at<float>(0) == 0.) {
-//        return;
-//    }
-//    undistortPoints(mvKeyPoints, mvKeyPoints, K, D, Mat(), K);
-//}
-
 //! 只执行一次
 void Frame::computeBoundUn(const Mat& K, const Mat& D)
 {
@@ -354,7 +557,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
         return vIndices;
 
     //! ceil向上取整
-    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv); // FIXME + ?
+    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv);  // FIXME + ?
     nMaxCellX = min(FRAME_GRID_COLS - 1, nMaxCellX);
     if (nMaxCellX < 0)
         return vIndices;
@@ -364,7 +567,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     if (nMinCellY >= FRAME_GRID_ROWS)
         return vIndices;
 
-    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv); // FIXME + ?
+    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv);  // FIXME + ?
     nMaxCellY = min(FRAME_GRID_ROWS - 1, nMaxCellY);
     if (nMaxCellY < 0)
         return vIndices;
@@ -400,6 +603,73 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
     }
 
     return vIndices;
+}
+
+/*
+* @更新klt跟踪的特征点及标签
+* @Maple_liu
+* @Email:mingpei.liu@rock-chips.com
+* @2019.10.23
+*/
+void Frame::addPoints()
+{
+    for (auto& p : mvNewPts) {
+        mvForwPts.push_back(p);
+        mvPrevPts.push_back(p);
+        mvCurPts.push_back(p);
+        mvIds.push_back(id);
+        mvTrackNum.push_back(1);
+    }
+}
+
+//将图像分块
+void Frame::ceilImage(const cv::Mat& frame, vector<cv::Mat>& ceil_Image)
+{
+    cv::Mat image_cut, roi_img;
+    int m = frame.cols / mnCeilColSize;
+    int n = frame.rows / mnCeilRowSize;
+    for (int j = 0; j < n; j++) {
+        for (int i = 0; i < m; i++) {
+            cv::Rect rect(i * mnCeilColSize, j * mnCeilRowSize, mnCeilColSize, mnCeilRowSize);
+            image_cut = cv::Mat(frame, rect);
+            roi_img = image_cut.clone();
+            ceil_Image.push_back(roi_img);
+        }
+    }
+}
+
+//图像分块内进行特征点提取
+void Frame::detectFeaturePointsCeil(const cv::Mat& frame, const cv::Mat& mask)
+{
+    vector<cv::Mat> ceil_Image, ceil_mask;
+    vector<vector<cv::Point2f>> ceilFeature(16);
+    ceilImage(frame, ceil_Image);
+    ceilImage(mask, ceil_mask);
+    for (int i = 0; i < 16; i++) {
+        ceilFeature[i].clear();
+        if (mvCeilPointsNum[i] < 50) {
+            cv::goodFeaturesToTrack(ceil_Image[i], ceilFeature[i], 100, 0.01, mnMinDist,
+                                    ceil_mask[i]);
+            mvCeilPointsNum[i] = mvCeilPointsNum[i] + ceilFeature[i].size();
+            // num = num + num_ceil_points[i];
+            for (int j = 0; j < ceilFeature[i].size(); j++) {
+                if (i < 4) {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * i;
+                } else if (i >= 4 && i < 8) {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 4);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize;
+                } else if (i >= 8 && i < 12) {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 8);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize * 2;
+                } else {
+                    ceilFeature[i][j].x = ceilFeature[i][j].x + mnCeilColSize * (i - 12);
+                    ceilFeature[i][j].y = ceilFeature[i][j].y + mnCeilRowSize * 3;
+                }
+                mvNewPts.push_back(ceilFeature[i][j]);
+                mvCeilLable.push_back(i);
+            }
+        }
+    }
 }
 
 }  // namespace se2lam

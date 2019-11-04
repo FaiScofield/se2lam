@@ -387,7 +387,7 @@ void Localizer::DetectIfLost()
     float distOdom = cv::norm(cv::Point2f(dodom.x, dodom.y));
 
     bool distanceOK = distVO <= (1.5 * distOdom + 50);
-    bool angleOK = abs(normalize_angle(dvo.theta)) < (1.5 * abs(normalize_angle(dodom.theta)) + 0.05);  // rad
+    bool angleOK = abs(normalizeAngle(dvo.theta)) < (1.5 * abs(normalizeAngle(dodom.theta)) + 0.05);  // rad
     if (!distanceOK) {
         fprintf(stderr, "[Localizer] #%ld Lost because too large distance: %f compared to odom: %f\n",
                 mpKFCurr->mIdKF, distVO, distOdom);
@@ -396,7 +396,7 @@ void Localizer::DetectIfLost()
     }
     else if (!angleOK) {
         fprintf(stderr, "[Localizer] #%ld Lost because too large angle: %f degree compared to odom: %f\n",
-                mpKFCurr->mIdKF, g2o::rad2deg(abs(normalize_angle(dvo.theta))), g2o::rad2deg(abs(normalize_angle(dvo.theta))));
+                mpKFCurr->mIdKF, g2o::rad2deg(abs(normalizeAngle(dvo.theta))), g2o::rad2deg(abs(normalizeAngle(dvo.theta))));
         mState = cvu::LOST;
         return;
     }
@@ -984,7 +984,7 @@ bool Localizer::TrackLocalMap()
 
     int numMPCurr = mpKFCurr->countObservations();
     if (numMPCurr > 30) {
-//                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+        DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
     }
 
     UpdateCovisKFCurr();
