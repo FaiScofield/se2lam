@@ -127,10 +127,10 @@ int main(int argc, char** argv)
             continue;
         }
 
-        double dTheta = normalizeAngle(lastTheta - theta);
+        double dTheta = normalizeAngle(theta - lastTheta);
         system.receiveOdoData(x, y, theta);
         system.receiveImgData(img);
-        system.receiveImuTheta(dTheta, allImages[i].timeStamp, true);  // 分快or全局
+        system.receiveImuTheta(dTheta, allImages[i].timeStamp);
 
         lastTheta = theta;
 

@@ -112,6 +112,7 @@ else()
     if(Cholmod_FOUND)
         message("===> Cholmod Information: Include Dir: ${Cholmod_INCLUDE_DIR}" )
     else()
+        message("===> Cholmod Not Found!!!")
         include_directories(/usr/include/suitesparse)
     endif()
     set(LineDescriptor_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include")
@@ -189,6 +190,7 @@ target_link_libraries(se2lam
 
 # 子目录
 add_subdirectory(rk)
+add_subdirectory(test)
 
 ################################################################################
 # Install setting for ROS

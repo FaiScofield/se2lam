@@ -45,7 +45,6 @@ Track::Track()
     mD = Config::Dcam;
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
 
-
     mbPrint = Config::GlobalPrint;
     mbNeedVisualization = Config::NeedVisualization;
 }
@@ -71,6 +70,9 @@ void Track::run()
 
     ros::Rate rate(Config::FPS * 5);
     while (ros::ok()) {
+        if (checkFinish())
+            break;
+
         bool sensorUpdated = mpSensors->update();
         if (sensorUpdated) {
             timer.start();
@@ -92,8 +94,9 @@ void Track::run()
                 } else {
                     relocalization(img, imgTime, odo);
                 }
+                mpMap->setCurrentFramePose(mCurrentFrame.getPose());
             }
-            mpMap->setCurrentFramePose(mCurrentFrame.getPose());
+
             mLastOdom = odo;
 
             double t2 = timer.count();
@@ -101,9 +104,6 @@ void Track::run()
             fprintf(stdout, "[Track][Timer] #%ld 当前帧前端取点追踪耗时: %.2fms\n", mCurrentFrame.id, t2);
             fprintf(stdout, "[Track][Timer] #%ld 当前帧前端进程总耗时: %.2fms\n", mCurrentFrame.id, t1 + t2);
         }
-
-        if (checkFinish())
-            break;
 
         rate.sleep();
     }
@@ -470,8 +470,7 @@ int Track::removeOutliers()
     ptRef.reserve(mpReferenceKF->N);
     ptCur.reserve(mCurrentFrame.N);
 
-    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i)
-     {
+    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
         idxRef.push_back(i);
@@ -528,8 +527,7 @@ bool Track::needNewKF()
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
-    if (mpLocalMapper->acceptNewKF())
-    {
+    if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
         printf("[Track][Info ] #%ld 强制添加KF\n", mCurrentFrame.id);
@@ -591,7 +589,7 @@ int Track::doTriangulate()
         // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则可见地图点更新为此MP
         if (mpReferenceKF->hasObservation(i)) {
             mLocalMPs[i] = mpReferenceKF->mvViewMPs[i];
-//            mLocalMPs[i] = mpReferenceKF->getViewMPPoseInCamareFrame(i);
+            // mLocalMPs[i] = mpReferenceKF->getViewMPPoseInCamareFrame(i);
             nTrackedOld++;
             continue;
         }

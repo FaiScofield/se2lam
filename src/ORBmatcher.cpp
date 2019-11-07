@@ -324,7 +324,7 @@ int ORBmatcher::MatchByWindow(const Frame& frame1, const Frame& frame2,
             continue;
         int minLevel2 = level1 - levelOffset > 0 ? level1 - levelOffset : 0;
         //! 1.对F1中的每个KP先获得F2中一个cell里的粗匹配候选, cell的边长为2*winsize
-        vector<size_t> vIndices2 = frame2.GetFeaturesInArea(
+        vector<size_t> vIndices2 = frame2.getFeaturesInArea(
             vbPrevMatched[i1].x, vbPrevMatched[i1].y, winSize, minLevel2, level1 + levelOffset);
         if (vIndices2.empty())
             continue;
@@ -455,7 +455,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         Mat pt2 = H * pt1;
         pt2 /= pt2.at<double>(2);
         vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
+            frame2.getFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())
             continue;
 
@@ -572,7 +572,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         Mat pt2 = HA12 * pt1;
         pt2 /= pt2.at<double>(2);
         vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
+            frame2.getFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
         if (vIndices2.empty())
             continue;
 
@@ -693,7 +693,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
         const int minLevel = predictLevel > levelOffset ? predictLevel - levelOffset : 0;
 
         // 通过投影点(投影到当前帧,见isInFrustum())以及搜索窗口和预测的尺度进行搜索,找出附近的兴趣点
-        vector<size_t> vNearKPIndices = pNewKF->GetFeaturesInArea(
+        vector<size_t> vNearKPIndices = pNewKF->getFeaturesInArea(
                     predictUV.x, predictUV.y, radio,  minLevel, predictLevel + levelOffset);
         if (vNearKPIndices.empty())
             continue;

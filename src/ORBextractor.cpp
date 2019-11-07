@@ -60,15 +60,11 @@
 *
 *********************************************************************/
 
+#include "ORBextractor.h"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <vector>
-
-#include "ORBextractor.h"
-
-#include <ros/ros.h>
-
 
 namespace se2lam
 {
@@ -76,13 +72,12 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-const float factorPI = (float)(CV_PI / 180.f);
-
 const float HARRIS_K = 0.04f;
 
 const int PATCH_SIZE = 31;       // 31, 23
 const int HALF_PATCH_SIZE = 15;  // 15, 11
 const int EDGE_THRESHOLD = 16;   // 16, 12
+
 
 static void HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize, float harris_k)
 {
@@ -157,7 +152,7 @@ static float IC_Angle(const Mat& image, Point2f pt, const vector<int>& u_max)
 static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Point* pattern,
                                  uchar* desc)
 {
-    float angle = (float)kpt.angle * factorPI;
+    float angle = (float)kpt.angle * (float)(CV_PI / 180.f);
     float a = (float)cos(angle), b = (float)sin(angle);
 
     const uchar* center = &img.at<uchar>(cvRound(kpt.pt.y), cvRound(kpt.pt.x));
@@ -166,7 +161,6 @@ static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Poin
 #define GET_VALUE(idx)                                               \
     center[cvRound(pattern[idx].x * b + pattern[idx].y * a) * step + \
            cvRound(pattern[idx].x * a - pattern[idx].y * b)]
-
 
     for (int i = 0; i < 32; ++i, pattern += 16) {
         int t0, t1, val;
@@ -199,6 +193,15 @@ static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Poin
     }
 
 #undef GET_VALUE
+}
+
+static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
+                               const vector<Point>& pattern)
+{
+    descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+
+    for (size_t i = 0; i < keypoints.size(); ++i)
+        computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
 }
 
 static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints,
@@ -469,48 +472,47 @@ static int bit_pattern_31_[256 * 4] = {
     -1,  -6,  0,   -11 /*mean (0.127148), correlation (0.547401)*/
 };
 
-
 ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _scoreType,
                            int _fastTh)
-    : nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), scoreType(_scoreType),
+    : nMaxFeatures(_nfeatures), scaleFactor(_scaleFactor), nLevels(_nlevels), scoreType(_scoreType),
       fastTh(_fastTh)
 {
     // 计算每一层相对于原始图片的放大倍数
-    mvScaleFactor.resize(nlevels);
+    mvScaleFactor.resize(nLevels);
     mvScaleFactor[0] = 1;
-    for (int i = 1; i < nlevels; ++i)
+    for (int i = 1; i < nLevels; ++i)
         mvScaleFactor[i] = mvScaleFactor[i - 1] * scaleFactor;
 
     // 计算每一层想对于原始图片放大倍数的逆
     float invScaleFactor = 1.0f / scaleFactor;
-    mvInvScaleFactor.resize(nlevels);
+    mvInvScaleFactor.resize(nLevels);
     mvInvScaleFactor[0] = 1;
-    for (int i = 1; i < nlevels; ++i)
+    for (int i = 1; i < nLevels; ++i)
         mvInvScaleFactor[i] = mvInvScaleFactor[i - 1] * invScaleFactor;
 
-    mvImagePyramid.resize(nlevels);
-    mvMaskPyramid.resize(nlevels);
+    mvImagePyramid.resize(nLevels);
+    mvMaskPyramid.resize(nLevels);
 
     // 前nlevels层的和为总的特征点数量nfeatures（等比数列的前n项和）
     // 主要是将每层的特征点数量进行均匀控制
-    mnFeaturesPerLevel.resize(nlevels);
+    mvFeaturesPerLevel.resize(nLevels);
     float factor = (float)(1.0 / scaleFactor);
     float nDesiredFeaturesPerScale =
-        nfeatures * (1 - factor) / (1 - (float)pow((double)factor, (double)nlevels));
+        nMaxFeatures * (1 - factor) / (1 - (float)pow((double)factor, (double)nLevels));
 
     int sumFeatures = 0;
-    for (int level = 0; level < nlevels - 1; level++) {
-        mnFeaturesPerLevel[level] = cvRound(nDesiredFeaturesPerScale);
-        sumFeatures += mnFeaturesPerLevel[level];
+    for (int level = 0; level < nLevels - 1; level++) {
+        mvFeaturesPerLevel[level] = cvRound(nDesiredFeaturesPerScale);
+        sumFeatures += mvFeaturesPerLevel[level];
         nDesiredFeaturesPerScale *= factor;
     }
-    mnFeaturesPerLevel[nlevels - 1] = max(nfeatures - sumFeatures, 0);
+    mvFeaturesPerLevel[nLevels - 1] = max(nMaxFeatures - sumFeatures, 0);
 
     // 复制训练的模板
     const int npoints = 512;
     const Point* pattern0 = (const Point*)bit_pattern_31_;
-    pattern.reserve(npoints);
-    copy(pattern0, pattern0 + npoints, back_inserter(pattern));
+    mvPattern.reserve(npoints);
+    copy(pattern0, pattern0 + npoints, back_inserter(mvPattern));
 
     // This is for orientation pre-compute the end of a row in a circular patch
     // 用于计算特征方向时，每个v坐标对应最大的u坐标
@@ -537,12 +539,12 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int
 
 void ORBextractor::computeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
 {
-    allKeypoints.resize(nlevels);
+    allKeypoints.resize(nLevels);
 
     float imageRatio = (float)mvImagePyramid[0].cols / mvImagePyramid[0].rows;
 
-    for (int level = 0; level < nlevels; ++level) {
-        const int nDesiredFeatures = mnFeaturesPerLevel[level];
+    for (int level = 0; level < nLevels; ++level) {
+        const int nDesiredFeatures = mvFeaturesPerLevel[level];
 
         const int levelCols = sqrt((float)nDesiredFeatures / (5 * imageRatio));
         const int levelRows = imageRatio * levelCols;
@@ -604,8 +606,8 @@ void ORBextractor::computeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
                         continue;
                 }
 
-                Mat cellImage = mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
-//                Mat cellImageandMask = cellImage.clone();
+                Mat cellImage =
+                    mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
 
                 Mat cellMask;
                 if (!mvMaskPyramid[level].empty())
@@ -615,17 +617,9 @@ void ORBextractor::computeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
 
                 FAST(cellImage, cellKeyPoints[i][j], fastTh, true);
 
-                // 加入直线的mask
-//                FAST(cellImageandMask, cellKeyPoints[i][j], fastTh, true);
-//                KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j], cellMask);
-
                 if (cellKeyPoints[i][j].size() <= 3) {  // 3
                     cellKeyPoints[i][j].clear();
                     FAST(cellImage, cellKeyPoints[i][j], 7, true);
-//                    FAST(cellImageandMask, cellKeyPoints[i][j], 5, true);
-//                    7
-//                    KeyPointsFilter::runByPixelsMask(cellKeyPoints[i][j],
-//                    cellMask);
                 }
 
                 if (scoreType == ORB::HARRIS_SCORE) {
@@ -699,17 +693,8 @@ void ORBextractor::computeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
     }
 
     // and compute orientations
-    for (int level = 0; level < nlevels; ++level)
+    for (int level = 0; level < nLevels; ++level)
         computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
-}
-
-static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
-                               const vector<Point>& pattern)
-{
-    descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
-
-    for (size_t i = 0; i < keypoints.size(); ++i)
-        computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
 }
 
 void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
@@ -730,7 +715,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
     Mat descriptors;
 
     int nkeypoints = 0;
-    for (int level = 0; level < nlevels; ++level)
+    for (int level = 0; level < nLevels; ++level)
         nkeypoints += (int)allKeypoints[level].size();
     if (nkeypoints == 0)
         _descriptors.release();
@@ -744,7 +729,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
 
     // 计算每个特征点对应的描述子
     int offset = 0;
-    for (int level = 0; level < nlevels; ++level) {
+    for (int level = 0; level < nLevels; ++level) {
         vector<KeyPoint>& keypoints = allKeypoints[level];
         int nkeypointsLevel = (int)keypoints.size();
 
@@ -757,7 +742,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
 
         // Compute the descriptors 计算描述子
         Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-        computeDescriptors(workingMat, keypoints, desc, pattern);
+        computeDescriptors(workingMat, keypoints, desc, mvPattern);
 
         offset += nkeypointsLevel;
 
@@ -776,7 +761,7 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
 
 void ORBextractor::computePyramid(Mat image, Mat Mask)
 {
-    for (int level = 0; level < nlevels; ++level) {
+    for (int level = 0; level < nLevels; ++level) {
         float scale = mvInvScaleFactor[level];
         Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
         Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
@@ -819,7 +804,7 @@ void ORBextractor::computePyramid(Mat image, Mat Mask)
  * @author Maple.Liu
  * @date 2019.10.23
  */
-void ORBextractor::getDescriptor(const Mat& image, vector<KeyPoint>& keypoints, Mat& descs)
+void ORBextractor::getDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descs)
 {
     vector<int> vumax(HALF_PATCH_SIZE + 1, 0);
 
@@ -842,12 +827,11 @@ void ORBextractor::getDescriptor(const Mat& image, vector<KeyPoint>& keypoints, 
     }
 
     computeOrientation(image, keypoints, vumax);
+    computeDescriptors(image, keypoints, descs, mvPattern);
 
-    descs = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
-
-    for (size_t i = 0, iend = keypoints.size(); i < iend; i++)
-        computeOrbDescriptor(keypoints[i], image, &pattern[0], descs.ptr((int)i));
+    //    descs = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+    //    for (size_t i = 0, iend = keypoints.size(); i < iend; i++)
+    //        computeOrbDescriptor(keypoints[i], image, &mvPattern[0], descs.ptr((int)i));
 }
-
 
 }  // namespace se2lam

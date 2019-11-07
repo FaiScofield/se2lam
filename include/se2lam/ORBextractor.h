@@ -42,7 +42,7 @@ public:
     enum { HARRIS_SCORE = 0, FAST_SCORE = 1 };
 
     //! 超天花板的摄像头没有z方向位移, 金字塔层数可以设为1
-    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 6,
+    ORBextractor(int nMaxFeatures = 1000, float scaleFactor = 1.2f, int nLevels = 6,
                  int scoreType = FAST_SCORE, int fastTh = 15);  // 20
 
     ~ORBextractor() {}
@@ -51,26 +51,27 @@ public:
     void operator()(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& keypoints,
                     cv::OutputArray descriptors);
 
-    int inline getLevels() { return nlevels; }
-    float inline getScaleFactor() { return scaleFactor; }
+    inline int   getMaxFeaturesNum() { return nMaxFeatures; }
+    inline int   getLevels() { return nLevels; }
+    inline float getScaleFactor() { return scaleFactor; }
 
     // 获取给定特征点的描述子
-    void getDescriptor(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints,
+    void getDescriptors(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints,
                        cv::Mat& descriptors);
 
 protected:
     void computePyramid(cv::Mat image, cv::Mat Mask = cv::Mat());
     void computeKeyPoints(std::vector<std::vector<cv::KeyPoint>>& allKeypoints);
 
-    std::vector<cv::Point> pattern;
+    std::vector<cv::Point> mvPattern;
 
-    int nfeatures;
+    int nMaxFeatures;
     double scaleFactor;
-    int nlevels;
+    int nLevels;
     int scoreType;
     int fastTh;
 
-    std::vector<int> mnFeaturesPerLevel;
+    std::vector<int> mvFeaturesPerLevel;
 
     std::vector<int> umax;
 

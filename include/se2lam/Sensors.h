@@ -29,13 +29,13 @@ public:
     void setUpdated(bool val);
 
     void updateOdo(float x_, float y_, float theta_, double time_ = 0);
-    void updateImu(double theta_, double time_ = 0, bool useCeil = true);
+    void updateImu(double theta_, double time_ = 0);
 //    void updateOdoSequence(std::vector<Se2>& odoDeque_);
     void updateImg(const cv::Mat& img_, double time_ = 0);
 
     // After readData(), img_updatd and odo_updated would be set false
     void readData(Se2& dataOdo_, cv::Mat& dataImg_);
-    void readData(Se2& dataOdo_, cv::Mat& dataImg_, double& Imu_theta, bool& useCeil);
+    void readData(Se2& dataOdo_, cv::Mat& dataImg_, double& theta);
 //    void readDataSequence(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_);
 //    void readDataWithTime(Se2& odo, cv::Mat& img, double& time);
 
@@ -51,9 +51,8 @@ protected:
     //    std::vector<Se2> mvOdoSeq;
     double timeImg;
     double timeOdo;
-    double time_Imu;
-    double theta_Imu;
-    bool use_ceil;
+    double timeImu;
+    double thetaImu;
 
     std::atomic_bool imuUpdated;
     std::atomic_bool imgUpdated;

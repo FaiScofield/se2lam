@@ -13,13 +13,6 @@ target_link_libraries(test_vn
 #)
 
 
-#add_executable(test_imageUndistort test_imageUndistort.cpp)
-#target_link_libraries(test_imageUndistort
-#    se2lam
-#    ${LINK_LIBS}
-#    ${Boost_LIBRARIES}
-#)
-
 add_executable(test_KeyPointMatch
     test_KeyPointMatch.cpp
     test_functions.hpp
@@ -42,6 +35,16 @@ add_executable(test_MapPointManager
     TestViewer.hpp
 )
 target_link_libraries(test_MapPointManager
+    se2lam
+    ${LINK_LIBS}
+)
+
+
+add_executable(test_KltTracking
+    test_KltTracking.cpp
+    test_functions.hpp
+)
+target_link_libraries(test_KltTracking
     se2lam
     ${LINK_LIBS}
 )

@@ -83,10 +83,6 @@ private:
     bool mbPrint;
     bool mbNeedVisualization;
 
-    // only useful when odo time not sync with img time
-//    double mTimeOdo;
-//    double mTimeImg;
-
     // set in OdoSLAM class
     Map* mpMap;
     LocalMapper* mpLocalMapper;
@@ -101,8 +97,6 @@ private:
     std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
     std::vector<cv::Point3f> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
-//    std::set<PtrKeyFrame> mspKFLocal;
-//    std::set<PtrMapPoint> mspMPLocal;
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
     int mnInliers, mnMatchSum, mnTrackedOld;

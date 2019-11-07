@@ -27,14 +27,17 @@
 namespace se2lam
 {
 
-struct img_line {
+#define USE_EDLINE
+
+struct ImgLine {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     cv::Mat imgGray;
     Eigen::Matrix<double, 4, Eigen::Dynamic> linesTh1;
     Eigen::Matrix<double, 4, Eigen::Dynamic> linesTh2;
 };
 
-struct lineSort_S {
+struct Keyline {
     cv::Point star;
     cv::Point end;
     double length;
@@ -42,48 +45,36 @@ struct lineSort_S {
     double b;
 };
 
-class lineSort_compareClass : public std::binary_function<lineSort_S, lineSort_S, bool>
+class KeylineCompare : public std::binary_function<Keyline, Keyline, bool>
 {
 public:
-    inline bool operator()(const lineSort_S& t1, const lineSort_S& t2)
-    {
-        return t1.length > t2.length;
-    }
+    inline bool operator()(const Keyline& t1, const Keyline& t2) { return t1.length > t2.length; }
 };
 
-cv::Mat getLineMask(const cv::Mat& image, std::vector<lineSort_S>& lines, bool extend);
-cv::Mat getLineMask(const cv::Mat& image, bool extend);
+cv::Mat getLineMask(const cv::Mat& image, std::vector<Keyline>& lines, bool extend);
 
-
-#define UNUSE_LINE_FILTER
-#define USE_EDLINE
-
-class LineDetection
+class LineDetector
 {
 public:
-    LineDetection();
+    LineDetector();
+    ~LineDetector();
 
-    ~LineDetection();
-
-
-    // std::vector<lineSort_S> lineFeature;
+    void detect(const cv::Mat& image, double thLength1, double thLength2,
+                Eigen::Matrix<double, 4, Eigen::Dynamic>& linesTh1,
+                Eigen::Matrix<double, 4, Eigen::Dynamic>& linesTh2, std::vector<Keyline>& keylines);
 
     cv::Mat getLineMaskByHf(const cv::Mat& img, bool extentionLine);
 
-    void ComputeThreeMaxima(const std::vector<std::vector<int>>& rotHist, int lenth, int& ind1,
-                            int& ind2, int& ind3, int& ind4);
+    void computeFourMaxima(const std::vector<std::vector<int>>& rotHist, int lenth, int& ind1,
+                           int& ind2, int& ind3, int& ind4);
 
     void lineStatistics(double theta, int label, std::vector<std::vector<int>>& rotHist, int lenth,
                         float factor);
 
     void getLineKandB(const cv::Point& starPoint, const cv::Point& endPoint, double& k, double& b);
 
-    void LineDetect(const cv::Mat& image, double thLength1, double thLength2,
-                    Eigen::Matrix<double, 4, Eigen::Dynamic>& linesTh1,
-                    Eigen::Matrix<double, 4, Eigen::Dynamic>& linesTh2,
-                    std::vector<lineSort_S>& linefeatures);
 
-    int pointInwhichLine(double x, double y, double& lenth, std::vector<lineSort_S>& linefeatures);
+    int pointInwhichLine(double x, double y, double& lenth, std::vector<Keyline>& keylines);
 
     cv::Range roiX, roiY;
 
@@ -91,8 +82,8 @@ private:
     int shiftX, shiftY;
     int endX, endY;
 
-    cv::Ptr<cv::line_descriptor::BinaryDescriptor> edlinesDetect;
-    std::vector<cv::line_descriptor::KeyLine> edlines;
+    cv::Ptr<cv::line_descriptor::BinaryDescriptor> mpEDdetector;
+    std::vector<cv::line_descriptor::KeyLine> mvKeylines;
 };
 
 
