@@ -323,8 +323,8 @@ void LocalMapper::localBA()
         return;
     }
 
-    //    optimizer.verifyInformationMatrices(true);
-    //    assert(optimizer.verifyInformationMatrices(true));
+//    optimizer.verifyInformationMatrices(true);
+//    assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
     optimizer.optimize(Config::LocalIterNum);

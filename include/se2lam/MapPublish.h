@@ -10,11 +10,12 @@
 #include "FramePublish.h"
 #include "LocalMapper.h"
 #include "Localizer.h"
+#include "TrackKlt.h"
 #include <opencv2/core/core.hpp>
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
-#include "TrackKlt.h"
+
 namespace se2lam
 {
 
@@ -58,9 +59,9 @@ public:
     Localizer* mpLocalizer;
     FramePublish* mpFramePub;
 #ifdef USEKLT
-        TrackKlt* mpTracker;
+    TrackKlt* mpTracker;
 #else
-        Track* mpTracker;
+    Track* mpTracker;
 #endif
 
 private:

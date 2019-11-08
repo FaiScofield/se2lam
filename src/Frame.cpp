@@ -55,21 +55,20 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
                 minXUn, maxXUn, minYUn, maxYUn);
     }
 
     id = nextId++;
 
-    if (bNeedVisualization)
-        imgGray.copyTo(mImage);
-
     //! 计算描述子
-    mpORBExtractor->getDescriptors(mImage, mvKeyPoints, mDescriptors);
-
+    mpORBExtractor->getDescriptors(imgGray, mvKeyPoints, mDescriptors);
     N = mvKeyPoints.size();
     if (mvKeyPoints.empty())
         return;
+
+    if (bNeedVisualization)
+        imgGray.copyTo(mImage);
 
      //! Scale Levels Info
     mnScaleLevels = mpORBExtractor->getLevels();       // default 1

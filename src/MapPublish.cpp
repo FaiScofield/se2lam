@@ -663,7 +663,13 @@ void MapPublish::run()
         // draw image matches
         cv::Mat Tcw;
         if (!mbIsLocalize) {
-            Mat imgMatch = mpTracker->getImageMatches();
+            Mat img = mpTracker->getImageMatches(), imgMatch;
+            if (img.channels() == 4)
+                cvtColor(img, imgMatch, CV_BGRA2BGR);
+            else
+                imgMatch = img;
+//            imshow("Match", imgMatch);
+//            waitKey(50);
 
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();

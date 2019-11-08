@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Marker1
+        - /Marker1/Namespaces1
       Splitter Ratio: 0.5
     Tree Height: 390
   - Class: rviz/Selection
@@ -41,9 +42,9 @@ Visualization Manager:
         FeatGraph: false
         KeyFramesActive: true
         KeyFramesNegative: true
-        MapPointsActive: false
-        MapPointsNegative: false
-        MapPointsNoGoodParallax: false
+        MapPointsActive: true
+        MapPointsNegative: true
+        MapPointsNoGoodParallax: true
         MapPointsNow: true
         OdomRawGraph: true
         VIGraph: true
@@ -105,16 +106,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 17.2271423
+      Distance: 42.423317
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -2.50431323
-        Y: 0.895655096
-        Z: -1.23777592
+        X: -2.81827664
+        Y: -1.40040755
+        Z: 0.0611349158
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false

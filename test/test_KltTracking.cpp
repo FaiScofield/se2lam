@@ -54,15 +54,14 @@ public:
     Mat imgPrev, imgCurr, imgForw;
     vector<Point2f> ptsPrev, ptsCurr, ptsForw, ptsNew;
 
-    vector<pair<unsigned long, size_t>> firstAddMap;
     vector<unsigned long> idFirstAdd;  // 在哪一帧生成
     vector<size_t> idxToFirstAdd;      // 相对生成帧的KP索引
-    vector<size_t> idxToRefKF;         // 相对参考帧的匹配索引
     vector<int> trackCount;            // 被追踪的次数
-    vector<int> forwCellLable;         // 都在哪个cell里
+    vector<int> cellLable;         // 都在哪个cell里
     vector<int> numInCell;             // 当前帧每个cell里的点数
 
-    map<int, int> forwMatchIdxWithRefKF;
+    vector<int> matchIdx;
+    map<int, int> matchIdxWithRefKF;
 
     ORBextractor* pExtractor;
     ORBmatcher* pMatcher;
@@ -120,7 +119,7 @@ public:
         }
 
         size_t n1 = 0, n2 = 0, n3 = 0, n4 = 0;
-        Mat show1, show2, show3, show4, show5;
+        Mat show1, show2, show3, show4;
 
         //! 1.预测上一帧img和KP旋转后的值
         double imuTheta = normalizeAngle(odo.theta - frameLast.odom.theta);
@@ -149,23 +148,10 @@ public:
                 n++;
         }
 
-        //! 3.更新当前帧与参考关键帧的匹配关系
-        forwMatchIdxWithRefKF.clear();
-        for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
-            //if (forwFirstAdd[i].first == KFRef->id)
-            //   forwMatchIdxWithRefKF.emplace(i, forwFirstAdd[i].second);
-            if (idFirstAdd[i] == KFRef->id)
-                forwMatchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
-        }
-        g_matchToRefSum += forwMatchIdxWithRefKF.size();
-        show3 = drawMachesPointsToRefFrame("Match Ref KF");
-        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
-               forwMatchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
-
-        //! 4.有必要的话提取新的特征点
+        //! 3.有必要的话提取新的特征点
         setMask(maskRadius);
         n4 = ptsForw.size();
-        show4 = drawMachesPointsToLastFrame("Masked & Added");
+        show3 = drawMachesPointsToLastFrame("Masked & Added");
         printf("#%ld 光流追踪, 去密后剩点数/内点数/追踪上的点数/总点数 = %ld/%ld/%ld/%ld\n", idCurr,
                n4, n3, n2, n1);
 
@@ -178,20 +164,34 @@ public:
         } else {
             ptsNew.clear();
         }
-        show5 = drawNewAddPointsInMatch(show4);
         imshow("mask", mask);
+        printf("#%ld 光流追踪, 新增点数为: %ld, ", idCurr, ptsNew.size());
+        drawNewAddPointsInMatch(show3);
+        addNewPoints();
+        printf("目前共有点数为: %ld\n", ptsForw.size());
+
+        //! 4.更新当前帧与参考关键帧的匹配关系
+        matchIdxWithRefKF.clear();
+        matchIdx.clear();
+        matchIdx.resize(KFRef->N, -1);
+        for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
+            if (idFirstAdd[i] == KFRef->id) {
+                matchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
+                matchIdx[idxToFirstAdd[i]] = i;
+            }
+        }
+        g_matchToRefSum += matchIdxWithRefKF.size();
+        show4 = drawMachesPointsToRefFrame("Match Ref KF");
+        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
+               matchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
 
         Mat showMatchs;
         vconcat(show1, show2, showMatchs);
-        vconcat(showMatchs, show5, showMatchs);
         vconcat(showMatchs, show3, showMatchs);
+        vconcat(showMatchs, show4, showMatchs);
         //string fileName = "/home/vance/output/rk_se2lam/klt-match/" + to_string(idCurr) + ".bmp";
         //imwrite(fileName, showMatchs);
         imshow("KLT Matches To Last & Ransac & Ref", showMatchs);
-
-        printf("#%ld 光流追踪, 新增点数为: %ld, ", idCurr, ptsNew.size());
-        addNewPoints();
-        printf("目前共有点数为: %ld\n", ptsForw.size());
 
         //! 5.更新Frame
         vector<KeyPoint> vKPsCurFrame(ptsForw.size());
@@ -200,8 +200,7 @@ public:
         assert(idCurr == frameCurr.id);
 
         //! 6. KF判断
-        if (needNewKF(forwMatchIdxWithRefKF.size())) {
-
+        if (needNewKF(matchIdxWithRefKF.size())) {
             KFRef = make_shared<KeyFrame>(frameCurr);
 
             // 重置klt相关变量
@@ -251,7 +250,7 @@ public:
         }
 
         size_t n1 = 0, n2 = 0, n3 = 0, n4 = 0;
-        Mat show1, show2, show3, show4, show5;
+        Mat show1, show2, show3, show4;
 
         //! 1.预测上一帧img和KP旋转后的值
         double imuTheta = normalizeAngle(odo.theta - frameLast.odom.theta);
@@ -280,40 +279,43 @@ public:
                 n++;
         }
 
-        //! 3.更新当前帧与参考关键帧的匹配关系
-        // 统计当前帧与关键帧匹配点的个数, 更新匹配关系
-        forwMatchIdxWithRefKF.clear();
-        for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
-            if (idFirstAdd[i] == KFRef->id)
-                forwMatchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
-        }
-        g_matchToRefSum += forwMatchIdxWithRefKF.size();
-        show3 = drawMachesPointsToRefFrame("Match Ref KF");
-        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
-               forwMatchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
-
-        //! 4.有必要的话提取新的特征点
+        //! 3.有必要的话提取新的特征点
         setMaskCell(maskRadius);  // 设置mask, 去除密集点
         n4 = ptsForw.size();
-        show4 = drawMachesPointsToLastFrame("Masked & Added");
+        show3 = drawMachesPointsToLastFrame("Masked & Added");
         printf("#%ld 光流追踪, 去密后剩点数/内点数/追踪上的点数/总点数 = %ld/%ld/%ld/%ld\n", idCurr,
                n4, n3, n2, n1);
 
         detectFeaturePointsWithCell(imgForw, mask);
-        show5 = drawNewAddPointsInMatch(show4);
+        drawNewAddPointsInMatch(show3);
         imshow("mask", mask);
-
-        Mat showMatchs;
-        vconcat(show1, show2, showMatchs);
-        vconcat(showMatchs, show5, showMatchs);
-        vconcat(showMatchs, show3, showMatchs);
-        //string fileName = "/home/vance/output/rk_se2lam/klt-match-cell/" + to_string(idCurr) + ".bmp";
-        //imwrite(fileName, showMatchs);
-        imshow("KLT Matches To Last & Ransac & Ref", showMatchs);
-
         printf("#%ld 光流追踪, 新增点数为: %ld, ", idCurr, ptsNew.size());
         addNewPoints();
         printf("目前共有点数为: %ld\n", ptsForw.size());
+
+        //! 4.更新当前帧与参考关键帧的匹配关系
+        matchIdxWithRefKF.clear();
+        matchIdx.clear();
+        matchIdx.resize(KFRef->N, -1);
+        for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
+            if (idFirstAdd[i] == KFRef->id) {
+                matchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
+                matchIdx[idxToFirstAdd[i]] = i;
+            }
+        }
+        g_matchToRefSum += matchIdxWithRefKF.size();
+        show4 = drawMachesPointsToRefFrame("Match Ref KF");
+        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
+               matchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
+
+        // 可视化
+        Mat showMatchs;
+        vconcat(show1, show2, showMatchs);
+        vconcat(showMatchs, show3, showMatchs);
+        vconcat(showMatchs, show4, showMatchs);
+        //string fileName = "/home/vance/output/rk_se2lam/klt-match-cell/" + to_string(idCurr) + ".bmp";
+        //imwrite(fileName, showMatchs);
+        imshow("KLT Matches To Last & Ransac & Ref", showMatchs);
 
         //! 5.更新Frame
         vector<KeyPoint> vKPsCurFrame(ptsForw.size());
@@ -322,7 +324,7 @@ public:
         assert(idCurr == frameCurr.id);
 
         //! 6. KF判断
-        if (needNewKF(forwMatchIdxWithRefKF.size())) {
+        if (needNewKF(matchIdxWithRefKF.size())) {
 
             KFRef = make_shared<KeyFrame>(frameCurr);
 
@@ -397,10 +399,8 @@ public:
                 ptsPrev[j] = ptsPrev[i];
                 ptsCurr[j] = ptsCurr[i];
                 ptsForw[j] = ptsForw[i];
-
                 idFirstAdd[j] = idFirstAdd[i];
                 idxToFirstAdd[j] = idxToFirstAdd[i];
-                firstAddMap[j] = firstAddMap[i];
                 trackCount[j] = trackCount[i];
                 j++;
             }
@@ -408,11 +408,9 @@ public:
         ptsPrev.resize(j);
         ptsCurr.resize(j);
         ptsForw.resize(j);
-
-        trackCount.resize(j);
         idFirstAdd.resize(j);
         idxToFirstAdd.resize(j);
-        firstAddMap.resize(j);
+        trackCount.resize(j);
     }
 
     void reduceVectorCell(const vector<uchar>& status)
@@ -429,30 +427,27 @@ public:
                 ptsForw[j] = ptsForw[i];
                 idFirstAdd[j] = idFirstAdd[i];
                 idxToFirstAdd[j] = idxToFirstAdd[i];
-                firstAddMap[j] = firstAddMap[i];
                 trackCount[j] = trackCount[i];
-                forwCellLable[j] = forwCellLable[i];
+                cellLable[j] = cellLable[i];
                 j++;
             } else {
-                numInCell[forwCellLable[i]]--;
+                numInCell[cellLable[i]]--;
             }
         }
         ptsPrev.resize(j);
         ptsCurr.resize(j);
         ptsForw.resize(j);
-
-        trackCount.resize(j);
         idFirstAdd.resize(j);
         idxToFirstAdd.resize(j);
-        firstAddMap.resize(j);
-        forwCellLable.resize(j);
+        trackCount.resize(j);
+        cellLable.resize(j);
     }
 
     void rejectWithRansac(bool cell)
     {
         if (ptsForw.size() >= 8) {
             vector<unsigned char> inliersMask(ptsForw.size());
-            findHomography(ptsCurr, ptsForw, RANSAC, 2.0, inliersMask);
+            findHomography(ptsCurr, ptsForw, RANSAC, 3.0, inliersMask);
             // AffineMatrix = estimateAffine2D(ptsCurr, ptsForw, inliersMask, RANSAC, 2.0);
             if (cell)
                 reduceVectorCell(inliersMask);
@@ -491,7 +486,7 @@ public:
             if (newPtsToAdd > th) {
                 vector<Point2f> ptsInThisCell;
                 ptsInThisCell.reserve(newPtsToAdd);
-                goodFeaturesToTrack(cellImgs[i], ptsInThisCell, newPtsToAdd, 0.08, maskRadius,
+                goodFeaturesToTrack(cellImgs[i], ptsInThisCell, newPtsToAdd, 0.05, maskRadius,
                                     cellMasks[i], 3);
                 numInCell[i] += static_cast<int>(ptsInThisCell.size());
 
@@ -505,7 +500,7 @@ public:
                     thisPoint.y += cellHeight * cellIndexY;
 
                     ptsNew.push_back(thisPoint);
-                    forwCellLable.push_back(i);
+                    cellLable.push_back(i);
                 }
             }
         }
@@ -519,14 +514,12 @@ public:
             trackCount.push_back(1);
             idFirstAdd.push_back(Frame::nextId);  // Frame还未生成
             idxToFirstAdd.push_back(i + offset);
-            firstAddMap.emplace_back(Frame::nextId, i + offset);
         }
         ptsNew.clear();
         size_t s = ptsForw.size();
         assert(s == idFirstAdd.size());
         assert(s == trackCount.size());
         assert(s == idxToFirstAdd.size());
-        assert(s == firstAddMap.size());
     }
 
     void setMask(int maskRadius = 0)
@@ -537,12 +530,10 @@ public:
         for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
             pm.firstAdd = idFirstAdd[i];
             pm.idxToAdd = idxToFirstAdd[i];
-            // pm.firstAdd = forwFirstAdd[i].first;
-            // pm.idxToAdd = forwFirstAdd[i].second;
             pm.ptInForw = ptsForw[i];
             pm.ptInCurr = ptsCurr[i];
             pm.ptInPrev = ptsPrev[i];
-            vCountPtsId.push_back(make_pair(trackCount[i], pm));
+            vCountPtsId.emplace_back(trackCount[i], pm);
         }
         sort(vCountPtsId.begin(), vCountPtsId.end(),
              [](const pair<int, PairMask>& a, const pair<int, PairMask>& b) {
@@ -555,7 +546,6 @@ public:
         trackCount.clear();
         idFirstAdd.clear();
         idxToFirstAdd.clear();
-        firstAddMap.clear();
         for (const auto& it : vCountPtsId) {
             if (mask.at<uchar>(it.second.ptInForw) == 255) {
                 trackCount.push_back(it.first);
@@ -564,7 +554,6 @@ public:
                 ptsPrev.push_back(it.second.ptInPrev);
                 idFirstAdd.push_back(it.second.firstAdd);
                 idxToFirstAdd.push_back(it.second.idxToAdd);
-                firstAddMap.emplace_back(it.second.firstAdd, it.second.idxToAdd);
                 cv::circle(mask, it.second.ptInForw, maskRadius, Scalar(0), -1);  // 标记掩模
             }
         }
@@ -578,12 +567,10 @@ public:
         for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
             pm.firstAdd = idFirstAdd[i];
             pm.idxToAdd = idxToFirstAdd[i];
-            // pm.firstAdd = forwFirstAdd[i].first;
-            // pm.idxToAdd = forwFirstAdd[i].second;
             pm.ptInForw = ptsForw[i];
             pm.ptInCurr = ptsCurr[i];
             pm.ptInPrev = ptsPrev[i];
-            pm.cellLabel = forwCellLable[i];
+            pm.cellLabel = cellLable[i];
             vCountPtsId.push_back(make_pair(trackCount[i], pm));
         }
         sort(vCountPtsId.begin(), vCountPtsId.end(),
@@ -597,8 +584,7 @@ public:
         trackCount.clear();
         idFirstAdd.clear();
         idxToFirstAdd.clear();
-        firstAddMap.clear();
-        forwCellLable.clear();
+        cellLable.clear();
         for (const auto& it : vCountPtsId) {
             if (it.second.firstAdd == KFRef->id) {
                 trackCount.push_back(it.first);
@@ -607,8 +593,7 @@ public:
                 ptsPrev.push_back(it.second.ptInPrev);
                 idFirstAdd.push_back(it.second.firstAdd);
                 idxToFirstAdd.push_back(it.second.idxToAdd);
-                firstAddMap.emplace_back(it.second.firstAdd, it.second.idxToAdd);
-                forwCellLable.push_back(it.second.cellLabel);
+                cellLable.push_back(it.second.cellLabel);
                 cv::circle(mask, it.second.ptInForw, 0, Scalar(0), -1);
                 continue;
             }
@@ -618,9 +603,8 @@ public:
                 ptsCurr.push_back(it.second.ptInCurr);
                 ptsPrev.push_back(it.second.ptInPrev);
                 idFirstAdd.push_back(it.second.firstAdd);
-                idxToFirstAdd.push_back(it.second.idxToAdd); //! FIXME idxToFirstAdd对应的数据已被打乱!
-                firstAddMap.emplace_back(it.second.firstAdd, it.second.idxToAdd);
-                forwCellLable.push_back(it.second.cellLabel);
+                idxToFirstAdd.push_back(it.second.idxToAdd);
+                cellLable.push_back(it.second.cellLabel);
                 cv::circle(mask, it.second.ptInForw, maskRadius, Scalar(0), -1);  // 标记掩模
             } else {
                 numInCell[it.second.cellLabel]--;
@@ -628,17 +612,14 @@ public:
         }
     }
 
-    Mat drawNewAddPointsInMatch(const Mat& image)
+    void drawNewAddPointsInMatch(Mat& image)
     {
-        Mat outImg = image.clone();
         Point2f offset(imgPrev.cols, 0);
         for (size_t i = 0, iend = ptsNew.size(); i < iend; ++i)
-            circle(outImg, ptsNew[i] + offset, 2, Scalar(255, 0, 255)); // 新点紫色
-
-        return outImg;
+            circle(image, ptsNew[i] + offset, 3, Scalar(255, 0, 255)); // 新点紫色
     }
 
-    Mat drawMachesPointsToLastFrame(const string& txt = "")
+    Mat drawMachesPointsToLastFrame(const string& title = "")
     {
         Mat imgCur, imgPre, imgMatchLast;
         cvtColor(imgPrev, imgPre, CV_GRAY2BGR);
@@ -659,14 +640,14 @@ public:
             }
         }
 
-        string str = txt + ": F-F: " + to_string(frameLast.id) + "-" + to_string(idCurr) +
+        string str = title + ": F-F: " + to_string(frameLast.id) + "-" + to_string(idCurr) +
                      ", M:  " + to_string(N);
         putText(imgMatchLast, str, Point(15, 20), 1, 1, Scalar(0, 0, 255), 2);
 
         return imgMatchLast.clone();
     }
 
-    Mat drawMachesPointsToRefFrame(const string& txt = "")
+    Mat drawMachesPointsToRefFrame(const string& title = "")
     {
         Mat imgRef, imgCur, imgMatchRef;
         cvtColor(KFRef->mImage, imgRef, CV_GRAY2BGR);
@@ -674,16 +655,26 @@ public:
         hconcat(imgRef, imgCur, imgMatchRef);
 
         Point2f offset(imgPrev.cols, 0);
-        for (const auto& m : forwMatchIdxWithRefKF) {
-            Point2f p1 = ptsForw[m.first] + offset;
-            Point2f p2 = KFRef->mvKeyPoints[m.second].pt;
+//        for (const auto& m : matchIdxWithRefKF) {
+//            Point2f p1 = ptsForw[m.first] + offset;
+//            Point2f p2 = KFRef->mvKeyPoints[m.second].pt;
+//            circle(imgMatchRef, p1, 3, Scalar(0, 255, 255));
+//            circle(imgMatchRef, p2, 3, Scalar(0, 255, 255));
+//            line(imgMatchRef, p1, p2, Scalar(220, 248, 255));
+//        }
+        for (size_t i = 0; i < KFRef->N; ++i) {
+            if (matchIdx[i] < 0)
+                continue;
+            Point2f p1 = ptsForw[matchIdx[i]] + offset;
+            Point2f p2 = KFRef->mvKeyPoints[i].pt;
             circle(imgMatchRef, p1, 3, Scalar(0, 255, 255));
             circle(imgMatchRef, p2, 3, Scalar(0, 255, 255));
             line(imgMatchRef, p1, p2, Scalar(220, 248, 255));
         }
 
-        string str = txt + ": " + to_string(KFRef->id) + "-" + to_string(idCurr) + "(" +
-                to_string(idCurr - KFRef->id) + "), M: " + to_string(forwMatchIdxWithRefKF.size());
+
+        string str = title + ": " + to_string(KFRef->id) + "-" + to_string(idCurr) + "(" +
+                to_string(idCurr - KFRef->id) + "), M: " + to_string(matchIdxWithRefKF.size());
         putText(imgMatchRef, str, Point(15, 20), 1, 1, Scalar(0, 0, 255), 2);
 
         return imgMatchRef.clone();
@@ -692,10 +683,10 @@ public:
     bool needNewKF(int matchedPtsWithRef)
     {
         //! 内点数太少要生成新的参考帧
-        if (matchedPtsWithRef <= 0.1 * Config::MaxFtrNumber)
-            return true;
-//        if (idCurr % 40 == 0)
+//        if (matchedPtsWithRef <= 0.1 * Config::MaxFtrNumber)
 //            return true;
+        if (idCurr % 30 == 0)
+            return true;
         return false;
     }
 
@@ -778,8 +769,8 @@ int main(int argc, char* argv[])
         cv::undistort(imgClahe, imgUn, K, D);
 
         timer.start();
-        // klt.track(imgUn, odo);
-        klt.trackCell(imgUn, odo);
+        klt.track(imgUn, odo);
+        //klt.trackCell(imgUn, odo);
         printf("#%ld 当前帧处理耗时: %.2fms\n", klt.idCurr, timer.count());
     }
 
