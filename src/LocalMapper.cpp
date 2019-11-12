@@ -63,8 +63,8 @@ void LocalMapper::addNewKF(PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
 
     //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     timer.start();
-    mpMap->updateCovisibility(mpNewKF);
-    //    mpNewKF->updateCovisibleKFs();
+//    mpMap->updateCovisibility(mpNewKF);
+    mpNewKF->updateCovisibleKFs();
     double t2 = timer.count();
     printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF\n",
            mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs());
@@ -89,11 +89,11 @@ void LocalMapper::addNewKF(PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
         mpMap->insertKF(pKFNew);
         mbUpdated = true;  //! 这里LocalMapper的主线程会开始工作, 优化新KF的位姿
     }
+    double t3 = timer.count();
 
     mbAbortBA = false;
     mbAcceptNewKF = false;
 
-    double t3 = timer.count();
     printf("[Local][Timer] #%ld(KF#%ld) L1.3.添加里程计约束耗时: %.2fms\n", mpNewKF->id,
            mpNewKF->mIdKF, t3);
     printf("[Local][Timer] #%ld(KF#%ld) L1.4.LocalMap的预处理总耗时: %.2fms\n", mpNewKF->id,
@@ -115,10 +115,8 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
 
     // Identify tracked map points
     PtrKeyFrame pPrefKF = mpMap->getCurrentKF();  // 这是上一参考帧KF
-
-    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 当前MP总数: %ld, 参考帧MP观测数: %ld\n",
-           mpNewKF->id, mpNewKF->mIdKF, mpMap->countMPs(), pPrefKF->countObservations());
-
+    size_t nMPs = mpMap->countMPs();
+    size_t nObs = pPrefKF->countObservations();
 
     if (!bNoMP) {
         int nCros = 0, nProj = 0;
@@ -146,7 +144,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
         ORBmatcher matcher;
-        matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);  // 15
+        matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);
         for (int i = 0, iend = mpNewKF->N; i != iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
@@ -173,8 +171,10 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             nProj++;
         }
 
-        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 和参考帧/局部地图的关联MP数为: %d/%d\n",
-               mpNewKF->id, mpNewKF->mIdKF, nCros, nProj);
+        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点1/3, 关联参考帧MP数/参考帧MP总数: %d/%ld\n",
+               mpNewKF->id, mpNewKF->mIdKF, nCros, nObs);
+        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点2/3, 关联的MP数/当前MP总数: %d/%ld\n",
+               mpNewKF->id, mpNewKF->mIdKF, nProj, nMPs);
     }
 
 
@@ -230,7 +230,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             nAddNewMP++;
         }
     }
-    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点, 共添加了%d个新MP, 目前MP总数为%ld个\n",
+    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点3/3, 共添加了%d个新MP, 目前MP总数为%ld个\n",
            mpNewKF->id, mpNewKF->mIdKF, nAddNewMP, mpMap->countMPs());
 }
 

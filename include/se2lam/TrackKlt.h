@@ -41,6 +41,8 @@ public:
     void setGlobalMapper(GlobalMapper* pGlobalMapper) { mpGlobalMapper = pGlobalMapper; }
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
 
+    //! NOTE 锁?
+    cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
 
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
@@ -48,9 +50,10 @@ public:
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
     // for visulization message publisher
-    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
-                      std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
+    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::Point2f>& kp1,
+                      std::vector<cv::Point2f>& kp2, std::vector<int>& vMatches12);
     cv::Mat getImageMatches();
+
 
     bool isFinished();
     void requestFinish();
@@ -64,9 +67,7 @@ public:
 
 private:
     void relocalization(const cv::Mat& img, double imgTime, const Se2& odo) {}
-
     void updateFramePose();
-    int removeOutliers();
 
     bool needNewKF(int trackedRef);
     int doTriangulate();
@@ -78,23 +79,22 @@ private:
     // klt跟踪添加函数
     void createFrameFirstKlt(const cv::Mat& img, const Se2& odo);
     void trackKlt(const cv::Mat& img, const Se2& odo, double imuTheta);
-    bool inBorder(const cv::Point2f& pt);
-    void rejectWithRansac();
-    void reduceVector(const std::vector<unsigned char>& status);
-    void reduceVectorCell(const std::vector<unsigned char>& status);
-    void setMask();
-    void setMaskCell();
-    void addNewPoints();
-    void getRotatedPoint(const std::vector<cv::Point2f>& Points,
-                         std::vector<cv::Point2f>& dstPoints, const cv::Point& center,
-                         double angle);
+    void trackRefKlt(const cv::Mat& img, const Se2& odo, double imuTheta);
     void predictPointsAndImage(double angle);
     void detectFeaturePointsCell(const cv::Mat& image, const cv::Mat& mask);
+    bool inBorder(const cv::Point2f& pt);
+    void removeOutliers();
+    void reduceVectorCell(const std::vector<unsigned char>& status);
+    void setMaskCell();
+    void addNewPoints();
+    void getRotatedPoints(const std::vector<cv::Point2f>& Points,
+                         std::vector<cv::Point2f>& dstPoints, const cv::Point& center,
+                         double angle);
     void segImageToCells(const cv::Mat& image, std::vector<cv::Mat>& cellImgs);
     void resetKltData();
-    void drawNewAddPointsInMatch(cv::Mat& image);
-    cv::Mat drawMachesPointsToLastFrame(const std::string& title = "");
-    cv::Mat drawMachesPointsToRefFrame(const std::string& title = "");
+
+    cv::Mat drawMatchesPointsToLastFrame(const std::string& title = "");
+    cv::Mat drawMatchesPointsToRefFrame(const std::string& title = "");
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
@@ -112,7 +112,6 @@ private:
     // local map
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
-    std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
     std::vector<cv::Point3f> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdxToRefKF;   // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
@@ -129,7 +128,7 @@ private:
     Se2 mLastOdom;
 
     cv::Mat mK, mD;
-    cv::Mat mAffineMatrix;
+    cv::Mat mAffineMatrix, mHomograpy;
     cv::Mat mImgOutMatch;
 
     bool mbFinishRequested;
@@ -156,7 +155,6 @@ private:
     std::vector<int> mvCellLabel;               // 每个KP所属的分块索引号
 
     // klt分块添加
-    static bool mbWithCell;
     int mnCellWidth, mnCellHeight;        // 分块尺寸
     int mnCellsY, mnCellsX, mnCells;  // 分块数
     int mnMaxNumPtsInCell;                // 与分块检点的最大点数

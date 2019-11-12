@@ -38,57 +38,54 @@ public:
     void setMap(Map* pMap) { mpMap = pMap; }
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void setUpdated(bool val);
-    bool CheckGMReady();
+    bool checkGMReady();
 
     // Feature Constraint Graph Functions ...
     // Update feature constraint graph, on KFs pairs given by LocalMapper
-    void UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs);
+    void updataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs);
 
     // Set KF pair waiting for feature constraint generation
     //! 并没有用上
-    void SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo);
+    void setKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo);
 
     // Create single feature constraint between 2 KFs
-    static int CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
+    static int createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
                               SE3Constraint& SE3CnstrOutput);
-    static int CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int, int>& mapMatch,
+    static int createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int, int>& mapMatch,
                               SE3Constraint& SE3CnstrOutput);
 
     // Do local optimization with chosen KFs and MPs
-    static void OptKFPair(const vector<PtrKeyFrame>& _vPtrKFs, const vector<PtrMapPoint>& _vPtrMPs,
+    static void optKFPair(const vector<PtrKeyFrame>& _vPtrKFs, const vector<PtrMapPoint>& _vPtrMPs,
                           vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
                           vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
-    static void
-    OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
+    static void optKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
                    vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
                    vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
 
     // generate MeasSE3XYZ measurement vector
-    static void
-    CreateVecMeasSE3XYZ(const vector<PtrKeyFrame> _vpKFs, const vector<PtrMapPoint> _vpMPs,
+    static void createVecMeasSE3XYZ(const vector<PtrKeyFrame> _vpKFs, const vector<PtrMapPoint> _vpMPs,
                         vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas);
 
-    vector<pair<PtrKeyFrame, PtrKeyFrame>> SelectKFPairFeat(const PtrKeyFrame _pKF);
+    vector<pair<PtrKeyFrame, PtrKeyFrame>> selectKFPairFeat(const PtrKeyFrame _pKF);
 
-    static set<PtrKeyFrame> GetAllConnectedKFs(const PtrKeyFrame _pKF,
+    static set<PtrKeyFrame> getAllConnectedKFs(const PtrKeyFrame _pKF,
                                                set<PtrKeyFrame> _sKFSelected = set<PtrKeyFrame>());
-    static set<PtrKeyFrame>
-    GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers = 10,
+    static set<PtrKeyFrame> getAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers = 10,
                                set<PtrKeyFrame> _sKFSelected = set<PtrKeyFrame>());
 
 
     // Loop Closing ...
     void setORBVoc(ORBVocabulary* pORBVoc) { mpORBVoc = pORBVoc; }
-    void ComputeBowVecAll();
-    bool DetectLoopClose();
-    bool VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchAll,
+    void computeBowVecAll();
+    bool detectLoopClose();
+    bool verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchAll,
                          map<int, int>& _mapMatchRaw);
 
-    void GlobalBA();
+    void globalBA();
 
-    void RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop,
+    void removeMatchOutlierRansac(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop,
                                   map<int, int>& mapiMatch);
-    void RemoveKPMatch(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop, map<int, int>& mapiMatch);
+    void removeKPMatch(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop, map<int, int>& mapiMatch);
 
     void setBusy(bool v);
     void waitIfBusy();
@@ -96,13 +93,13 @@ public:
     void requestFinish();
     bool isFinished();
 
-    void DrawMatch(const map<int, int>& mapiMatch);
-    void DrawMatch(const vector<int>& viMatch);
+    void drawMatch(const map<int, int>& mapiMatch);
+    void drawMatch(const vector<int>& viMatch);
 
     // DEBUG Functions ... Print SE3Quat
-    void PrintSE3(const g2o::SE3Quat se3);
-    void PrintOptInfo(const SlamOptimizer& _optimizer);
-    void PrintOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
+    void printSE3(const g2o::SE3Quat se3);
+    void printOptInfo(const SlamOptimizer& _optimizer);
+    void printOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
                       const vector<g2o::EdgeSE3*>& vpEdgeFeat,
                       const vector<g2o::EdgeSE3Prior*>& vpEdgePlane, double threshChi2 = 30.0,
                       bool bPrintMatInfo = false);
@@ -111,7 +108,6 @@ public:
     ORBVocabulary* mpORBVoc;
     PtrKeyFrame mpLastKFLoopDetect;
 
-    // FramePublish Related ...
     cv::Mat mImgLoop;
     cv::Mat mImgCurr;
     cv::Mat mImgMatch;
@@ -127,7 +123,7 @@ protected:
     PtrKeyFrame mpKFLoop;
     std::deque<std::pair<PtrKeyFrame, PtrKeyFrame>> mdeqPairKFs;
 
-    bool mbUpdated; //! 没用
+    bool mbUpdated;  //! 没用
     bool mbNewKF;
 
     bool mbGlobalBALastLoop;

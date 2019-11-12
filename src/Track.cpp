@@ -84,9 +84,9 @@ void Track::run()
             mpSensors->readData(odo, img);
             double t1 = timer.count();
 
-            timer.start();
             {  // 计算位姿时不做可视化, 防止数据竞争
                 // locker lock(mMutexForPub);
+                timer.start();
                 if (mState == cvu::FIRST_FRAME) {
                     createFirstFrame(img, imgTime, odo);
                 } else if (mState == cvu::OK) {
@@ -100,9 +100,8 @@ void Track::run()
             mLastOdom = odo;
 
             double t2 = timer.count();
-            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端读取数据耗时: %.2fms\n", mCurrentFrame.id, t1);
-            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端取点追踪耗时: %.2fms\n", mCurrentFrame.id, t2);
-            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端进程总耗时: %.2fms\n", mCurrentFrame.id, t1 + t2);
+            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端读取数据/追踪/总耗时为: %.2f/%.2f/%.2fms\n",
+                    mCurrentFrame.id, t1, t2, t1 + t2);
         }
 
         rate.sleep();
@@ -350,8 +349,8 @@ void Track::drawMatchesForPub(bool warp)
         if (mvMatchIdx[i] < 0) {
             continue;
         } else {
-            Point2f ptRef = mpReferenceKF->mvKeyPoints[i].pt;
-            Point2f ptCur = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
+            Point2f& ptRef = mpReferenceKF->mvKeyPoints[i].pt;
+            Point2f& ptCur = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
 
             Point2f ptl, ptr;
             if (warp) {
@@ -507,10 +506,10 @@ int Track::removeOutliers()
 bool Track::needNewKF()
 {
     int nOldKP = mpReferenceKF->countObservations();
-    bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
+    bool c0 = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) > nMinFrames;
     bool c1 = static_cast<float>(mnTrackedOld) <= nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;
-    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
+    bool c3 =  static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) > nMaxFrames;
     bool c4 = mnMatchSum < 0.1f * Config::MaxFtrNumber || mnMatchSum < 20;
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
@@ -524,7 +523,7 @@ bool Track::needNewKF()
 
         bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
     }
-    bNeedNewKF = bNeedNewKF && bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
+    bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
     if (mpLocalMapper->acceptNewKF()) {
@@ -566,7 +565,7 @@ bool Track::needNewKF()
  */
 int Track::doTriangulate()
 {
-    if (mCurrentFrame.id - mpReferenceKF->id < nMinFrames)
+    if (static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) < nMinFrames)
         return 0;
 
     Mat Tcr = mCurrentFrame.getTcr();
@@ -614,9 +613,8 @@ int Track::doTriangulate()
             mvMatchIdx[i] = -1;
         }
     }
-    printf("[Track][Info ] #%ld 1.三角化生成了%d个点且%d个具有良好视差, "
-           "因深度不符合预期而剔除的匹配点对有%d个\n",
-           mCurrentFrame.id, nGoodDepth, mnGoodPrl, nBadDepth);
+    printf("[Track][Info ] #%ld 1.三角化, 良好视差点数/生成点数/因深度不符而剔除的匹配点对数: %d/%d/%d\n",
+           mCurrentFrame.id, mnGoodPrl, nGoodDepth, nBadDepth);
 
     return nTrackedOld;
 }

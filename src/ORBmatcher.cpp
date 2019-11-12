@@ -193,8 +193,8 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 
                 cv::Mat d1 = Descriptors1.row(idx1);
 
-                int bestDist1 = 256;
-                int bestDist2 = 256;
+                int bestDist1 = INT_MAX;
+                int bestDist2 = INT_MAX;
                 int bestIdx2 = -1;
 
                 // 步骤3：遍历F中属于该node的特征点，找到了最佳匹配点
@@ -676,7 +676,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
     int nmatches = 0;
 
     vMatchesIdxMP = vector<int>(pNewKF->N, -1);
-    vector<int> vMatchesDistance(pNewKF->N, 256);
+    vector<int> vMatchesDistance(pNewKF->N, INT_MAX);
 
     for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
         PtrMapPoint pMP = localMPs[i];
@@ -698,8 +698,8 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
         if (vNearKPIndices.empty())
             continue;
 
-        int bestDist = 256;
-        int bestDist2 = 256;
+        int bestDist = INT_MAX;
+        int bestDist2 = INT_MAX;
         int bestLevel = -1;
         int bestLevel2 = -1;
         int bestIdx = -1;

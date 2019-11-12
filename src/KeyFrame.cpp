@@ -15,18 +15,8 @@ namespace se2lam
 
 using namespace cv;
 using namespace std;
+
 typedef unique_lock<mutex> locker;
-
-
-//bool KFIdLessThan::operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs) const
-//{
-//    return lhs->mIdKF < rhs->mIdKF;
-//}
-
-//bool CmpByValueGreater(const std::pair<std::shared_ptr<KeyFrame>, int>& lhs,
-//                       const std::pair<std::shared_ptr<KeyFrame>, int>& rhs) {
-//    return lhs.second > rhs.second;
-//}
 
 unsigned long KeyFrame::mNextIdKF = 1;    //! F,KF和MP的编号都是从1开始
 
@@ -113,6 +103,10 @@ void KeyFrame::setNull(shared_ptr<KeyFrame> &pThis)
         fprintf(stderr, "[KeyFrame] KF#%ld 取消特征约束之后引用计数 = %ld\n", mIdKF, pThis.use_count());
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
+    mOdoMeasureFrom.first = nullptr;
+    mOdoMeasureTo.first = nullptr;
+    preOdomFromSelf.first = nullptr;
+    preOdomToSelf.first = nullptr;
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
     fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测前(%ld)引用计数 = %ld\n",
@@ -121,6 +115,8 @@ void KeyFrame::setNull(shared_ptr<KeyFrame> &pThis)
         PtrMapPoint pMP = it->first;
         pMP->eraseObservation(pThis);
     }
+    mObservations.clear();
+    mDualObservations.clear();
     fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
@@ -129,16 +125,15 @@ void KeyFrame::setNull(shared_ptr<KeyFrame> &pThis)
     for (auto it = mspCovisibleKFs.begin(), iend = mspCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
+    mspCovisibleKFs.clear();
+    mCovisibleKFsWeight.clear();
+    mvpCovisibleKFsSorted.clear();
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
-    mObservations.clear();
-    mDualObservations.clear();
-    mspCovisibleKFs.clear();
     mvViewMPs.clear();
     mvViewMPsInfo.clear();
 
     mpMap->eraseKF(pThis);
-
     fprintf(stderr, "[KeyFrame] KF#%ld 被Map设置为null, 引用计数 = %ld\n",
            mIdKF, pThis.use_count());
 }
@@ -186,7 +181,7 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame> pKF)
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame> pKF, int weight)
 {
     locker lock(mMutexCovis);
-    mCovisibleKFsWeight.insert(make_pair(pKF, weight));
+    mCovisibleKFsWeight.emplace(pKF, weight);
     mspCovisibleKFs.insert(pKF);
 }
 
@@ -335,8 +330,8 @@ bool KeyFrame::hasObservation(size_t idx)
 void KeyFrame::addObservation(PtrMapPoint pMP, size_t idx)
 {
     locker lock(mMutexObs);
-    mObservations.insert(make_pair(pMP, idx));
-    mDualObservations.insert(make_pair(idx, pMP));
+    mObservations.emplace(pMP, idx);
+    mDualObservations.emplace(idx, pMP);
 }
 
 map<PtrMapPoint, size_t> KeyFrame::getObservations()
@@ -362,7 +357,7 @@ void KeyFrame::eraseObservation(size_t idx)
 
 void KeyFrame::addFtrMeasureFrom(shared_ptr<KeyFrame> pKF, const Mat &_mea, const Mat &_info)
 {
-    mFtrMeasureFrom.insert(make_pair(pKF, SE3Constraint(_mea, _info)));
+    mFtrMeasureFrom.emplace(pKF, SE3Constraint(_mea, _info));
 }
 
 void KeyFrame::eraseFtrMeasureFrom(shared_ptr<KeyFrame> pKF)
@@ -372,7 +367,7 @@ void KeyFrame::eraseFtrMeasureFrom(shared_ptr<KeyFrame> pKF)
 
 void KeyFrame::addFtrMeasureTo(shared_ptr<KeyFrame> pKF, const Mat &_mea, const Mat &_info)
 {
-    mFtrMeasureTo.insert(make_pair(pKF, SE3Constraint(_mea, _info)));
+    mFtrMeasureTo.emplace(pKF, SE3Constraint(_mea, _info));
 }
 
 void KeyFrame::eraseFtrMeasureTo(shared_ptr<KeyFrame> pKF)

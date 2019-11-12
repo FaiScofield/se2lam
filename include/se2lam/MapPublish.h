@@ -7,7 +7,6 @@
 #ifndef MAPPUBLISH_H
 #define MAPPUBLISH_H
 
-#include "FramePublish.h"
 #include "LocalMapper.h"
 #include "Localizer.h"
 #include "TrackKlt.h"
@@ -30,9 +29,7 @@ public:
 
     void run();
 
-    void setFramePub(FramePublish* pFP) { mpFramePub = pFP; }
     void setMap(Map* pMap) { mpMap = pMap; }
-
 #ifdef USEKLT
     void setTracker(TrackKlt* pTrack) { mpTracker = pTrack; }
 #else
@@ -57,7 +54,6 @@ public:
     Map* mpMap;
     LocalMapper* mpLocalMapper;
     Localizer* mpLocalizer;
-    FramePublish* mpFramePub;
 #ifdef USEKLT
     TrackKlt* mpTracker;
 #else

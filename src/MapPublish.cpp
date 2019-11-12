@@ -386,11 +386,11 @@ void MapPublish::publishKeyFrames()
 
             mVIGraph.points.push_back(msgsLast);
             mVIGraph.points.push_back(msgsCurr);
-            //            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
-            //            Twb: [%.4f, %.4f]\n",
-            //                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
-            //                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
-            //                   Twb.x/1000., Twb.y/1000.);
+//            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
+//            Twb: [%.4f, %.4f]\n",
+//                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
+//                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
+//                   Twb.x/1000., Twb.y/1000.);
 
             msgsLast = msgsCurr;
         }
@@ -474,9 +474,6 @@ void MapPublish::publishMapPoints()
         msg_p.y = vpMPAct[i]->getPos().y / mScaleRatio;
         msg_p.z = vpMPAct[i]->getPos().z / mScaleRatio;
 
-        //        if (!vpMPAct[i]->isGoodPrl())
-        //            mMPsNoGoodPrl.points.push_back(msg_p);
-        //        else
         mMPsAct.points.push_back(msg_p);
     }
 
@@ -491,9 +488,6 @@ void MapPublish::publishMapPoints()
         msg_p.y = pMPtmp->getPos().y / mScaleRatio;
         msg_p.z = pMPtmp->getPos().z / mScaleRatio;
 
-        //        if (!pMPtmp->isGoodPrl())
-        //            mMPsNoGoodPrl.points.push_back(msg_p);
-        //        else
         mMPsNow.points.push_back(msg_p);
     }
 
@@ -585,12 +579,11 @@ void MapPublish::publishOdomInformation()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
+    Se2 currOdom = mpTracker->getCurrentFrameOdo();
     if (!mbIsLocalize) {
         //! 这里要对齐到首帧的Odom, 位姿从原点开始
-        static Se2 firstOdom = mpMap->getCurrentKF()->odom;
-        static Mat Tb0w = cvu::inv(firstOdom.toCvSE3());
+        static Mat Tb0w = cvu::inv(currOdom.toCvSE3());
 
-        Se2 currOdom = mpMap->getCurrentKF()->odom;
         Mat Twbi = currOdom.toCvSE3();
         Mat Tb0bi = (Tb0w * Twbi).col(3);
         msgsCurr.x = Tb0bi.at<float>(0, 0) / mScaleRatio;
@@ -617,7 +610,6 @@ void MapPublish::publishOdomInformation()
             if (isFirstFrame) {
                 msgsLast = msgsCurr;
                 isFirstFrame = false;
-                ;
             }
         } else {
             return;
@@ -648,6 +640,15 @@ void MapPublish::run()
         if (mpMap->empty())
             continue;
 
+//        Mat imgCurr, imgLast, imgRef;
+//        Point2f kpsCurr, kpsLast, kpsRef;
+//        vector<int> matchIdxToRef;
+
+//#ifdef USEKLT
+//        Mat imgShow = mpTracker->drawMatchesPointsToRefFrame("Match Ref KF");
+//#else
+//        Mat imgShow = mpTracker->getImageMatches();
+//#endif
 //        cv::Mat img = mpFramePub->drawFrame();
 //        if (img.empty())
 //            continue;
@@ -668,8 +669,6 @@ void MapPublish::run()
                 cvtColor(img, imgMatch, CV_BGRA2BGR);
             else
                 imgMatch = img;
-//            imshow("Match", imgMatch);
-//            waitKey(50);
 
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
@@ -689,10 +688,10 @@ void MapPublish::run()
             Tcw = mpLocalizer->getKFCurr()->getPose();
         }
 
+        publishOdomInformation();
         publishCameraCurr(cvu::inv(Tcw));
         publishKeyFrames();
         publishMapPoints();
-        publishOdomInformation();
 
         rate.sleep();
         ros::spinOnce();

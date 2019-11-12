@@ -70,7 +70,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
     if (bNeedVisualization)
         imgGray.copyTo(mImage);
 
-     //! Scale Levels Info
+    //! Scale Levels Info
     mnScaleLevels = mpORBExtractor->getLevels();       // default 1
     mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
 
@@ -87,6 +87,20 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
     mvInvLevelSigma2.resize(mvLevelSigma2.size());
     for (int i = 0; i < mnScaleLevels; i++)
         mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
+
+    //! Assign Features to Grid Cells. 将特征点按照cell存放
+    int nReserve = 0.5 * N / (GRID_COLS * GRID_ROWS);
+    for (int i = 0; i != GRID_COLS; ++i)
+        for (int j = 0; j < GRID_ROWS; ++j)
+            mGrid[i][j].reserve(nReserve);
+
+    for (size_t i = 0; i != N; ++i) {
+        KeyPoint& kp = mvKeyPoints[i];
+
+        int nGridPosX, nGridPosY;
+        if (posInGrid(kp, nGridPosX, nGridPosY))
+            mGrid[nGridPosX][nGridPosY].push_back(i);
+    }
 }
 
 /**
@@ -111,8 +125,8 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
-                minXUn, maxXUn, minYUn, maxYUn);
+        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n", minXUn,
+                maxXUn, minYUn, maxYUn);
     }
 
     id = nextId++;
@@ -188,8 +202,8 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
-                minXUn, maxXUn, minYUn, maxYUn);
+        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n", minXUn,
+                maxXUn, minYUn, maxYUn);
     }
 
     id = nextId++;
@@ -251,10 +265,9 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
 Frame::Frame(const Frame& f)
     : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-      mnScaleLevels(f.mnScaleLevels),
-      mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
-      mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()),
-      Trb(f.Trb)
+      mnScaleLevels(f.mnScaleLevels), mfScaleFactor(f.mfScaleFactor),
+      mvScaleFactors(f.mvScaleFactors), mvLevelSigma2(f.mvLevelSigma2),
+      mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()), Trb(f.Trb)
 {
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
@@ -413,7 +426,7 @@ vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const fl
         return vIndices;
 
     //! ceil向上取整
-    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv);  // FIXME + ?
+    int nMaxCellX = ceil((x - minXUn + r) * gridElementWidthInv);
     nMaxCellX = min(GRID_COLS - 1, nMaxCellX);
     if (nMaxCellX < 0)
         return vIndices;
@@ -423,7 +436,7 @@ vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const fl
     if (nMinCellY >= GRID_ROWS)
         return vIndices;
 
-    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv);  // FIXME + ?
+    int nMaxCellY = ceil((y - minYUn + r) * gridElementHeightInv);
     nMaxCellY = min(GRID_ROWS - 1, nMaxCellY);
     if (nMaxCellY < 0)
         return vIndices;

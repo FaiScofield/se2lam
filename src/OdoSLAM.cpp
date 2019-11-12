@@ -18,9 +18,9 @@ using namespace std;
 using namespace cv;
 
 OdoSLAM::OdoSLAM()
-    : mpMap(nullptr), mpLocalMapper(nullptr), mpGlobalMapper(nullptr), mpFramePub(nullptr),
-      mpMapPub(nullptr), mpTrack(nullptr), mpMapStorage(nullptr), mpLocalizer(nullptr),
-      mpSensors(nullptr), mpVocabulary(nullptr), mbFinishRequested(false), mbFinished(false)
+    : mpMap(nullptr), mpLocalMapper(nullptr), mpGlobalMapper(nullptr), mpMapPub(nullptr),
+      mpTrack(nullptr), mpMapStorage(nullptr), mpLocalizer(nullptr), mpSensors(nullptr),
+      mpVocabulary(nullptr), mbFinishRequested(false), mbFinished(false)
 {}
 
 OdoSLAM::~OdoSLAM()
@@ -32,7 +32,6 @@ OdoSLAM::~OdoSLAM()
     delete mpGlobalMapper;
     delete mpMap;
     delete mpMapStorage;
-    delete mpFramePub;
     delete mpSensors;
 
     delete mpVocabulary;
@@ -101,7 +100,6 @@ void OdoSLAM::start()
 #endif
     mpLocalMapper = new LocalMapper;
     mpGlobalMapper = new GlobalMapper;
-    mpFramePub = new FramePublish(mpTrack, mpGlobalMapper);
     mpMapStorage = new MapStorage();
     mpMapPub = new MapPublish(mpMap);
     mpLocalizer = new Localizer();
@@ -123,9 +121,6 @@ void OdoSLAM::start()
     mpLocalizer->setORBVoc(mpVocabulary);
     mpLocalizer->setSensors(mpSensors);
 
-    mpFramePub->setLocalizer(mpLocalizer);
-
-    mpMapPub->setFramePub(mpFramePub);
     mpMapPub->setLocalizer(mpLocalizer);
     mpMapPub->setTracker(mpTrack);
 
@@ -141,7 +136,6 @@ void OdoSLAM::start()
         cerr << "[Syste][Info ] =====>> Localization-Only Mode <<=====" << endl;
 
         //! 注意标志位在这里设置的
-        mpFramePub->mbIsLocalize = true;
         mpMapPub->mbIsLocalize = true;
 
         thread threadLocalizer(&Localizer::run, mpLocalizer);
@@ -153,7 +147,6 @@ void OdoSLAM::start()
         cout << "[Syste][Info ] =====>> Running SLAM <<=====" << endl;
 
         mpMapPub->mbIsLocalize = false;
-        mpFramePub->mbIsLocalize = false;
 
 #ifdef USEKLT
         thread threadTracker(&TrackKlt::run, mpTrack);

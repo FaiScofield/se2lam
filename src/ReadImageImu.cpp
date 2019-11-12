@@ -16,7 +16,6 @@ using namespace cv;
 int ReadImageImu::playback_mydate(const string& fname, int t_offset, Mat& gimgf)
 {
     static bool b_open = false;
-    static int count = 0;
     static string dir(fname);
     static ifstream fin(fname);
 

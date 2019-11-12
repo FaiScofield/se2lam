@@ -996,7 +996,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
     set<PtrKeyFrame> sKFSelected;
     set<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
     set<PtrKeyFrame> sKFLocal =
-        GlobalMapper::GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+        GlobalMapper::getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
 
     // 共视图里的KF如果在特征图里,就加入到sKFSelected里,然后会更新特征图
     for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {
@@ -1004,7 +1004,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
         if (sKFLocal.count(_pKFCand) == 0) {
             sKFSelected.insert(*iter);
             sKFLocal =
-                GlobalMapper::GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+                GlobalMapper::getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
         } else {
             continue;
         }
@@ -1042,7 +1042,7 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
         SE3Constraint ftrCnstr;
 
         //! NOTE 为KF对添加特征图约束,这里对应论文里的SE3XYZ约束??
-        if (GlobalMapper::CreateFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
+        if (GlobalMapper::createFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GlobalPrint) {

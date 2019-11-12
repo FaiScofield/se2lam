@@ -15,6 +15,7 @@
 namespace se2lam
 {
 
+// -pi ~ +pi
 inline double normalizeAngle(double theta)
 {
     if (theta >= -M_PI && theta < M_PI)

@@ -37,7 +37,7 @@ void GlobalMapper::setUpdated(bool val)
 }
 
 //! 检查Map里是不是来了最新的帧
-bool GlobalMapper::CheckGMReady()
+bool GlobalMapper::checkGMReady()
 {
     if (mpMap->empty())
         return false;
@@ -66,7 +66,7 @@ void GlobalMapper::run()
             break;
 
         //! Check if everything is ready for global mapping
-        if (!CheckGMReady()) {
+        if (!checkGMReady()) {
             rate.sleep();
             continue;
         }
@@ -98,7 +98,7 @@ void GlobalMapper::run()
         timer.start();
 
         //! Refresh BowVec for all KFs
-        ComputeBowVecAll();
+        computeBowVecAll();
 
         timer.stop();
         double t2 = timer.time;
@@ -106,7 +106,7 @@ void GlobalMapper::run()
         timer.start();
 
         //! Detect loop close
-        bIfLoopCloseDetected = DetectLoopClose();
+        bIfLoopCloseDetected = detectLoopClose();
 
         timer.stop();
         double t3 = timer.time;
@@ -118,14 +118,14 @@ void GlobalMapper::run()
         if (bIfLoopCloseDetected) {
             locker lock(mpLocalMapper->mutexMapper);
             // 验证回环,如果通过了会对其进行Merge
-            bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
+            bIfLoopCloseVerified = verifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
         }
 
         //! Create feature edge from loop close
         // TODO ...
 
         //! Draw Matches
-        DrawMatch(mapMatchGood);
+        drawMatch(mapMatchGood);
 
         timer.stop();
         double t4 = timer.time;
@@ -139,7 +139,7 @@ void GlobalMapper::run()
             locker lock(mpLocalMapper->mutexMapper);
 
             WorkTimer wt;
-            GlobalBA();  // 更新KF和MP
+            globalBA();  // 更新KF和MP
 
             mbGlobalBALastLoop = true;
             printf("[Globa][Timer] #%ld(KF#%ld) G5.全局优化耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
@@ -170,7 +170,7 @@ void GlobalMapper::run()
  * @brief GlobalMapper::UpdataFeatGraph 更新特征图
  * @param _vKFPairs 输入KF匹配对
  */
-void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs)
+void GlobalMapper::updataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs)
 {
     cout << "[ Map ] 正在更新特征图.... " << endl;
     int numPairKFs = _vKFPairs.size();
@@ -180,7 +180,7 @@ void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFP
         PtrKeyFrame ptKFTo = pairKF.second;
         SE3Constraint ftrCnstr;
 
-        if (CreateFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
+        if (createFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GlobalPrint) {
@@ -200,7 +200,7 @@ void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFP
  * 选出符合条件中场景相似度最大的一帧作为回环候选, 给下一步做回环验证.
  * @return  返回是否找到候选回环帧的标志
  */
-bool GlobalMapper::DetectLoopClose()
+bool GlobalMapper::detectLoopClose()
 {
     // Loop closure detection with ORB-BOW method
 
@@ -259,7 +259,7 @@ bool GlobalMapper::DetectLoopClose()
  * @param _mapMatchRaw  原始匹配点对
  * @return
  */
-bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchGood,
+bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchGood,
                                    map<int, int>& _mapMatchRaw)
 {
     assert(mpKFCurr != nullptr && mpKFLoop != nullptr);
@@ -281,12 +281,12 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     _mapMatchRaw = mapMatch;
 
     //! Remove Outliers: by RANSAC of Fundamental
-    RemoveMatchOutlierRansac(mpKFCurr, mpKFLoop, mapMatch);
+    removeMatchOutlierRansac(mpKFCurr, mpKFLoop, mapMatch);
     _mapMatchGood = mapMatch;
     int nGoodKFMatch = mapMatch.size();  // KP匹配数,包含了MP匹配数
 
     //! Remove all KPs matches
-    RemoveKPMatch(mpKFCurr, mpKFLoop, mapMatch);
+    removeKPMatch(mpKFCurr, mpKFLoop, mapMatch);
     _mapMatchMP = mapMatch;
     int nGoodMPMatch = mapMatch.size();  // MP匹配数
 
@@ -301,7 +301,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
         ratioMPMatched >= ratioMinMatchMP) {
         // Generate feature based constraint
         SE3Constraint Se3_Curr_Loop;
-        bool bFtrCnstrErr = CreateFeatEdge(mpKFCurr, mpKFLoop, _mapMatchMP, Se3_Curr_Loop);
+        bool bFtrCnstrErr = createFeatEdge(mpKFCurr, mpKFLoop, _mapMatchMP, Se3_Curr_Loop);
         if (!bFtrCnstrErr) {
             mpKFCurr->addFtrMeasureFrom(mpKFLoop, Se3_Curr_Loop.measure, Se3_Curr_Loop.info);
             mpKFLoop->addFtrMeasureTo(mpKFCurr, Se3_Curr_Loop.measure, Se3_Curr_Loop.info);
@@ -328,7 +328,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
 }
 
 //! BUG 会崩溃 20190927
-void GlobalMapper::GlobalBA()
+void GlobalMapper::globalBA()
 {
     cout << "[ Map ] 正在进行GlobalBA().... " << endl;
     mpLocalMapper->setGlobalBABegin(true);
@@ -534,7 +534,7 @@ void GlobalMapper::GlobalBA()
     mpLocalMapper->setGlobalBABegin(false);
 }
 
-void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
+void GlobalMapper::printOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
                                 const vector<g2o::EdgeSE3*>& vpEdgeFeat,
                                 const vector<g2o::EdgeSE3Prior*>& vpEdgePlane, double threshChi2,
                                 bool bPrintMatInfo)
@@ -654,7 +654,7 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
     }
 }
 
-void GlobalMapper::PrintOptInfo(const SlamOptimizer& _optimizer)
+void GlobalMapper::printOptInfo(const SlamOptimizer& _optimizer)
 {
 
     double threshChi2 = 5.0;
@@ -728,7 +728,7 @@ void GlobalMapper::PrintOptInfo(const SlamOptimizer& _optimizer)
 // Interface function:
 // Called by LocalMapper when feature constraint generation is needed
 //! 并没有用上
-void GlobalMapper::SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo)
+void GlobalMapper::setKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo)
 {
 
     std::pair<PtrKeyFrame, PtrKeyFrame> pairKF;
@@ -738,7 +738,7 @@ void GlobalMapper::SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo)
 }
 
 // Generate feature constraint between 2 KFs
-int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
+int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
                                  SE3Constraint& SE3CnstrOutput)
 {
     // Find co-observed MPs
@@ -765,14 +765,14 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
 
     vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>> vSe3KFs;
     vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>> vPt3MPs;
-    OptKFPair(vPtrKFs, vPtrMPs, vSe3KFs, vPt3MPs);
+    optKFPair(vPtrKFs, vPtrMPs, vSe3KFs, vPt3MPs);
 
     // Generate feature based constraint between 2 KFs
     vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>> vMeasSE3XYZ;
     g2o::SE3Quat meas_out;
     g2o::Matrix6d info_out;
 
-    CreateVecMeasSE3XYZ(vPtrKFs, vPtrMPs, vMeasSE3XYZ);
+    createVecMeasSE3XYZ(vPtrKFs, vPtrMPs, vMeasSE3XYZ);
     Sparsifier::DoMarginalizeSE3XYZ(vSe3KFs, vPt3MPs, vMeasSE3XYZ, meas_out, info_out);
 
     // Return
@@ -781,14 +781,14 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
     return 0;
 }
 
-int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int, int>& mapMatch,
+int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int, int>& mapMatch,
                                  SE3Constraint& SE3CnstrOutput)
 {
     vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>> vSe3KFs;
     vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>> vPt3MPs;
 
     //! Optimize Local Graph with Only 2 KFs and MPs matched, and remove outlier by 3D measurements
-    OptKFPairMatch(_pKFFrom, _pKFTo, mapMatch, vSe3KFs, vPt3MPs);
+    optKFPairMatch(_pKFFrom, _pKFTo, mapMatch, vSe3KFs, vPt3MPs);
     if (mapMatch.size() < 3) {
         return 1;
     }
@@ -844,7 +844,7 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
 
 
 // Do localBA
-void GlobalMapper::OptKFPair(
+void GlobalMapper::optKFPair(
     const vector<PtrKeyFrame>& _vPtrKFs, const vector<PtrMapPoint>& _vPtrMPs,
     vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
     vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs)
@@ -927,7 +927,7 @@ void GlobalMapper::OptKFPair(
     }
 }
 
-void GlobalMapper::OptKFPairMatch(
+void GlobalMapper::optKFPairMatch(
     PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
     vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
     vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs)
@@ -1032,7 +1032,7 @@ void GlobalMapper::OptKFPairMatch(
     }
 }
 
-void GlobalMapper::PrintSE3(const g2o::SE3Quat se3)
+void GlobalMapper::printSE3(const g2o::SE3Quat se3)
 {
     Eigen::Vector3d _t = se3.translation();
     Eigen::Quaterniond _r = se3.rotation();
@@ -1049,7 +1049,7 @@ void GlobalMapper::PrintSE3(const g2o::SE3Quat se3)
     cerr << endl;
 }
 
-void GlobalMapper::CreateVecMeasSE3XYZ(
+void GlobalMapper::createVecMeasSE3XYZ(
     const vector<PtrKeyFrame> _vpKFs, const vector<PtrMapPoint> _vpMPs,
     vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas)
 {
@@ -1080,7 +1080,7 @@ void GlobalMapper::CreateVecMeasSE3XYZ(
     }
 }
 
-void GlobalMapper::ComputeBowVecAll()
+void GlobalMapper::computeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
@@ -1095,7 +1095,7 @@ void GlobalMapper::ComputeBowVecAll()
     }
 }
 
-void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
+void GlobalMapper::drawMatch(const map<int, int>& mapMatch)
 {
     if (!Config::NeedVisualization)
         return;
@@ -1208,7 +1208,7 @@ void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
  * @param _pKFLoop
  * @param mapMatch  返回良好匹配点对
  */
-void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
+void GlobalMapper::removeMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
                                             map<int, int>& mapMatch)
 {
     int numMinMatch = 10;
@@ -1251,7 +1251,7 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
 }
 
 // Remove match pair with KP. 去掉只有KP匹配但是没有对应MP的匹配, 回环验证时调用
-void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
+void GlobalMapper::removeKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
                                  map<int, int>& mapMatch)
 {
     vector<int> vIdxToErase;
@@ -1283,7 +1283,7 @@ void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
  * @param _sKFSelected  已经被选上的KFs集合
  * @return
  */
-set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF,
+set<PtrKeyFrame> GlobalMapper::getAllConnectedKFs(const PtrKeyFrame _pKF,
                                                   set<PtrKeyFrame> _sKFSelected)
 {
     set<PtrKeyFrame> sKFConnected;
@@ -1322,7 +1322,7 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF,
  * @param _sKFSelected  已经被选上的KFs集合
  * @return
  */
-set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers,
+set<PtrKeyFrame> GlobalMapper::getAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers,
                                                           set<PtrKeyFrame> _sKFSelected)
 {
     set<PtrKeyFrame> sKFLocal;   // Set of KFs whose distance from _pKF smaller than maxDist
@@ -1334,7 +1334,7 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF
 
         for (auto iter = sKFActive.begin(); iter != sKFActive.end(); iter++) {
             PtrKeyFrame pKFTmp = *iter;
-            set<PtrKeyFrame> sKFAdjTmp = GetAllConnectedKFs(pKFTmp, _sKFSelected);
+            set<PtrKeyFrame> sKFAdjTmp = getAllConnectedKFs(pKFTmp, _sKFSelected);
             for (auto iter2 = sKFAdjTmp.begin(); iter2 != sKFAdjTmp.end(); iter2++) {
                 if (sKFLocal.count(*iter2) == 0) {
                     sKFNew.insert(*iter2);
@@ -1351,7 +1351,7 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF
 
 
 // Select KF pairs to creat feature constraint between which
-vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::SelectKFPairFeat(const PtrKeyFrame _pKF)
+vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::selectKFPairFeat(const PtrKeyFrame _pKF)
 {
 
     vector<pair<PtrKeyFrame, PtrKeyFrame>> _vKFPairs;
@@ -1361,13 +1361,13 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::SelectKFPairFeat(const PtrK
 
     set<PtrKeyFrame> sKFSelected;
     set<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
-    set<PtrKeyFrame> sKFLocal = GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+    set<PtrKeyFrame> sKFLocal = getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
 
     for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {
         PtrKeyFrame _pKFCand = *iter;
         if (sKFLocal.count(_pKFCand) == 0) {
             sKFSelected.insert(*iter);
-            sKFLocal = GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+            sKFLocal = getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
         } else {
             continue;
         }

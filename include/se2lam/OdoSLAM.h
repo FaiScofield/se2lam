@@ -8,7 +8,6 @@
 #define ODOSLAM_H
 
 #include "Config.h"
-#include "FramePublish.h"
 #include "GlobalMapper.h"
 #include "LocalMapper.h"
 #include "Localizer.h"
@@ -43,11 +42,6 @@ public:
         mpSensors->updateOdo(x_, y_, z_, time_);
     }
 
-//    inline void receiveOdoDataSequence(std::vector<Se2> &odoDeque_)
-//    {
-//        mpSensors->updateOdoSequence(odoDeque_);
-//    }
-
     inline void receiveImgData(const cv::Mat& img_, double time_ = 0.)
     {
         mpSensors->updateImg(img_, time_);
@@ -71,9 +65,7 @@ private:
     Map* mpMap;
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;
-    FramePublish* mpFramePub;
     MapPublish* mpMapPub;
-//    Track* mpTrack;
 #ifdef USEKLT
     TrackKlt* mpTrack;
 #else

@@ -4,6 +4,7 @@
 
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 size_t g_matchToRefSum = 0;
+const int EDGE = 12;
 
 struct PairMask {
     cv::Point2f ptInForw;  // 点在当前帧下的像素坐标
@@ -24,8 +25,8 @@ struct KLT_KP {
     void addTrackCount() { trackCount++; }
     void setCorInLast(const cv::Point2f& pt) { ptInLast = pt; }
 
-    cv::Point2f ptInCurr;        // 在当前帧下的像素坐标
-    cv::Point2f ptInLast;        // 在上一帧下的像素坐标
+    cv::Point2f ptInCurr;  // 在当前帧下的像素坐标
+    cv::Point2f ptInLast;  // 在上一帧下的像素坐标
     cv::Point2f ptInPred;
     unsigned long firstAdd = 0;  // 所诞生的帧号
     int idxToRef = -1;           // 与参考KF的匹配点索引
@@ -57,11 +58,9 @@ public:
     vector<unsigned long> idFirstAdd;  // 在哪一帧生成
     vector<size_t> idxToFirstAdd;      // 相对生成帧的KP索引
     vector<int> trackCount;            // 被追踪的次数
-    vector<int> cellLable;         // 都在哪个cell里
+    vector<int> cellLable;             // 都在哪个cell里
     vector<int> numInCell;             // 当前帧每个cell里的点数
-
-    vector<int> matchIdx;
-    map<int, int> matchIdxWithRefKF;
+    vector<int> matchIdx;              // 参考帧和当前帧的匹配索引
 
     ORBextractor* pExtractor;
     ORBmatcher* pMatcher;
@@ -171,26 +170,26 @@ public:
         printf("目前共有点数为: %ld\n", ptsForw.size());
 
         //! 4.更新当前帧与参考关键帧的匹配关系
-        matchIdxWithRefKF.clear();
         matchIdx.clear();
         matchIdx.resize(KFRef->N, -1);
+        int trackedRef = 0;
         for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
             if (idFirstAdd[i] == KFRef->id) {
-                matchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
                 matchIdx[idxToFirstAdd[i]] = i;
+                trackedRef++;
             }
         }
-        g_matchToRefSum += matchIdxWithRefKF.size();
+        g_matchToRefSum += trackedRef;
         show4 = drawMachesPointsToRefFrame("Match Ref KF");
-        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
-               matchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
+        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %d/%.2f\n", idCurr,
+               trackedRef, g_matchToRefSum / (idCurr - 1.0));
 
         Mat showMatchs;
         vconcat(show1, show2, showMatchs);
         vconcat(showMatchs, show3, showMatchs);
         vconcat(showMatchs, show4, showMatchs);
-        //string fileName = "/home/vance/output/rk_se2lam/klt-match/" + to_string(idCurr) + ".bmp";
-        //imwrite(fileName, showMatchs);
+        // string fileName = "/home/vance/output/rk_se2lam/klt-match/" + to_string(idCurr) + ".bmp";
+        // imwrite(fileName, showMatchs);
         imshow("KLT Matches To Last & Ransac & Ref", showMatchs);
 
         //! 5.更新Frame
@@ -200,7 +199,7 @@ public:
         assert(idCurr == frameCurr.id);
 
         //! 6. KF判断
-        if (needNewKF(matchIdxWithRefKF.size())) {
+        if (needNewKF(trackedRef)) {
             KFRef = make_shared<KeyFrame>(frameCurr);
 
             // 重置klt相关变量
@@ -230,7 +229,7 @@ public:
             detectFeaturePointsWithCell(imgForw, lineMask);  // 更新ptsNew, vNumInCell, vCellLable
             addNewPoints();  // 更新ptsForw, vIdAddInFrame, vTrackCount, vIdxTrackToFirstAdd
 
-            if (ptsForw.size() < 100) {
+            if (ptsForw.size() < 200) {
                 cerr << "Too less points in first frame!" << endl;
                 return;
             }
@@ -250,7 +249,7 @@ public:
         }
 
         size_t n1 = 0, n2 = 0, n3 = 0, n4 = 0;
-        Mat show1, show2, show3, show4;
+        Mat show1, show2;
 
         //! 1.预测上一帧img和KP旋转后的值
         double imuTheta = normalizeAngle(odo.theta - frameLast.odom.theta);
@@ -269,11 +268,9 @@ public:
             }
             reduceVectorCell(status);  // 把所有跟踪失败和图像外的点剔除
             n2 = ptsForw.size();
-            show1 = drawMachesPointsToLastFrame("Match Predict");
 
             rejectWithRansac(true);  // Ransac匹配剔除outliers, 通过未旋转的ptsCurr
             n3 = ptsForw.size();
-            show2 = drawMachesPointsToLastFrame("Match Ransac ");
 
             for (auto& n : trackCount)  // 光流追踪成功, 特征点被成功跟中的次数就加一
                 n++;
@@ -282,49 +279,45 @@ public:
         //! 3.有必要的话提取新的特征点
         setMaskCell(maskRadius);  // 设置mask, 去除密集点
         n4 = ptsForw.size();
-        show3 = drawMachesPointsToLastFrame("Masked & Added");
-        printf("#%ld 光流追踪, 去密后剩点数/内点数/追踪上的点数/总点数 = %ld/%ld/%ld/%ld\n", idCurr,
-               n4, n3, n2, n1);
+        show1 = drawMachesPointsToLastFrame("Masked & Added");
 
         detectFeaturePointsWithCell(imgForw, mask);
-        drawNewAddPointsInMatch(show3);
-        imshow("mask", mask);
-        printf("#%ld 光流追踪, 新增点数为: %ld, ", idCurr, ptsNew.size());
+        drawNewAddPointsInMatch(show1);
+        printf("[Track][Info ] #%ld 光流追踪, 去密后剩点数/新增点数为: %ld/%ld, ", idCurr, n4,
+               ptsNew.size());
         addNewPoints();
         printf("目前共有点数为: %ld\n", ptsForw.size());
 
         //! 4.更新当前帧与参考关键帧的匹配关系
-        matchIdxWithRefKF.clear();
         matchIdx.clear();
         matchIdx.resize(KFRef->N, -1);
+        int trackedRef = 0;
         for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
             if (idFirstAdd[i] == KFRef->id) {
-                matchIdxWithRefKF.emplace(i, idxToFirstAdd[i]);
                 matchIdx[idxToFirstAdd[i]] = i;
+                trackedRef++;
             }
         }
-        g_matchToRefSum += matchIdxWithRefKF.size();
-        show4 = drawMachesPointsToRefFrame("Match Ref KF");
-        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %ld/%.2f\n", idCurr,
-               matchIdxWithRefKF.size(), g_matchToRefSum / (idCurr - 1.0));
-
-        // 可视化
-        Mat showMatchs;
-        vconcat(show1, show2, showMatchs);
-        vconcat(showMatchs, show3, showMatchs);
-        vconcat(showMatchs, show4, showMatchs);
-        //string fileName = "/home/vance/output/rk_se2lam/klt-match-cell/" + to_string(idCurr) + ".bmp";
-        //imwrite(fileName, showMatchs);
-        imshow("KLT Matches To Last & Ransac & Ref", showMatchs);
 
         //! 5.更新Frame
         vector<KeyPoint> vKPsCurFrame(ptsForw.size());
         cv::KeyPoint::convert(ptsForw, vKPsCurFrame);
         frameCurr = Frame(imgForw, odo, vKPsCurFrame, pExtractor);
-        assert(idCurr == frameCurr.id);
+
+        // 可视化
+        g_matchToRefSum += trackedRef;
+        show2 = drawMachesPointsToRefFrame("Match Ref KF");
+        printf("#%ld 光流追踪, 从参考帧追踪上的点数/平均追踪点数 = %d/%.2f\n", idCurr,
+               trackedRef, g_matchToRefSum / (idCurr - 1.0));
+
+        Mat showMatchs;
+        vconcat(show1, show2, showMatchs);
+        imshow("KLT Matches To Last & Ref", showMatchs);
+        printf("#%ld 光流追踪上Ref的点数/内点数/追踪上Last的点数/总点数 = %d/%ld/%ld/%ld\n",
+               idCurr, trackedRef, n3, n2, n1);
 
         //! 6. KF判断
-        if (needNewKF(matchIdxWithRefKF.size())) {
+        if (needNewKF(trackedRef)) {
 
             KFRef = make_shared<KeyFrame>(frameCurr);
 
@@ -343,7 +336,95 @@ public:
         resetKltData();
     }
 
-    void trackCellToRef(const Mat& imgGray, const Se2& odo) {}
+    /**
+     * @brief 直接和参考KF进行追踪
+     * @details 这里 ptsCurr 和 imgCurr 代表的是参考帧的KPs和图像
+     */
+    void trackCellToRef(const Mat& imgGray, const Se2& odo)
+    {
+        idCurr++;
+        imgForw = imgGray;
+        ptsForw.clear();
+
+        if (firstFrame) {
+            vector<Keyline> lines;
+            Mat lineMask = getLineMask(imgForw, lines, false);
+            detectFeaturePointsWithCell(imgForw, lineMask);
+            addNewPoints();
+
+            if (ptsForw.size() < 100) {
+                cerr << "Too less points in first frame!" << endl;
+                return;
+            }
+
+            firstFrame = false;
+
+            // 创建当前帧
+            vector<KeyPoint> vKPsCurFrame(ptsForw.size());
+            cv::KeyPoint::convert(ptsForw, vKPsCurFrame);
+            frameCurr = Frame(imgForw, odo, vKPsCurFrame, pExtractor);
+            frameCurr.setPose(Se2(0.f, 0.f, 0.f));
+
+            KFRef = make_shared<KeyFrame>(frameCurr);
+
+            imgCurr = imgForw.clone();  // 需要深拷贝
+            ptsCurr = ptsForw;
+
+            return;
+        }
+
+        size_t n1 = 0, n2 = 0, n3 = 0;
+        Mat show1;
+
+        //! 1.预测当前帧在参考帧KF下的点
+        cv::KeyPoint::convert(KFRef->mvKeyPoints, ptsCurr);
+        double imuTheta = normalizeAngle(odo.theta - KFRef->odom.theta);
+        Point rotationCenter;
+        rotationCenter.x = 160.5827 - 0.01525;  //! TODO
+        rotationCenter.y = 117.7329 - 3.6984;
+        getRotatedPoints(ptsCurr, ptsPrev, rotationCenter, imuTheta);
+        Mat rotationMatrix = getRotationMatrix2D(rotationCenter, imuTheta * 180 / CV_PI, 1.);
+        warpAffine(imgCurr, imgPrev, rotationMatrix, imgCurr.size());
+        cout << "Affine Matrix (PRE): " << endl << rotationMatrix << endl;
+
+        //! 2.光流追踪参考帧的KP
+        vector<uchar> status;
+        vector<float> err;
+        calcOpticalFlowPyrLK(imgPrev, imgForw, ptsPrev, ptsForw, status, err, Size(21, 21), 0);
+        n1 = ptsForw.size();
+        for (size_t i = 0, iend = ptsForw.size(); i < iend; i++) {
+            if (status[i] && !inBorder(ptsForw[i]))
+                status[i] = 0;
+        }
+        reduceVectorCell(status);
+        n2 = ptsForw.size();
+        rejectWithRansac(true);
+        n3 = ptsForw.size();
+        getAffineMatrixDLT(-imuTheta);
+
+        //! 3.更新Frame
+        vector<KeyPoint> vKPsCurFrame(ptsForw.size());
+        cv::KeyPoint::convert(ptsForw, vKPsCurFrame);
+        frameCurr = Frame(imgForw, odo, vKPsCurFrame, pExtractor);
+
+        //! 可视化
+        show1 = drawMachesWhenTrckToRefKF("Match Ref KF");
+        imshow("Track to Ref", show1);
+        printf("#%ld 光流追踪上Ref的内点数/追踪上的点数/总KP数 = %ld/%ld/%ld\n", idCurr, n3, n2, n1);
+
+        if (needNewKF(n3)) {
+            firstFrame = true;
+            trackCount.clear();
+            idFirstAdd.clear();
+            idxToFirstAdd.clear();
+            ptsPrev.clear();
+            ptsCurr.clear();
+            numInCell.clear();
+            numInCell.resize(cells, 0);
+        }
+
+        waitKey(50);
+    }
 
     void predictPointsAndImage(double angle)
     {
@@ -383,8 +464,15 @@ public:
 
     bool inBorder(const Point2f& pt)
     {
-        return Frame::minXUn <= pt.x && pt.x < Frame::maxXUn && Frame::minYUn <= pt.y &&
-               pt.y < Frame::maxYUn;
+        const int minBorderX = EDGE;
+        const int minBorderY = minBorderX;
+        const int maxBorderX = 320 - EDGE;
+        const int maxBorderY = 240 - EDGE;
+
+        const int x = cvRound(pt.x);
+        const int y = cvRound(pt.y);
+
+        return minBorderX <= x && x < maxBorderX && minBorderY <= y && y < maxBorderY;
     }
 
     void reduceVector(const vector<uchar>& status)
@@ -482,7 +570,7 @@ public:
         for (int i = 0; i < cells; ++i) {
             assert(numInCell[i] >= 0);
             int newPtsToAdd = maxPtsInCell - numInCell[i];
-            //newPtsToAdd = newPtsToAdd > maxPtsInCell ? maxPtsInCell : newPtsToAdd;
+            // newPtsToAdd = newPtsToAdd > maxPtsInCell ? maxPtsInCell : newPtsToAdd;
             if (newPtsToAdd > th) {
                 vector<Point2f> ptsInThisCell;
                 ptsInThisCell.reserve(newPtsToAdd);
@@ -616,7 +704,7 @@ public:
     {
         Point2f offset(imgPrev.cols, 0);
         for (size_t i = 0, iend = ptsNew.size(); i < iend; ++i)
-            circle(image, ptsNew[i] + offset, 3, Scalar(255, 0, 255)); // 新点紫色
+            circle(image, ptsNew[i] + offset, 3, Scalar(255, 0, 255));  // 新点紫色
     }
 
     Mat drawMachesPointsToLastFrame(const string& title = "")
@@ -629,11 +717,11 @@ public:
         Point2f offset(imgPrev.cols, 0);
         size_t N = ptsForw.size();
         for (size_t i = 0; i < N; ++i) {
-            if (idFirstAdd[i] == KFRef->id) { // 从参考帧追下来的点标记黄色实心
+            if (idFirstAdd[i] == KFRef->id) {  // 从参考帧追下来的点标记黄色实心
                 circle(imgMatchLast, ptsPrev[i], 3, Scalar(0, 255, 255), -1);
                 circle(imgMatchLast, ptsForw[i] + offset, 3, Scalar(0, 255, 255), -1);
                 line(imgMatchLast, ptsPrev[i], ptsForw[i] + offset, Scalar(220, 248, 255));
-            } else { // 和上一帧的匹配点标记绿色
+            } else {  // 和上一帧的匹配点标记绿色
                 circle(imgMatchLast, ptsPrev[i], 3, Scalar(0, 255, 0));
                 circle(imgMatchLast, ptsForw[i] + offset, 3, Scalar(0, 255, 0));
                 line(imgMatchLast, ptsPrev[i], ptsForw[i] + offset, Scalar(170, 150, 50));
@@ -649,32 +737,78 @@ public:
 
     Mat drawMachesPointsToRefFrame(const string& title = "")
     {
-        Mat imgRef, imgCur, imgMatchRef;
+        Mat imgRef, imgFor, imgForWarp, imgMatchRef;
         cvtColor(KFRef->mImage, imgRef, CV_GRAY2BGR);
-        cvtColor(imgForw, imgCur, CV_GRAY2BGR);
-        hconcat(imgRef, imgCur, imgMatchRef);
+        cvtColor(imgForw, imgFor, CV_GRAY2BGR);
 
-        Point2f offset(imgPrev.cols, 0);
-//        for (const auto& m : matchIdxWithRefKF) {
-//            Point2f p1 = ptsForw[m.first] + offset;
-//            Point2f p2 = KFRef->mvKeyPoints[m.second].pt;
-//            circle(imgMatchRef, p1, 3, Scalar(0, 255, 255));
-//            circle(imgMatchRef, p2, 3, Scalar(0, 255, 255));
-//            line(imgMatchRef, p1, p2, Scalar(220, 248, 255));
-//        }
-        for (size_t i = 0; i < KFRef->N; ++i) {
+        vector<Point2f> ptsRef, ptsFor, ptsForWarp;
+        ptsRef.reserve(KFRef->N);
+        ptsFor.reserve(KFRef->N);
+        for (size_t i = 0, iend = KFRef->N; i < iend; ++i) {
             if (matchIdx[i] < 0)
                 continue;
-            Point2f p1 = ptsForw[matchIdx[i]] + offset;
-            Point2f p2 = KFRef->mvKeyPoints[i].pt;
+            ptsRef.push_back(KFRef->mvKeyPoints[i].pt);
+            ptsFor.push_back(ptsForw[matchIdx[i]]);
+        }
+
+        double angle = normalizeAngle(KFRef->odom.theta - frameCurr.odom.theta);
+        Point rotationCenter;
+        rotationCenter.x = 160.5827 - 0.01525;  //! TODO
+        rotationCenter.y = 117.7329 - 3.6984;
+        Mat A21 = getRotationMatrix2D(rotationCenter, angle * 180 / CV_PI, 1.);
+        warpAffine(imgFor, imgForWarp, A21, imgFor.size());
+        getRotatedPoints(ptsFor, ptsForWarp, rotationCenter, angle);
+
+        hconcat(imgRef, imgForWarp, imgMatchRef);
+        Point2f offset(imgPrev.cols, 0);
+        int m = 0;
+        for (size_t i = 0, iend = ptsRef.size(); i < iend; ++i) {
+            Point2f& p1 = ptsRef[i];
+            Point2f p2 = ptsForWarp[i] + offset;
             circle(imgMatchRef, p1, 3, Scalar(0, 255, 255));
             circle(imgMatchRef, p2, 3, Scalar(0, 255, 255));
             line(imgMatchRef, p1, p2, Scalar(220, 248, 255));
+            m++;
         }
 
+        string str = title + ": " + to_string(KFRef->id) + "-" + to_string(idCurr) + "(" +
+                     to_string(idCurr - KFRef->id) + "), M: " + to_string(m);
+        putText(imgMatchRef, str, Point(15, 20), 1, 1, Scalar(0, 0, 255), 2);
+
+        return imgMatchRef.clone();
+    }
+
+    Mat drawMachesWhenTrckToRefKF(const string& title = "")
+    {
+        Mat imgRef, imgFor, imgForWarp, imgMatchRef;
+        cvtColor(KFRef->mImage, imgRef, CV_GRAY2BGR);
+        cvtColor(imgForw, imgFor, CV_GRAY2BGR);
+
+        size_t n = ptsForw.size();
+        vector<Point2f> ptsForWarp(n);
+
+        double angle = normalizeAngle(KFRef->odom.theta - frameCurr.odom.theta);
+        Point rotationCenter;
+        rotationCenter.x = 160.5827 - 0.01525;  //! TODO
+        rotationCenter.y = 117.7329 - 3.6984;
+        Mat A21 = getRotationMatrix2D(rotationCenter, angle * 180 / CV_PI, 1.);
+        warpAffine(imgFor, imgForWarp, A21, imgFor.size());
+        getRotatedPoints(ptsForw, ptsForWarp, rotationCenter, angle);
+
+        hconcat(imgRef, imgForWarp, imgMatchRef);
+        Point2f offset(imgRef.cols, 0);
+        int m = 0;
+        for (size_t i = 0; i < n; ++i) {
+            Point2f& p1 = ptsCurr[i];
+            Point2f p2 = ptsForWarp[i] + offset;
+            circle(imgMatchRef, p1, 3, Scalar(0, 255, 255));
+            circle(imgMatchRef, p2, 3, Scalar(0, 255, 255));
+            line(imgMatchRef, p1, p2, Scalar(220, 248, 255));
+            m++;
+        }
 
         string str = title + ": " + to_string(KFRef->id) + "-" + to_string(idCurr) + "(" +
-                to_string(idCurr - KFRef->id) + "), M: " + to_string(matchIdxWithRefKF.size());
+                     to_string(idCurr - KFRef->id) + "), M: " + to_string(m);
         putText(imgMatchRef, str, Point(15, 20), 1, 1, Scalar(0, 0, 255), 2);
 
         return imgMatchRef.clone();
@@ -683,10 +817,10 @@ public:
     bool needNewKF(int matchedPtsWithRef)
     {
         //! 内点数太少要生成新的参考帧
-//        if (matchedPtsWithRef <= 0.1 * Config::MaxFtrNumber)
-//            return true;
-        if (idCurr % 30 == 0)
+        if (matchedPtsWithRef <= 0.05 * Config::MaxFtrNumber)
             return true;
+//        if (idCurr % 30 == 0)
+//            return true;
         return false;
     }
 
@@ -706,6 +840,37 @@ public:
 
         return num;
     }
+
+    Mat getAffineMatrixDLT(double theta)
+    {
+        assert(ptsCurr.size() == ptsForw.size());
+
+        Point2f rotationCenter;
+        rotationCenter.x = 160.5827 - 0.01525;  //! TODO
+        rotationCenter.y = 117.7329 - 3.6984;
+        Mat Affine = getRotationMatrix2D(rotationCenter, theta * 180 / CV_PI, 1.);
+        Mat R = Affine.colRange(0, 2).clone();
+        cout << "Affine Matrix (DLT): " << endl << Affine << endl;
+
+        size_t n = ptsForw.size();
+        Mat t = Mat::zeros(2, 1, CV_64FC1);
+        for (size_t i = 0; i < n; ++i) {
+            Mat pi = (Mat_<double>(2, 1) << ptsForw[i].x, ptsForw[i].y);
+            Mat qi = (Mat_<double>(2, 1) << ptsCurr[i].x, ptsCurr[i].y);
+            t += qi - R * pi;
+        }
+        t = t / 2;
+        t.copyTo(Affine.col(2));
+        cout << "Affine Matrix (DLT): " << endl << Affine << endl;
+
+        Mat imgForwWarp, out;
+        warpAffine(imgForw, imgForwWarp, Affine, imgForw.size());
+        hconcat(imgCurr, imgForwWarp, out);
+        imshow("Affine(DLT)", out);
+
+        return Affine.clone();
+    }
+
 };
 
 
@@ -769,8 +934,9 @@ int main(int argc, char* argv[])
         cv::undistort(imgClahe, imgUn, K, D);
 
         timer.start();
-        klt.track(imgUn, odo);
+        //klt.track(imgUn, odo);
         //klt.trackCell(imgUn, odo);
+        klt.trackCellToRef(imgUn, odo);
         printf("#%ld 当前帧处理耗时: %.2fms\n", klt.idCurr, timer.count());
     }
 

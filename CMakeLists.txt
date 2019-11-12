@@ -185,8 +185,11 @@ target_link_libraries(se2lam
     ${DBOW2_LIBS}
     ${LSD161_LIBS}
     ${LineDescriptor_LIBS}
-    # -ltinyxml2  # 交叉编译中ROS需要
 )
+if(CROSS_COMPILE)
+    target_link_libraries(se2lam -ltinyxml2)  # 交叉编译中ROS需要
+endif()
+
 
 # 子目录
 add_subdirectory(rk)

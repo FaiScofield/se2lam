@@ -118,6 +118,7 @@ public:
 protected:
     PtrKeyFrame mCurrentKF;
     cv::Mat mCurrentFramePose;  // Tcw
+    Se2 mCurrentFrameOdom;
 
     bool isEmpty;
 

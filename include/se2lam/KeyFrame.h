@@ -145,7 +145,7 @@ protected:
     std::map<PtrMapPoint, size_t> mObservations;  // size_t为MP在此KF中对应的特征点的索引
     std::map<size_t, PtrMapPoint> mDualObservations;
 
-    std::set<std::shared_ptr<KeyFrame>/*, KeyFrame::IdLessThan*/> mspCovisibleKFs;
+    std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
     std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
     std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
 
@@ -157,21 +157,6 @@ protected:
 };
 
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
-
-// bool operator <(const PtrKeyFrame& lhs, const PtrKeyFrame& rhs)
-//{
-//    return lhs->mIdKF < rhs->mIdKF;
-//}
-
-//class KFIdCompareClass : public std::binary_function<PtrKeyFrame, PtrKeyFrame, bool>
-//{
-//    public:
-//        inline bool operator()(const PtrKeyFrame &f1, const PtrKeyFrame &f2)
-//        {
-//            return f1->mIdKF < f2->mIdKF;
-//        }
-//};
-
 
 }  // namespace se2lam
 
