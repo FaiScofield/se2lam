@@ -11,6 +11,7 @@
 #include "converter.h"
 #include "cvutil.h"
 #include "optimizer.h"
+#include <opencv2/flann.hpp>
 
 namespace se2lam
 {
@@ -22,7 +23,7 @@ using namespace g2o;
 
 typedef unique_lock<mutex> locker;
 
-Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
+Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr), mNewCurrentKF(nullptr)
 {
     mCurrentFramePose = cv::Mat::eye(4, 4, CV_32FC1);
 }
@@ -30,7 +31,7 @@ Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 Map::~Map()
 {}
 
-void Map::insertKF(se2lam::PtrKeyFrame& pKF)
+void Map::insertKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
     printf("[ Map ][Info ] #%ld(KF#%ld) 当前新KF插入到地图里了!\n", pKF->id, pKF->mIdKF);
@@ -40,7 +41,7 @@ void Map::insertKF(se2lam::PtrKeyFrame& pKF)
     mCurrentKF = pKF;
 }
 
-void Map::insertMP(PtrMapPoint& pMP)
+void Map::insertMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
     assert(pMP->countObservations() > 0);
@@ -48,7 +49,6 @@ void Map::insertMP(PtrMapPoint& pMP)
     mspMPs.insert(pMP);
 }
 
-//! 未使用函数
 void Map::eraseKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
@@ -63,7 +63,6 @@ void Map::eraseKF(const PtrKeyFrame& pKF)
         mvRefKFs.erase(iter2);
 }
 
-//! 未使用函数
 void Map::eraseMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
@@ -114,13 +113,13 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
         *it = toKeep;
 }
 
-vector<PtrKeyFrame> Map::getAllKF()
+vector<PtrKeyFrame> Map::getAllKFs()
 {
     locker lock(mMutexGlobalGraph);
     return vector<PtrKeyFrame>(mspKFs.begin(), mspKFs.end());
 }
 
-vector<PtrMapPoint> Map::getAllMP()
+vector<PtrMapPoint> Map::getAllMPs()
 {
     locker lock(mMutexGlobalGraph);
     return vector<PtrMapPoint>(mspMPs.begin(), mspMPs.end());
@@ -286,7 +285,7 @@ bool Map::pruneRedundantKF()
                     //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
                     if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
                         //                        mspKFs.erase(thisKF);
-                        thisKF->setNull(thisKF);
+                        thisKF->setNull();
                         fprintf(stderr, "[ Map ][Info ] KF#%ld 此KF被修剪, 引用计数 = %ld\n",
                                 thisKF->mIdKF, thisKF.use_count());
 
@@ -672,7 +671,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
             }
 
             int ftrIdx = pMP->getIndexInKF(pKF);
-            int octave = pMP->getOctave(pKF);
+            int octave = pMP->getOctave(pKF); //! TODO 可能返回负数
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
             Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
@@ -842,7 +841,6 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
  * 在LocalMapper::removeOutlierChi2()中调用，
  * @param vnOutlierIdxAll   所有离群MP的索引
  * @return  小于2帧观测数的离群MP数量
- * FIXME 最后对MP的setNull()并不会让MP析构, 需要查找原因
  */
 int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
 {
@@ -895,19 +893,14 @@ int Map::removeLocalOutlierMP(const vector<vector<int>>& vnOutlierIdxAll)
                 continue;
             }
 
-            pMP->eraseObservation(pKF);
+            pMP->eraseObservation(pKF); // 观测为0时会自动setNull()
             pKF->eraseObservation(pMP);
         }
 
-        if (pMP->countObservations() < 2) {
-            //            mspMPs.erase(pMP);
-            pMP->setNull(pMP);  // 加了Map的锁
-            fprintf(stderr,
-                    "[ Map ][Info ] MP#%ld 在移除外点中因观测数少于2而被修剪, 引用计数 = %ld\n",
-                    pMP->mId, pMP.use_count());
+        if (pMP->isNull())
             nBadMP++;
-        }
     }
+
     return nBadMP;
 }
 
@@ -941,13 +934,13 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
 
         Point3f pos = toCvPt3f(estimateVertexSBAXYZ(optimizer, i + maxKFid));
         pMP->setPos(pos);
-        pMP->updateMeasureInKFs();
+        // pMP->updateMeasureInKFs(); // 现在setPos后会自动调用
     }
 }
 
 //! 新添的KF在关联MP和生成新的MP之后，如果与Local
 //! KFs的共同MP观测数超过自身观测总数的30%，则为他们之间添加共视关系
-void Map::updateCovisibility(PtrKeyFrame& pNewKF)
+void Map::updateCovisibility(const PtrKeyFrame& pNewKF)
 {
     locker lock1(mMutexLocalGraph);
     locker lock2(mMutexGlobalGraph);
@@ -961,13 +954,11 @@ void Map::updateCovisibility(PtrKeyFrame& pNewKF)
         if (ratios.x > 0.3 || ratios.y > 0.3) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
-            printf("[Local][Info ] #%ld(KF#%ld) [Map]和(KF#%ld)添加了共视关系, 共视比例为%.2f, "
-                   "%.2f.\n",
+            printf("[Local][Info ] #%ld(KF#%ld) [Map]和(KF#%ld)添加了共视关系, 共视比例为%.2f, %.2f.\n",
                    pNewKF->id, pNewKF->mIdKF, pKFi->mIdKF, ratios.x, ratios.y);
         }
     }
 }
-
 
 bool Map::checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP)
 {
@@ -980,9 +971,8 @@ bool Map::checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP)
     return false;
 }
 
-// Select KF pairs to creat feature constraint between which
 /**
- * @brief   提取特征图匹配对
+ * @brief   提取特征图匹配对, 创建KF之间的约束
  * @param _pKF  当前帧
  * @return      返回当前帧和即在共视图又在特征图里的KF的匹配对
  */
@@ -1024,7 +1014,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
  * @param _pKF  当前帧KF
  * @return      返回是否有更新的标志
  */
-bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
+bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
 {
     locker lock1(mMutexLocalGraph);
     locker lock2(mMutexGlobalGraph);
@@ -1239,25 +1229,23 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN,
                                      float searchRadius)
 {
-    vector<PtrKeyFrame> vKFsAll = getAllKF();
-    vector<Point3f> vKFPoses;
+    vector<PtrKeyFrame> vKFsAll = getAllKFs();
+    vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());
         Point3f pose(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f,
                      Twc.at<float>(2, 3) * 0.001f);
-        vKFPoses.push_back(pose);
+        vKFPoses[i] = pose;
     }
 
     cv::flann::KDTreeIndexParams kdtreeParams;
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
     Mat pose = cvu::inv(getCurrentKF()->getPose());
-    std::vector<float> query = {pose.at<float>(0, 3) / 1000.f, pose.at<float>(1, 3) / 1000.f,
-                                pose.at<float>(2, 3) / 1000.f};
-    //    int size = std::min(static_cast<int>(vKFsAll.size()), 8);  // 最近的5个KF
+    std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
+                                pose.at<float>(2, 3) * 0.001f};
     std::vector<int> indices;
     std::vector<float> dists;
-    //    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
     kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
         if (indices[i] > 0 && dists[i] < searchRadius && vKFsAll[indices[i]])  // 距离在0.3m以内

@@ -7,7 +7,6 @@
 
 #include "Frame.h"
 #include "KeyFrame.h"
-#include "LineDetector.h"
 #include "Track.h"
 #include "converter.h"
 #include "cvutil.h"
@@ -31,7 +30,6 @@ Frame::Frame()
 Frame::~Frame()
 {}
 
-
 /**
  * @brief   klt的Frame构造
  * @param imgGray   已矫正过畸变的灰度图
@@ -41,8 +39,7 @@ Frame::~Frame()
  * @author  Maple.Liu
  * @date    2019.10.23
  */
-Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
-             ORBextractor* extractor)
+Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBextractor* extractor)
     : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo), mvKeyPoints(vKPs)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
@@ -50,8 +47,8 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
         //! 计算去畸变后的图像边界
         computeBoundUn(Config::Kcam, Config::Dcam);
 
-        gridElementWidthInv = GRID_COLS / (maxXUn - minXUn);
-        gridElementHeightInv = GRID_ROWS / (maxYUn - minYUn);
+        gridElementWidthInv = static_cast<float>(GRID_COLS) / (maxXUn - minXUn);
+        gridElementHeightInv = static_cast<float>(GRID_ROWS) / (maxYUn - minYUn);
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
@@ -62,41 +59,35 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
     id = nextId++;
 
     //! 计算描述子
-    mpORBExtractor->getDescriptors(imgGray, mvKeyPoints, mDescriptors);
+    mpORBExtractor->getDescriptors(im, mvKeyPoints, mDescriptors);
     N = mvKeyPoints.size();
-    if (mvKeyPoints.empty())
-        return;
+    assert(N != 0);
 
     if (bNeedVisualization)
-        imgGray.copyTo(mImage);
-
-    //! Scale Levels Info
-    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
-    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
+        im.copyTo(mImage);
 
     //! 计算金字塔每层尺度和高斯噪声
+    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
+    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
     mvScaleFactors.resize(mnScaleLevels);
     mvLevelSigma2.resize(mnScaleLevels);
+    mvInvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
-    for (int i = 1; i < mnScaleLevels; i++) {
+    for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
     }
 
-    mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for (int i = 0; i < mnScaleLevels; i++)
-        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
-
     //! Assign Features to Grid Cells. 将特征点按照cell存放
-    int nReserve = 0.5 * N / (GRID_COLS * GRID_ROWS);
-    for (int i = 0; i != GRID_COLS; ++i)
+    int nReserve = N / (GRID_COLS * GRID_ROWS);
+    for (int i = 0; i != GRID_COLS; ++i) {
         for (int j = 0; j < GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
-
+    }
     for (size_t i = 0; i != N; ++i) {
         KeyPoint& kp = mvKeyPoints[i];
-
         int nGridPosX, nGridPosY;
         if (posInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
@@ -111,7 +102,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, const vector<KeyPoint>& vKPs,
  * @param K         相机内参
  * @param distCoef  相机畸变参数
  */
-Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const Mat& K,
+Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& K,
              const Mat& distCoef)
     : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
 {
@@ -120,21 +111,24 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        gridElementWidthInv = GRID_COLS / (maxXUn - minXUn);
-        gridElementHeightInv = GRID_ROWS / (maxYUn - minYUn);
+        gridElementWidthInv = static_cast<float>(GRID_COLS) / (maxXUn - minXUn);
+        gridElementHeightInv = static_cast<float>(GRID_ROWS) / (maxYUn - minYUn);
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n", minXUn,
-                maxXUn, minYUn, maxYUn);
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+                minXUn, maxXUn, minYUn, maxYUn);
     }
 
     id = nextId++;
 
-    Mat imgUn, imgClahed;
+    Mat imgGray, imgUn, imgClahed;
 
     //! 输入图像去畸变
-    assert(imgGray.channels() == 1);
+    if (im.channels() != 1)
+        cvtColor(im, imgGray, CV_BGR2GRAY);
+    else
+        imgGray = im;
     undistort(imgGray, imgUn, K, distCoef);
 
     //!  限制对比度自适应直方图均衡
@@ -143,41 +137,34 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
 
     //! 提取特征点
     (*mpORBExtractor)(imgClahed, Mat(), mvKeyPoints, mDescriptors);
-
     N = mvKeyPoints.size();
-    if (mvKeyPoints.empty())
-        return;
+    assert(N != 0);
 
     if (bNeedVisualization)
         imgClahed.copyTo(mImage);
 
-    //! Scale Levels Info
+    //! 计算金字塔每层尺度和高斯噪声
     mnScaleLevels = mpORBExtractor->getLevels();       // default 1
     mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
-
-    //! 计算金字塔每层尺度和高斯噪声
     mvScaleFactors.resize(mnScaleLevels);
     mvLevelSigma2.resize(mnScaleLevels);
+    mvInvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
     for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
     }
 
-    mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for (int i = 0; i != mnScaleLevels; ++i)
-        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
-
     //! Assign Features to Grid Cells. 将特征点按照cell存放
-    int nReserve = 0.5 * N / (GRID_COLS * GRID_ROWS);
-    for (int i = 0; i != GRID_COLS; ++i)
+    int nReserve = N / (GRID_COLS * GRID_ROWS);
+    for (int i = 0; i != GRID_COLS; ++i) {
         for (int j = 0; j < GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
-
+    }
     for (size_t i = 0; i != N; ++i) {
         KeyPoint& kp = mvKeyPoints[i];
-
         int nGridPosX, nGridPosY;
         if (posInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
@@ -188,7 +175,7 @@ Frame::Frame(const Mat& imgGray, const Se2& odo, ORBextractor* extractor, const 
  * @brief   带时间戳信息的构造函数
  * @author  Vance.Wu
  */
-Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
+Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* extractor,
              const Mat& K, const Mat& distCoef)
     : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
 {
@@ -197,21 +184,24 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
         //! 计算去畸变后的图像边界
         computeBoundUn(K, distCoef);
 
-        gridElementWidthInv = GRID_COLS / (maxXUn - minXUn);
-        gridElementHeightInv = GRID_ROWS / (maxYUn - minYUn);
+        gridElementWidthInv = static_cast<float>(GRID_COLS) / (maxXUn - minXUn);
+        gridElementHeightInv = static_cast<float>(GRID_ROWS) / (maxYUn - minYUn);
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n", minXUn,
-                maxXUn, minYUn, maxYUn);
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+                minXUn, maxXUn, minYUn, maxYUn);
     }
 
     id = nextId++;
 
-    Mat imgUn, imgClahed;
+    Mat imgGray, imgUn, imgClahed;
 
     //! 输入图像去畸变
-    assert(imgGray.channels() == 1);
+    if (im.channels() != 1)
+        cvtColor(im, imgGray, CV_BGR2GRAY);
+    else
+        imgGray = im;
     undistort(imgGray, imgUn, K, distCoef);
 
     //!  限制对比度自适应直方图均衡
@@ -220,54 +210,47 @@ Frame::Frame(const Mat& imgGray, const double& time, const Se2& odo, ORBextracto
 
     //! 提取特征点
     (*mpORBExtractor)(imgClahed, Mat(), mvKeyPoints, mDescriptors);
-
     N = mvKeyPoints.size();
-    if (mvKeyPoints.empty())
-        return;
+    assert(N != 0);
 
     if (bNeedVisualization)
         imgClahed.copyTo(mImage);
 
-    //! Scale Levels Info
+    //! 计算金字塔每层尺度和高斯噪声
     mnScaleLevels = mpORBExtractor->getLevels();       // default 5
     mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
-
-    //! 计算金字塔每层尺度和高斯噪声
     mvScaleFactors.resize(mnScaleLevels);
     mvLevelSigma2.resize(mnScaleLevels);
+    mvInvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
     for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
+        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
     }
 
-    mvInvLevelSigma2.resize(mvLevelSigma2.size());
-    for (int i = 0; i != mnScaleLevels; ++i)
-        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
-
     //! Assign Features to Grid Cells. 将特征点按照cell存放
-    int nReserve = 0.5 * N / (GRID_COLS * GRID_ROWS);
-    for (int i = 0; i != GRID_COLS; ++i)
+    int nReserve = N / (GRID_COLS * GRID_ROWS);
+    for (int i = 0; i != GRID_COLS; ++i) {
         for (int j = 0; j < GRID_ROWS; ++j)
             mGrid[i][j].reserve(nReserve);
-
+    }
     for (size_t i = 0; i != N; ++i) {
         KeyPoint& kp = mvKeyPoints[i];
-
         int nGridPosX, nGridPosY;
         if (posInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
     }
 }
 
-//! 复制构造函数
+//! 复制构造函数, 初始化KF用
 Frame::Frame(const Frame& f)
     : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
       mnScaleLevels(f.mnScaleLevels), mfScaleFactor(f.mfScaleFactor),
       mvScaleFactors(f.mvScaleFactors), mvLevelSigma2(f.mvLevelSigma2),
-      mvInvLevelSigma2(f.mvInvLevelSigma2), Tcr(f.Tcr.clone()), Trb(f.Trb)
+      mvInvLevelSigma2(f.mvInvLevelSigma2), Trb(f.Trb)
 {
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
@@ -276,30 +259,30 @@ Frame::Frame(const Frame& f)
         for (int j = 0; j < GRID_ROWS; ++j)
             mGrid[i][j] = f.mGrid[i][j];
 
+    if (!f.Tcr.empty())
+        setTcr(f.Tcr);
     if (!f.Tcw.empty())
-        setPose(f.Tcw);
+        setPose(f.Tcw);  // Twb在此更新;
 }
 
-//! 赋值拷贝
+//! 赋值拷贝, Track中交换前后帧数据使用
 Frame& Frame::operator=(const Frame& f)
 {
     mpORBExtractor = f.mpORBExtractor;
 
+    mTimeStamp = f.mTimeStamp;
+    id = f.id;
+    odom = f.odom;
+
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
 
+    N = f.N;
     mvKeyPoints = f.mvKeyPoints;
     f.mDescriptors.copyTo(mDescriptors);
-
-    mTimeStamp = f.mTimeStamp;
-    id = f.id;
-    N = f.N;
-
-    odom = f.odom;
-    Trb = f.Trb;
-    Tcr = f.Tcr;
-    if (!f.Tcw.empty())
-        setPose(f.Tcw);
+    for (int i = 0; i != GRID_COLS; ++i)
+        for (int j = 0; j < GRID_ROWS; ++j)
+            mGrid[i][j] = f.mGrid[i][j];
 
     mnScaleLevels = f.mnScaleLevels;
     mfScaleFactor = f.mfScaleFactor;
@@ -307,37 +290,13 @@ Frame& Frame::operator=(const Frame& f)
     mvLevelSigma2 = f.mvLevelSigma2;
     mvInvLevelSigma2 = f.mvInvLevelSigma2;
 
-    for (int i = 0; i != GRID_COLS; ++i)
-        for (int j = 0; j < GRID_ROWS; ++j)
-            mGrid[i][j] = f.mGrid[i][j];
+    if (!f.Tcr.empty())
+        setTcr(f.Tcr);
+    if (!f.Tcw.empty())
+        setPose(f.Tcw);  // Twb在此更新
+    Trb = f.Trb;
 
     return *this;
-}
-
-Se2 Frame::getTwb()
-{
-    locker lock(mMutexPose);
-    return Twb;
-}
-
-Mat Frame::getTcr()
-{
-    locker lock(mMutexPose);
-    return Tcr.clone();
-}
-
-Mat Frame::getPose()
-{
-    locker lock(mMutexPose);
-    return Tcw.clone();
-}
-
-Point3f Frame::getCameraCenter()
-{
-    locker lock(mMutexPose);
-    Mat Ow = cvu::inv(Tcw).rowRange(0, 3).col(3);
-
-    return Point3f(Ow);
 }
 
 void Frame::setPose(const Mat& _Tcw)
@@ -366,12 +325,43 @@ void Frame::setTrb(const Se2& _Trb)
     Trb = _Trb;
 }
 
-//! 只执行一次
+Se2 Frame::getTwb()
+{
+    locker lock(mMutexPose);
+    return Twb;
+}
+
+Se2 Frame::getTrb()
+{
+    locker lock(mMutexPose);
+    return Trb;
+}
+
+Mat Frame::getTcr()
+{
+    locker lock(mMutexPose);
+    return Tcr.clone();
+}
+
+Mat Frame::getPose()
+{
+    locker lock(mMutexPose);
+    return Tcw.clone();
+}
+
+Point3f Frame::getCameraCenter()
+{
+    locker lock(mMutexPose);
+    Mat Ow = cvu::inv(Tcw).rowRange(0, 3).col(3);
+
+    return Point3f(Ow);
+}
+
+// 只执行一次
 void Frame::computeBoundUn(const Mat& K, const Mat& D)
 {
     float x = static_cast<float>(Config::ImgSize.width);
     float y = static_cast<float>(Config::ImgSize.height);
-    assert(x > 0 && y > 0);
     if (D.at<float>(0) == 0.) {
         minXUn = 0.f;
         minYUn = 0.f;
@@ -388,7 +378,7 @@ void Frame::computeBoundUn(const Mat& K, const Mat& D)
     maxYUn = std::max(mat(2).y, mat(3).y);
 }
 
-bool Frame::inImgBound(Point2f pt)
+bool Frame::inImgBound(const cv::Point2f& pt)
 {
     return (pt.x >= minXUn && pt.x <= maxXUn && pt.y >= minYUn && pt.y <= maxYUn);
 }
@@ -412,7 +402,7 @@ bool Frame::posInGrid(KeyPoint& kp, int& posX, int& posY)
  * @return 返回区域内特征点在KF里的索引
  */
 vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const float& r,
-                                        int minLevel, int maxLevel) const
+                                        const int minLevel, const int maxLevel) const
 {
     assert(r > 0);
 

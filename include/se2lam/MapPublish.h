@@ -9,6 +9,7 @@
 
 #include "LocalMapper.h"
 #include "Localizer.h"
+#include "Track.h"
 #include "TrackKlt.h"
 #include <opencv2/core/core.hpp>
 #include <ros/ros.h>

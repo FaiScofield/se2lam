@@ -14,7 +14,6 @@
 #include "MapPoint.h"
 #include "optimizer.h"
 
-#include <opencv2/flann.hpp>
 #include <set>
 #include <unordered_map>
 
@@ -27,19 +26,6 @@ class LocalMapper;
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
-// class MPIdLessThan {
-// public:
-//    bool operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs)
-//    const;
-//};
-
-// class KFIdLessThan {
-// public:
-//    bool operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs)
-//    const;
-//};
-
-
 class Map
 {
 
@@ -47,14 +33,14 @@ public:
     Map();
     ~Map();
 
-    void insertKF(PtrKeyFrame& pkf);
-    void insertMP(PtrMapPoint& pmp);
+    void insertKF(const PtrKeyFrame& pkf);
+    void insertMP(const PtrMapPoint& pmp);
     void eraseKF(const PtrKeyFrame& pKF);
     void eraseMP(const PtrMapPoint& pMP);
     void mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete);
 
-    std::vector<PtrKeyFrame> getAllKF();
-    std::vector<PtrMapPoint> getAllMP();
+    std::vector<PtrKeyFrame> getAllKFs();
+    std::vector<PtrMapPoint> getAllMPs();
     std::vector<PtrKeyFrame> getLocalKFs();
     std::vector<PtrMapPoint> getLocalMPs();
     std::vector<PtrKeyFrame> getRefKFs();
@@ -63,8 +49,8 @@ public:
     size_t countLocalKFs();
     size_t countLocalMPs();
 
-    void setCurrentKF(const PtrKeyFrame& pKF);
     PtrKeyFrame getCurrentKF();
+    void setCurrentKF(const PtrKeyFrame& pKF);
     void setCurrentFramePose(const cv::Mat& pose);
     cv::Mat getCurrentFramePose();
 
@@ -81,10 +67,9 @@ public:
     //! For LocalMapper
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
-    void updateCovisibility(PtrKeyFrame& pNewKF);
+    void updateCovisibility(const PtrKeyFrame& pNewKF);
     void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
                                     float searchRadius = 5.f);
-
     bool pruneRedundantKF();
     int removeLocalOutlierMP(const std::vector<std::vector<int>>& vnOutlierIdxAll);
 
@@ -106,7 +91,7 @@ public:
     std::vector<std::pair<PtrKeyFrame, PtrKeyFrame>> SelectKFPairFeat(const PtrKeyFrame& _pKF);
 
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
-    bool UpdateFeatGraph(const PtrKeyFrame& _pKF);
+    bool updateFeatGraph(const PtrKeyFrame& _pKF);
 
     cv::SparseMat mFtrBasedGraph;
     cv::SparseMat mOdoBasedGraph;
@@ -118,7 +103,6 @@ public:
 protected:
     PtrKeyFrame mCurrentKF;
     cv::Mat mCurrentFramePose;  // Tcw
-    Se2 mCurrentFrameOdom;
 
     bool isEmpty;
 
@@ -137,6 +121,16 @@ protected:
     std::mutex mMutexLocalGraph;
     std::mutex mMutexCurrentKF;
     std::mutex mMutexCurrentFrame;
+
+    //! for new temporary map
+    PtrKeyFrame mNewCurrentKF;
+    cv::Mat mNewCurrentFramePose;
+    std::set<PtrMapPoint, MapPoint::IdLessThan> mNewMPs;
+    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mNewKFs;
+    std::vector<PtrMapPoint> mvNewLocalMPs;
+    std::vector<PtrKeyFrame> mvNewLocalKFs;
+    std::vector<PtrKeyFrame> mvNewRefKFs;
+    std::mutex mMutexNewMap;
 
 };  // class Map
 

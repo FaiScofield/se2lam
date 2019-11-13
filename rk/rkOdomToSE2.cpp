@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <math.h>
 #include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string.hpp>   // ends_with()
 
 using namespace std;
 namespace bf = boost::filesystem;

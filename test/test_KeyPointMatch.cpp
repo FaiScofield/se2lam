@@ -102,7 +102,7 @@ int main(int argc, char** argv)
         frameCur = Frame(imgClahe, imgFiles[i].timeStamp, Se2(), kpExtractor, K, D);
 //        frameCur = Frame(imgClahe, 0., Se2(), kpExtractor, K, D);
         KFCur = make_shared<KeyFrame>(frameCur);
-        KFCur->ComputeBoW(vocabulary);
+        KFCur->computeBoW(vocabulary);
         imgCur.copyTo(imgWithFeatureCur);
         for (int i = 0, iend = frameCur.N; i < iend; ++i)
             circle(imgWithFeatureCur, frameCur.mvKeyPoints[i].pt, 3, Scalar(255, 0, 0));

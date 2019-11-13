@@ -43,7 +43,7 @@ public:
 
     //! 超天花板的摄像头没有z方向位移, 金字塔层数可以设为1
     ORBextractor(int nMaxFeatures = 1000, float scaleFactor = 1.2f, int nLevels = 6,
-                 int scoreType = FAST_SCORE, int fastTh = 15);  // 20
+                 int scoreType = FAST_SCORE, int fastTh = 20);
 
     ~ORBextractor() {}
 

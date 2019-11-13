@@ -11,12 +11,10 @@
 
 #include "Config.h"
 #include "Frame.h"
-#include "GlobalMapper.h"
+#include "ORBmatcher.h"
 #include "Sensors.h"
 #include "cvutil.h"
 #include <g2o/types/sba/types_six_dof_expmap.h>
-
-#define USEKLT
 
 namespace se2lam
 {
@@ -64,6 +62,7 @@ public:
     cvu::eTrackingState mLastState;
 
     int N1 = 0, N2 = 0, N3 = 0;  // for debug print
+    double trackTimeTatal = 0.;
 
 private:
     void relocalization(const cv::Mat& img, double imgTime, const Se2& odo) {}

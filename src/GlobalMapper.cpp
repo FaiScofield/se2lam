@@ -59,7 +59,7 @@ void GlobalMapper::run()
     if (Config::LocalizationOnly)
         return;
 
-    ros::Rate rate(Config::FPS * 10);
+    ros::Rate rate(Config::FPS * 5);
     while (ros::ok() && !mbFinished) {
 
         if (checkFinish())
@@ -82,9 +82,9 @@ void GlobalMapper::run()
         setBusy(true);
 
         //! Update FeatGraph with Covisibility-Graph. 根据共视图更新特征图
-        bIfFeatGraphRenewed = mpMap->UpdateFeatGraph(mpKFCurr);
+        bIfFeatGraphRenewed = mpMap->updateFeatGraph(mpKFCurr);
 
-        /*
+        /* // 原本这里就是注释掉的
         vector<pair<PtrKeyFrame, PtrKeyFrame>> vKFPairs = SelectKFPairFeat(mpKFCurr);
         if (!vKFPairs.empty()) {
             UpdataFeatGraph(vKFPairs);
@@ -174,7 +174,7 @@ void GlobalMapper::updataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFP
 {
     cout << "[ Map ] 正在更新特征图.... " << endl;
     int numPairKFs = _vKFPairs.size();
-    for (int i = 0; i != numPairKFs; ++i) {
+    for (int i = 0; i < numPairKFs; ++i) {
         pair<PtrKeyFrame, PtrKeyFrame> pairKF = _vKFPairs[i];
         PtrKeyFrame ptKFFrom = pairKF.first;
         PtrKeyFrame ptKFTo = pairKF.second;
@@ -219,12 +219,12 @@ bool GlobalMapper::detectLoopClose()
     DBoW2::BowVector BowVecCurr = pKFCurr->mBowVec;
     int idKFCurr = pKFCurr->mIdKF;
 
-    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
     int numKFs = vpKFsAll.size();
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
 
-    for (int i = 0; i != numKFs; ++i) {
+    for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame pKF = vpKFsAll[i];
         DBoW2::BowVector BowVec = pKF->mBowVec;
 
@@ -327,7 +327,6 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     return bVerified;
 }
 
-//! BUG 会崩溃 20190927
 void GlobalMapper::globalBA()
 {
     cout << "[ Map ] 正在进行GlobalBA().... " << endl;
@@ -338,7 +337,7 @@ void GlobalMapper::globalBA()
     double threshFeatEdgeChi2Pre = 1000.0;
 #endif
 
-    vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
+    vector<PtrKeyFrame> vecKFs = mpMap->getAllKFs();
 
     SlamOptimizer optimizer;
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
@@ -505,7 +504,7 @@ void GlobalMapper::globalBA()
     }
 
     // Update local graph MapPoint positions
-    vector<PtrMapPoint> vMPsAll = mpMap->getAllMP();
+    vector<PtrMapPoint> vMPsAll = mpMap->getAllMPs();
     for (auto it = vMPsAll.begin(); it != vMPsAll.end(); ++it) {
         PtrMapPoint pMP = (*it);
 
@@ -567,7 +566,7 @@ void GlobalMapper::printOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i = 0; i != 6; ++i) {
+            for (int i = 0; i < 6; ++i) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
@@ -604,7 +603,7 @@ void GlobalMapper::printOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i = 0; i != 6; ++i) {
+            for (int i = 0; i < 6; ++i) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
@@ -641,7 +640,7 @@ void GlobalMapper::printOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo,
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i = 0; i != 6; ++i) {
+            for (int i = 0; i < 6; ++i) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
@@ -716,7 +715,7 @@ void GlobalMapper::printOptInfo(const SlamOptimizer& _optimizer)
                 cerr << "id0 = " << id0 << "; ";
                 cerr << "chi2 = " << pEdge->chi2() << "; ";
                 cerr << "err = ";
-                for (int i = 0; i != 6; ++i) {
+                for (int i = 0; i < 6; ++i) {
                     cerr << pEdge->error()(i) << "; ";
                 }
                 cerr << endl;
@@ -857,7 +856,7 @@ void GlobalMapper::optKFPair(
     // Init KF vertex
     int vertexId = 0;
     int numKFs = _vPtrKFs.size();
-    for (int i = 0; i != numKFs; ++i) {
+    for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame PtrKFi = _vPtrKFs[i];
         Mat T3_kf_w = PtrKFi->getPose();
         g2o::Isometry3D Iso3_w_kf = toIsometry3D(T3_kf_w.inv());
@@ -882,7 +881,7 @@ void GlobalMapper::optKFPair(
     }
 
     // Set SE3XYZ edges
-    for (int i = 0; i != numKFs; ++i) {
+    for (int i = 0; i < numKFs; ++i) {
         int vertexIdKF = i;
         PtrKeyFrame PtrKFi = _vPtrKFs[i];
 
@@ -915,7 +914,7 @@ void GlobalMapper::optKFPair(
 
     // Return optimize results
     _vSe3KFs.clear();
-    for (int i = 0; i != numKFs; ++i) {
+    for (int i = 0; i < numKFs; ++i) {
         g2o::SE3Quat Se3KFi = toSE3Quat(estimateVertexSE3(optimizer, i));
         _vSe3KFs.push_back(Se3KFi);
     }
@@ -1020,7 +1019,7 @@ void GlobalMapper::optKFPairMatch(
 
     // Return optimize results
     _vSe3KFs.clear();
-    for (int i = 0; i != 2; ++i) {
+    for (int i = 0; i < 2; ++i) {
         g2o::SE3Quat Se3KFi = toSE3Quat(estimateVertexSE3(optimizer, i));
         _vSe3KFs.push_back(Se3KFi);
     }
@@ -1057,7 +1056,7 @@ void GlobalMapper::createVecMeasSE3XYZ(
     int numMPs = _vpMPs.size();
     vMeas.clear();
 
-    for (int i = 0; i != numKFs; ++i) {
+    for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame PtrKFi = _vpKFs[i];
         for (int j = 0; j < numMPs; ++j) {
             PtrMapPoint PtrMPj = _vpMPs[j];
@@ -1084,14 +1083,14 @@ void GlobalMapper::computeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
-    vpKFs = mpMap->getAllKF();
+    vpKFs = mpMap->getAllKFs();
     size_t numKFs = vpKFs.size();
-    for (size_t i = 0; i != numKFs; ++i) {
+    for (size_t i = 0; i < numKFs; ++i) {
         PtrKeyFrame pKF = vpKFs[i];
         if (pKF->mbBowVecExist) {
             continue;
         }
-        pKF->ComputeBoW(mpORBVoc);
+        pKF->computeBoW(mpORBVoc);
     }
 }
 
@@ -1135,7 +1134,7 @@ void GlobalMapper::drawMatch(const map<int, int>& mapMatch)
     imgMatch.copyTo(mImgMatch);
 
     //! Draw Features
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i != iend; ++i) {
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
         KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
         bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
@@ -1148,7 +1147,7 @@ void GlobalMapper::drawMatch(const map<int, int>& mapMatch)
         circle(mImgMatch, ptCurr, 4, colorCurr, 1);
     }
 
-    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i != iend; ++i) {
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
         KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
@@ -1238,7 +1237,7 @@ void GlobalMapper::removeMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
     // RANSAC with fundemantal matrix
     vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
     findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
-    for (size_t i = 0, iend = vInlier.size(); i != iend; ++i) {
+    for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
         int idxCurr = vIdxCurr[i];
         int idxLoop = vIdxLoop[i];
         if (vInlier[i] == true) {
@@ -1271,8 +1270,8 @@ void GlobalMapper::removeKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
         }
     }
 
-    int numToErase = vIdxToErase.size();
-    for (int i = 0; i != numToErase; ++i) {
+    size_t numToErase = vIdxToErase.size();
+    for (size_t i = 0; i < numToErase; ++i) {
         mapMatch.erase(vIdxToErase[i]);
     }
 }
@@ -1329,7 +1328,7 @@ set<PtrKeyFrame> GlobalMapper::getAllConnectedKFs_nLayers(const PtrKeyFrame _pKF
     set<PtrKeyFrame> sKFActive;  // Set of KFs who are active for next loop;
     sKFActive.insert(_pKF);
 
-    for (int i = 0; i != numLayers; ++i) {
+    for (int i = 0; i < numLayers; ++i) {
         set<PtrKeyFrame> sKFNew;  // 每层新添的KF
 
         for (auto iter = sKFActive.begin(); iter != sKFActive.end(); iter++) {

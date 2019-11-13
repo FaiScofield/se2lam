@@ -9,7 +9,6 @@
 
 #include "Config.h"
 #include "Frame.h"
-#include "GlobalMapper.h"
 #include "ORBmatcher.h"
 #include "Sensors.h"
 #include "cvutil.h"
@@ -39,7 +38,6 @@ public:
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
 
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
-    Se2 dataAlignment(std::vector<Se2>& dataOdoSeq, double& timeImg);
 
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
     static void calcSE3toXYZInfo(const cv::Point3f& Pc1, const cv::Mat& Tc1w, const cv::Mat& Tc2w,
@@ -60,6 +58,7 @@ public:
     cvu::eTrackingState mLastState;
 
     int N1 = 0, N2 = 0, N3 = 0;  // for debug print
+    double trackTimeTatal = 0.;
 
 private:
     void createFirstFrame(const cv::Mat& img, const double& imgTime, const Se2& odo);
@@ -95,8 +94,8 @@ private:
     Frame mCurrentFrame;
     PtrKeyFrame mpReferenceKF;
     std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
-    std::vector<cv::Point3f> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
-    std::vector<int> mvMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
+    std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
+    std::vector<int> mvMatchIdx;         // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
     int mnInliers, mnMatchSum, mnTrackedOld;
@@ -121,6 +120,6 @@ private:
     std::mutex mMutexFinish;
 };
 
-} // namespace se2lam
+}  // namespace se2lam
 
 #endif  // TRACK_H

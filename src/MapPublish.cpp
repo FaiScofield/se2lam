@@ -223,7 +223,7 @@ void MapPublish::publishKeyFrames()
     cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
     cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
-    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKFs();
     if (vKFsAll.empty())
         return;
 
@@ -426,7 +426,7 @@ void MapPublish::publishMapPoints()
         spMPNow = mpMap->getCurrentKF()->getAllObsMPs();
     }
 
-    vector<PtrMapPoint> vpMPNeg = mpMap->getAllMP();
+    vector<PtrMapPoint> vpMPNeg = mpMap->getAllMPs();
 
     // MPsAll 包含了 MPsNeg 和 MPsAct
     vector<PtrMapPoint> vpMPNegGood;
@@ -579,7 +579,8 @@ void MapPublish::publishOdomInformation()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    Se2 currOdom = mpTracker->getCurrentFrameOdo();
+    //Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
+    Se2 currOdom = mpMap->getCurrentKF()->odom;       // 只显示KF的odo
     if (!mbIsLocalize) {
         //! 这里要对齐到首帧的Odom, 位姿从原点开始
         static Mat Tb0w = cvu::inv(currOdom.toCvSE3());
@@ -664,12 +665,7 @@ void MapPublish::run()
         // draw image matches
         cv::Mat Tcw;
         if (!mbIsLocalize) {
-            Mat img = mpTracker->getImageMatches(), imgMatch;
-            if (img.channels() == 4)
-                cvtColor(img, imgMatch, CV_BGRA2BGR);
-            else
-                imgMatch = img;
-
+            Mat imgMatch = mpTracker->getImageMatches();
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
             pubImgMatches.publish(msgMatch);

@@ -7,20 +7,17 @@
 #ifndef GLOBALMAPPER_H
 #define GLOBALMAPPER_H
 
+#include "Config.h"
 #include "KeyFrame.h"
 #include "LocalMapper.h"
 #include "Map.h"
+#include "ORBVocabulary.h"
+#include "ORBmatcher.h"
 #include "Track.h"
-#include <condition_variable>
-
 #include "converter.h"
 #include "optimizer.h"
 #include "sparsifier.h"
-
-#include "Config.h"
-
-#include "ORBVocabulary.h"
-#include "ORBmatcher.h"
+#include <condition_variable>
 
 namespace se2lam
 {
@@ -58,20 +55,23 @@ public:
     static void optKFPair(const vector<PtrKeyFrame>& _vPtrKFs, const vector<PtrMapPoint>& _vPtrMPs,
                           vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
                           vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
-    static void optKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
-                   vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
-                   vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
+    static void optKFPairMatch(
+        PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
+        vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
+        vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
 
     // generate MeasSE3XYZ measurement vector
-    static void createVecMeasSE3XYZ(const vector<PtrKeyFrame> _vpKFs, const vector<PtrMapPoint> _vpMPs,
-                        vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas);
+    static void createVecMeasSE3XYZ(const vector<PtrKeyFrame> _vpKFs,
+                                    const vector<PtrMapPoint> _vpMPs,
+                                    vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas);
 
     vector<pair<PtrKeyFrame, PtrKeyFrame>> selectKFPairFeat(const PtrKeyFrame _pKF);
 
     static set<PtrKeyFrame> getAllConnectedKFs(const PtrKeyFrame _pKF,
                                                set<PtrKeyFrame> _sKFSelected = set<PtrKeyFrame>());
-    static set<PtrKeyFrame> getAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers = 10,
-                               set<PtrKeyFrame> _sKFSelected = set<PtrKeyFrame>());
+    static set<PtrKeyFrame> getAllConnectedKFs_nLayers(
+        const PtrKeyFrame _pKF, int numLayers = 10,
+        set<PtrKeyFrame> _sKFSelected = set<PtrKeyFrame>());
 
 
     // Loop Closing ...

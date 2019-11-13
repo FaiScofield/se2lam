@@ -8,7 +8,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include <fstream>
 #include <opencv2/core/core.hpp>
 #include <ostream>
 
@@ -36,7 +35,7 @@ struct Se2 {
     float x;
     float y;
     float theta;
-    double timeStamp;    // for odo message
+    double timeStamp;  // for odo message
 
     Se2();
     Se2(float _x, float _y, float _theta, double _time = 0.);
@@ -71,7 +70,7 @@ public:
     void stop()
     {
         tickEnd = cv::getTickCount();
-        time = (tickEnd - tickBegin) * 1000. / cv::getTickFrequency(); // [mm]
+        time = (tickEnd - tickBegin) * 1000. / cv::getTickFrequency();  // [ms]
     }
 
     double count()
@@ -133,7 +132,7 @@ public:
     static float PlaneMotionInfoYrot;
 
     // local graph
-    static int MaxLocalFrameNum;          //! TODO
+    static int MaxLocalFrameNum;  //! TODO
     static int LocalFrameSearchLevel;
     static float LocalFrameSearchRadius;  //! TODO
 
@@ -154,7 +153,8 @@ public:
     static std::string WriteTrajFileName;
 
     // visulization
-    static bool NeedVisualization; //! TODO 是否需要可视化, 不可视化时内存占用小, 可在嵌入式平台上跑
+    static bool
+        NeedVisualization;  //! TODO 是否需要可视化, 不可视化时内存占用小, 可在嵌入式平台上跑
     static int MappubScaleRatio;  // 地图可视化比例
 
     //! other

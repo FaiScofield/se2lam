@@ -10,6 +10,7 @@
 #include "optimizer.h"
 #include <ros/ros.h>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 
 namespace se2lam
 {
@@ -197,14 +198,14 @@ void Localizer::ReadFrameInfo(const Mat& img, const float& imgTime, const Se2& o
     mFrameRef = mFrameCurr;
     mpKFRef = mpKFCurr;
 
-    mFrameCurr = Frame(img, imgTime, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 //    mFrameCurr.Tcw = Config::Tcb.clone();
 //    mFrameCurr.Twb = mFrameRef.Twb + (odo - mFrameRef.odom);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
     mFrameCurr.setPose(Twb);
 
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
-    mpKFCurr->ComputeBoW(mpORBVoc);
+    mpKFCurr->computeBoW(mpORBVoc);
 }
 
 void Localizer::MatchLocalMap()
@@ -263,7 +264,7 @@ void Localizer::DoLocalBA()
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), maxKFid + pMP->mId, marginal, fixed);
 
         int ftrIdx = Observations[pMP];
-        int octave = pMP->getOctave(mpKFCurr);
+        int octave = pMP->getOctave(mpKFCurr); //! TODO 可能返回负数
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
         Eigen::Vector2d uv = toVector2d(mpKFCurr->mvKeyPoints[ftrIdx].pt);
         Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
@@ -418,14 +419,14 @@ void Localizer::ComputeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
-    vpKFs = mpMap->getAllKF();
+    vpKFs = mpMap->getAllKFs();
     int numKFs = vpKFs.size();
     for (int i = 0; i < numKFs; ++i) {
         PtrKeyFrame pKF = vpKFs[i];
         if (pKF->mbBowVecExist) {
             continue;
         }
-        pKF->ComputeBoW(mpORBVoc);
+        pKF->computeBoW(mpORBVoc);
     }
 }
 
@@ -445,7 +446,7 @@ bool Localizer::DetectLoopClose()
 
     DBoW2::BowVector BowVecCurr = pKFCurr->mBowVec;
 
-    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
     int numKFs = vpKFsAll.size();
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
@@ -953,7 +954,7 @@ cvu::eTrackingState Localizer::getLastTrackingState()
 
 void Localizer::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
 {
-    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKFs();
     vector<Point3f> vKFPoses;
     for (size_t i = 0; i < vKFsAll.size(); ++i) {
         Mat Twb = cvu::inv(vKFsAll[i]->getPose()) * Config::Tcb;

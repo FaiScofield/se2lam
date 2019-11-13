@@ -14,6 +14,7 @@
 #include "cvutil.h"
 #include "optimizer.h"
 #include <ros/ros.h>
+#include <opencv2/calib3d/calib3d.hpp>
 
 
 namespace se2lam
@@ -38,8 +39,8 @@ Track::Track()
 
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(2 * Config::FPS);            // 下溢
-    mMaxAngle = g2o::deg2rad(20.);
-    mMaxDistance = 0.5 * Config::UpperDepth * 0.15;
+    mMaxAngle = g2o::deg2rad(60.);
+    mMaxDistance = 0.4 * Config::UpperDepth;
 
     mK = Config::Kcam;
     mD = Config::Dcam;
@@ -96,12 +97,13 @@ void Track::run()
                 }
                 mpMap->setCurrentFramePose(mCurrentFrame.getPose());
             }
+            double t2 = timer.count();
+            trackTimeTatal += t2;
+            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端读取数据/追踪/总耗时为: "
+                            "%.2f/%.2f/%.2fmsm, 平均追踪耗时: %.2fms\n",
+                    mCurrentFrame.id, t1, t2, t1 + t2, trackTimeTatal / mCurrentFrame.id);
 
             mLastOdom = odo;
-
-            double t2 = timer.count();
-            fprintf(stdout, "[Track][Timer] #%ld 当前帧前端读取数据/追踪/总耗时为: %.2f/%.2f/%.2fms\n",
-                    mCurrentFrame.id, t1, t2, t1 + t2);
         }
 
         rate.sleep();
@@ -262,12 +264,12 @@ void Track::resetLocalTrack()
 size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
                          vector<int>& vMatches12)
 {
+    locker lock(mMutexForPub);
+
     if (!mbNeedVisualization)
         return 0;
     if (mvMatchIdx.empty())
         return 0;
-
-    locker lock(mMutexForPub);
 
     mpReferenceKF->copyImgTo(img1);
     mCurrentFrame.copyImgTo(img2);
@@ -281,10 +283,10 @@ size_t Track::copyForPub(Mat& img1, Mat& img2, vector<KeyPoint>& kp1, vector<Key
 
 void Track::drawFrameForPub(Mat& imgLeft)
 {
+    locker lock(mMutexForPub);
+
     if (!mbNeedVisualization)
         return;
-
-    locker lock(mMutexForPub);
 
     //! 画左侧两幅图
     Mat imgUp = mCurrentFrame.mImage.clone();
@@ -508,10 +510,10 @@ bool Track::needNewKF()
     int nOldKP = mpReferenceKF->countObservations();
     bool c0 = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) > nMinFrames;
     bool c1 = static_cast<float>(mnTrackedOld) <= nOldKP * 0.5f;
-    bool c2 = mnGoodPrl > 40;
+    bool c2 = mnGoodPrl > 30;
     bool c3 =  static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) > nMaxFrames;
     bool c4 = mnMatchSum < 0.1f * Config::MaxFtrNumber || mnMatchSum < 20;
-    bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
+    bool bNeedNewKF = c0 && (c3 || c4 || (c1 && c2));
 
     bool bNeedKFByOdo = false;
     if (mbUseOdometry) {
@@ -641,28 +643,6 @@ void Track::setFinish()
 {
     locker lock(mMutexFinish);
     mbFinished = true;
-}
-
-Se2 Track::dataAlignment(std::vector<Se2>& dataOdoSeq, double& timeImg)
-{
-    Se2 res;
-    size_t n = dataOdoSeq.size();
-    if (n < 2) {
-        cerr << "[Track][Warni] Less odom sequence input!" << endl;
-        return res;
-    }
-
-    //! 计算单帧图像时间内的平均速度
-    Se2 tranSum = dataOdoSeq[n - 1] - dataOdoSeq[0];
-    double dt = dataOdoSeq[n - 1].timeStamp - dataOdoSeq[0].timeStamp;
-    double r = (timeImg - dataOdoSeq[n - 1].timeStamp) / dt;
-
-    assert(r >= 0.f);
-
-    Se2 transDelta(tranSum.x * r, tranSum.y * r, tranSum.theta * r);
-    res = dataOdoSeq[n - 1] + transDelta;
-
-    return res;
 }
 
 //! TODO 完成重定位功能

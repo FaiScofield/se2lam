@@ -12,6 +12,7 @@
 #include "optimizer.h"
 #include <opencv2/highgui.hpp>
 #include <opencv2/video/tracking.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 #include <ros/ros.h>
 
 namespace se2lam
@@ -34,7 +35,6 @@ struct PairMask {
     int trackCount;          // 被追踪上的次数
 };
 
-double trackTimeTatal = 0.;
 const int EDGE = 12;  // 和ORB的一样, 否则计算角度时会越界. 16
 bool TrackKlt::mbUseOdometry = false;
 
@@ -133,7 +133,6 @@ void TrackKlt::run()
                             "%.2f/%.2f/%.2fmsm, 平均追踪耗时: %.2fms\n",
                     mCurrentFrame.id, t1, t2, t1 + t2, trackTimeTatal / mCurrentFrame.id);
 
-            mLastFrame = mCurrentFrame;
             mLastOdom = odo;
         }
 

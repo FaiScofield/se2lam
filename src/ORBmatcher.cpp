@@ -150,12 +150,12 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 
     vector<cv::KeyPoint> vKeysUn1 = pKF1->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec1 = pKF1->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints1 = pKF1->GetMapPointMatches();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints1 = pKF1->getMapPointMatches();  // Localizer下无MP
     cv::Mat Descriptors1 = pKF1->mDescriptors;
 
     vector<cv::KeyPoint> vKeysUn2 = pKF2->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec2 = pKF2->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints2 = pKF2->GetMapPointMatches();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints2 = pKF2->getMapPointMatches();  // Localizer下无MP
     cv::Mat Descriptors2 = pKF2->mDescriptors;
 
     vector<bool> vbMatched2(vpMapPoints2.size(), false);
@@ -688,7 +688,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
         Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pNewKF->getPose(), pMP->getPos()));
         if (!pNewKF->inImgBound(predictUV))
             continue;
-        const int predictLevel = pMP->mMainOctave;  // 都在0层
+        const int predictLevel = pMP->getMainOctave();  // 都在0层
         const int radio = pNewKF->mvScaleFactors[predictLevel] * winSize;
         const int minLevel = predictLevel > levelOffset ? predictLevel - levelOffset : 0;
 

@@ -26,9 +26,9 @@ using namespace g2o;
 typedef std::unique_lock<std::mutex> locker;
 
 LocalMapper::LocalMapper()
-    : mpMap(nullptr), mpGlobalMapper(nullptr), mpNewKF(nullptr), mbAcceptNewKF(true),
-      mbUpdated(false), mbAbortBA(false), mbGlobalBABegin(false), mbFinishRequested(false),
-      mbFinished(false)
+    : mbFinishRequested(false), mbFinished(false), mpMap(nullptr), mpGlobalMapper(nullptr),
+      mpNewKF(nullptr), mbAcceptNewKF(true), mbUpdated(false), mbAbortBA(false),
+      mbGlobalBABegin(false)
 {
     mbPrintDebugInfo = Config::LocalPrint;
     mnMaxLocalFrames = Config::MaxLocalFrameNum;
@@ -43,13 +43,12 @@ LocalMapper::LocalMapper()
  * @param vMatched12  参考帧里KP匹配上当前帧KP的索引
  * @param vbGoodPrl   参考帧里KP匹配上但没有MP对应的点对里，视差比较好的flag
  */
-void LocalMapper::addNewKF(PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
+void LocalMapper::addNewKF(const PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
                            const vector<int>& vMatched12, const vector<bool>& vbGoodPrl)
 {
-    {
-        locker lock(mMutexNewKFs);
-        mpNewKF = pKFNew;
-    }
+
+    locker lock(mMutexNewKFs);
+    mpNewKF = pKFNew;
 
     WorkTimer timer;
     timer.start();
@@ -63,32 +62,32 @@ void LocalMapper::addNewKF(PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
 
     //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     timer.start();
-//    mpMap->updateCovisibility(mpNewKF);
-    mpNewKF->updateCovisibleKFs();
+    mpMap->updateCovisibility(mpNewKF);
+    // mpNewKF->updateCovisibleKFs();
     double t2 = timer.count();
     printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF\n",
            mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs());
 
     timer.start();
-    {
-        // Map的CurrentKF还是上一时刻的KF, 当前KF处理完后才加入
-        PtrKeyFrame pKFLast = mpMap->getCurrentKF();
 
-        // Add KeyFrame-KeyFrame relation. 添加前后KF的约束
-        // There must be covisibility between NewKF and PrevKF
-        pKFNew->addCovisibleKF(pKFLast);
-        pKFLast->addCovisibleKF(pKFNew);
-        Mat measure;
-        g2o::Matrix6d info;
-        Track::calcOdoConstraintCam(pKFNew->odom - pKFLast->odom, measure, info);
+    // Map的CurrentKF还是上一时刻的KF, 当前KF处理完后才加入
+    PtrKeyFrame pKFLast = mpMap->getCurrentKF();
 
-        pKFLast->setOdoMeasureFrom(pKFNew, measure, toCvMat6f(info));
-        pKFNew->setOdoMeasureTo(pKFLast, measure, toCvMat6f(info));
+    // Add KeyFrame-KeyFrame relation. 添加前后KF的约束
+    // There must be covisibility between NewKF and PrevKF
+    pKFNew->addCovisibleKF(pKFLast);
+    pKFLast->addCovisibleKF(pKFNew);
+    Mat measure;
+    g2o::Matrix6d info;
+    Track::calcOdoConstraintCam(pKFNew->odom - pKFLast->odom, measure, info);
 
-        // 将KF插入地图
-        mpMap->insertKF(pKFNew);
-        mbUpdated = true;  //! 这里LocalMapper的主线程会开始工作, 优化新KF的位姿
-    }
+    pKFLast->setOdoMeasureFrom(pKFNew, measure, toCvMat6f(info));
+    pKFNew->setOdoMeasureTo(pKFLast, measure, toCvMat6f(info));
+
+    // 将KF插入地图
+    mpMap->insertKF(pKFNew);
+    mbUpdated = true;  //! 这里LocalMapper的主线程会开始工作, 优化新KF的位姿
+
     double t3 = timer.count();
 
     mbAbortBA = false;
@@ -102,8 +101,7 @@ void LocalMapper::addNewKF(PtrKeyFrame& pKFNew, const vector<Point3f>& localMPs,
 
 /**
  * @brief 根据和参考帧和局部地图的匹配关系关联MP，会生成新的MP并插入到Map里
- * 能关联上的MP都关联上，不能关联上MP但和参考帧有匹配的KP，则三角化生成新的MP,
- * 最后都会更新两KF的mViewMPs。
+ * 能关联上的MP都关联上，不能关联上MP但和参考帧有匹配的KP，则三角化生成新的MP,最后都会更新两KF的mViewMPs。
  * @param vMatched12    参考帧到当前帧的KP匹配情况
  * @param localMPs      参考帧对应观测MP的坐标值, 即Pc1
  * @param vbGoodPrl 参考帧与当前帧KP匹配中没有MP但视差好的标志，生成新MP时会对它的视差好坏进行标记
@@ -114,38 +112,36 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
     bool bNoMP = (mpMap->countMPs() == 0);
 
     // Identify tracked map points
-    PtrKeyFrame pPrefKF = mpMap->getCurrentKF();  // 这是上一参考帧KF
+    PtrKeyFrame pRefKF = mpMap->getCurrentKF();  // 这是上一参考帧KF
     size_t nMPs = mpMap->countMPs();
-    size_t nObs = pPrefKF->countObservations();
+    size_t nObs = pRefKF->countObservations();
 
     if (!bNoMP) {
         int nCros = 0, nProj = 0;
 
         //! 1.如果参考帧的第i个特征点有对应的MP，且和当前帧KP有对应的匹配，就给当前帧对应的KP关联上MP
-        for (int i = 0, iend = pPrefKF->N; i != iend; ++i) {
-            if (vMatched12[i] >= 0 && pPrefKF->hasObservation(i)) {
-                PtrMapPoint pMP = pPrefKF->getObservation(i);
+        for (int i = 0, iend = pRefKF->N; i < iend; ++i) {
+            if (vMatched12[i] >= 0 && pRefKF->hasObservation(i)) {
+                PtrMapPoint pMP = pRefKF->getObservation(i);
                 if (!pMP || pMP->isNull())
                     continue;
                 Eigen::Matrix3d xyzinfo1, xyzinfo2;
                 Mat Tcr = mpNewKF->getTcr();
-                Track::calcSE3toXYZInfo(pPrefKF->mvViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1), Tcr,
+                Track::calcSE3toXYZInfo(pRefKF->mvViewMPs[i], cv::Mat::eye(4, 4, CV_32FC1), Tcr,
                                         xyzinfo1, xyzinfo2);
-                mpNewKF->setViewMP(cvu::se3map(Tcr, pPrefKF->mvViewMPs[i]), vMatched12[i],
-                                   xyzinfo2);
+                mpNewKF->setViewMP(cvu::se3map(Tcr, pRefKF->mvViewMPs[i]), vMatched12[i], xyzinfo2);
                 mpNewKF->addObservation(pMP, vMatched12[i]);
                 pMP->addObservation(mpNewKF, vMatched12[i]);
                 nCros++;
             }
         }
 
-        //! 2.和局部地图匹配，关联局部地图里的MP, 其中已经和参考KF有关联的MP不会被匹配,
-        //! 故不会重复关联
+        //! 2.和局部地图匹配，关联局部地图里的MP,其中已经和参考KF有关联的MP不会被匹配,故不会重复关联
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
         ORBmatcher matcher;
         matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);
-        for (int i = 0, iend = mpNewKF->N; i != iend; ++i) {
+        for (int i = 0, iend = mpNewKF->N; i < iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
 
@@ -154,7 +150,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
             Mat Tcw = mpNewKF->getPose();
-            Point3f Pw = cvu::triangulate(pMP->getMainMeasure(), mpNewKF->mvKeyPoints[i].pt,
+            Point3f Pw = cvu::triangulate(pMP->getMainMeasureProjection(), mpNewKF->mvKeyPoints[i].pt,
                                           Config::Kcam * pMP->getMainKF()->getPose().rowRange(0, 3),
                                           Config::Kcam * Tcw.rowRange(0, 3));
             Point3f Pc = cvu::se3map(Tcw, Pw);
@@ -181,49 +177,45 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
     //! 3.根据匹配情况给新的KF添加MP
     //! 首帧没有处理到这，第二帧进来有了参考帧，但还没有MPS，就会直接执行到这，生成MPs，所以第二帧才有MP
     int nAddNewMP = 0;
-    assert(pPrefKF->N == localMPs.size());
     for (size_t i = 0, iend = localMPs.size(); i != iend; ++i) {
         // 参考帧的特征点i没有对应的MP，且与当前帧KP存在匹配
-        if (vMatched12[i] >= 0 && !pPrefKF->hasObservation(i)) {
+        if (vMatched12[i] >= 0 && !pRefKF->hasObservation(i)) {
             // 情况1, 当前帧KP存在MP观测(可能是通过局部地图投影匹配得到的), 应与参考帧关联
             if (mpNewKF->hasObservation(vMatched12[i])) {
                 PtrMapPoint pMP = mpNewKF->getObservation(vMatched12[i]);
 
-                Point3f Pcr = cvu::se3map(pPrefKF->getPose(), pMP->getPos());
+                Point3f Pcr = cvu::se3map(pRefKF->getPose(), pMP->getPos());
                 Eigen::Matrix3d xyzinfo1, xyzinfo2;
-                Track::calcSE3toXYZInfo(Pcr, pPrefKF->getPose(), pMP->getMainKF()->getPose(),
+                Track::calcSE3toXYZInfo(Pcr, pRefKF->getPose(), pMP->getMainKF()->getPose(),
                                         xyzinfo1, xyzinfo2);
-                pPrefKF->setViewMP(Pcr, i, xyzinfo1);
-                pPrefKF->addObservation(pMP, i);
-                pMP->addObservation(pPrefKF, i);
+                pRefKF->setViewMP(Pcr, i, xyzinfo1);
+                pRefKF->addObservation(pMP, i);
+                pMP->addObservation(pRefKF, i);
                 continue;
             }
-
-            // 情况2, 当前帧KP也没有对应的MP，这时就三角化为它们创造MP
-            Point3f posW = cvu::se3map(cvu::inv(pPrefKF->getPose()), localMPs[i]);
 
             //! TODO to delete, for debug.
             //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新,
             //! 故这里不能生成MP! 照理说 localMPs[i] 有一个正常的值的话, 那么就应该有观测出现啊???
-            if (posW.z < 0.f) {
-                fprintf(stderr, "[Local] #KF%ld的mvViewMPs[%ld].z < 0. \n", pPrefKF->mIdKF, i);
-                cerr << "[Local] 此点在成为MP之前的坐标Pc是: " << localMPs[i] << endl;
-                cerr << "[Local] 此点在成为MP之后的坐标Pw是: " << posW << endl;
+            if (localMPs[i].z < 0) {
+                fprintf(stderr, "[Local][Warni] #KF%ld的mvViewMPs[%ld].z < 0.\n", pRefKF->mIdKF, i);
                 continue;
             }
 
+            // 情况2, 当前帧KP也没有对应的MP，这时就三角化为它们创造MP
+            Point3f posW = cvu::se3map(cvu::inv(pRefKF->getPose()), localMPs[i]);
             Point3f Pc2 = cvu::se3map(mpNewKF->getTcr(), localMPs[i]);
             Eigen::Matrix3d xyzinfo1, xyzinfo2;
-            Track::calcSE3toXYZInfo(localMPs[i], pPrefKF->getPose(), mpNewKF->getPose(), xyzinfo1,
+            Track::calcSE3toXYZInfo(localMPs[i], pRefKF->getPose(), mpNewKF->getPose(), xyzinfo1,
                                     xyzinfo2);
 
-            pPrefKF->setViewMP(localMPs[i], i, xyzinfo1);
+            pRefKF->setViewMP(localMPs[i], i, xyzinfo1);
             mpNewKF->setViewMP(Pc2, vMatched12[i], xyzinfo2);
             PtrMapPoint pNewMP = std::make_shared<MapPoint>(posW, vbGoodPrl[i]);
 
-            pNewMP->addObservation(pPrefKF, i);
+            pNewMP->addObservation(pRefKF, i);
             pNewMP->addObservation(mpNewKF, vMatched12[i]);
-            pPrefKF->addObservation(pNewMP, i);
+            pRefKF->addObservation(pNewMP, i);
             mpNewKF->addObservation(pNewMP, vMatched12[i]);
 
             mpMap->insertMP(pNewMP);
@@ -323,8 +315,8 @@ void LocalMapper::localBA()
         return;
     }
 
-//    optimizer.verifyInformationMatrices(true);
-//    assert(optimizer.verifyInformationMatrices(true));
+    //    optimizer.verifyInformationMatrices(true);
+    //    assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
     optimizer.optimize(Config::LocalIterNum);
@@ -334,8 +326,7 @@ void LocalMapper::localBA()
         fprintf(
             stdout,
             "[Local][Timer] #%ld(KF#%ld) 局部图优化耗时: %.2fms, 涉及的KFs/MPs数量为: %ld/%ld\n",
-            mpNewKF->id, mpNewKF->mIdKF, timer.time, mpMap->countLocalKFs(),
-            mpMap->countLocalMPs());
+            mpNewKF->id, mpNewKF->mIdKF, timer.time, mpMap->countLocalKFs(), mpMap->countLocalMPs());
     }
 
     if (solver->currentLambda() > 100.0) {

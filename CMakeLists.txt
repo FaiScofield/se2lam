@@ -4,6 +4,9 @@
 set(CROSS_COMPILE FALSE)
 set(CUSTOM_G2O FALSE)
 set(CUSTOM_OpenCV FALSE)
+message("===> CROSS_COMPILE: ${CROSS_COMPILE}")
+message("===> CUSTOM_G2O: ${CUSTOM_G2O}")
+message("===> CUSTOM_OpenCV: ${CUSTOM_OpenCV}")
 
 ################################################################################
 # 基本信息
@@ -30,9 +33,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations"
 ################################################################################
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
-#add_subdirectory(Thirdparty/DBoW2)
-#add_subdirectory(Thirdparty/lsd_161)
-#add_subdirectory(Thirdparty/line_descriptor)
 include_directories(
 #    ${PROJECT_SOURCE_DIR}/Thirdparty
 #    ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161
@@ -67,7 +67,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 find_package(Eigen REQUIRED)
 
 ## Boost
-find_package(Boost COMPONENTS filesystem REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 if(Boost_FOUND)
     message("===> Boost Information: Version: ${Boost_VERSION}" )
     message("===> Boost Information: Include Dir: ${Boost_INCLUDE_DIRS}" )
@@ -93,50 +93,56 @@ endif()
 
 ## G2O
 if(CROSS_COMPILE)
-    set(LineDescriptor_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/include")
-    set(LineDescriptor_LIBS ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/lib/liblinedesc.so)
-    set(LSD161_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/lsd_161/include")
-    set(LSD161_LIBS ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/lib/liblsd_161.so)
-    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/dbow2/include")
-    set(DBOW2_LIBS ${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/libDBoW2se2lam.so)
-
-    set(Cholmod_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/cholmod/include")
-    set(G2O_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/dependencies/g2o/include")
-    file(GLOB G2O_LIBS
-        "${PROJECT_SOURCE_DIR}/dependencies/g2o/lib/*.so"
-        "${PROJECT_SOURCE_DIR}/dependencies/cholmod/lib/*.so"
-        )
-else()
+    set(LineDesc_INCLUDE_DIR    ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/include)
+    set(LineDesc_LIBS           ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/lib/liblinedesc.so)
+    set(LSD161_INCLUDE_DIR      ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/include)
+    set(LSD161_LIBS             ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/lib/liblsd_161.so)
+    set(DBOW2_INCLUDE_DIR       ${PROJECT_SOURCE_DIR}/dependencies/dbow2/include)
+    set(DBOW2_LIBS              ${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/libDBoW2se2lam.so)
+    set(CSPARSE_INCLUDE_DIR     ${PROJECT_SOURCE_DIR}/dependencies/csparse/include)
+    set(CSPARSE_LIBRARY         ${PROJECT_SOURCE_DIR}/dependencies/csparse/lib/libcxsparse.so)
+    set(CHOLMOD_INCLUDE_DIR     ${PROJECT_SOURCE_DIR}/dependencies/cholmod/include)
+    file(GLOB CHOLMOD_LIBRARIES ${PROJECT_SOURCE_DIR}/dependencies/cholmod/lib/*.so)
+    set(G2O_INCLUDE_DIR         ${PROJECT_SOURCE_DIR}/dependencies/g2o/include)
+    file(GLOB G2O_LIBS          ${PROJECT_SOURCE_DIR}/dependencies/g2o/lib/*.so)
+else(CROSS_COMPILE)
 #    find_package(CSparse REQUIRED)
+#    if(CSPARSE_FOUND)
+#        message("===> CSparse Information: Include Dir: ${CSPARSE_INCLUDE_DIR}" )
+#        message("===> CSparse Information: Libs Dir: ${CSPARSE_LIBRARY}" )
+#    else()
+#        message("===> CSparse Not Found!!!")
+#    endif()
+
     find_package(Cholmod REQUIRED)
-    if(Cholmod_FOUND)
-        message("===> Cholmod Information: Include Dir: ${Cholmod_INCLUDE_DIR}" )
+    if(CHOLMOD_FOUND)
+        message("===> Cholmod Information: Include Dir: ${CHOLMOD_INCLUDE_DIR}" )
+        message("===> Cholmod Information: Libs Dir: ${CHOLMOD_LIBRARIES}" )
     else()
         message("===> Cholmod Not Found!!!")
-        include_directories(/usr/include/suitesparse)
     endif()
-    set(LineDescriptor_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include")
-    set(LineDescriptor_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.so)
-    set(LSD161_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161")
-    set(LSD161_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161/lib/liblsd_161.so)
-    set(DBOW2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/Thirdparty/dbow2/include")
-    set(DBOW2_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so)
+
+    set(LineDesc_INCLUDE_DIR    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include)
+    set(LineDesc_LIBS           ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.so)
+    set(LSD161_INCLUDE_DIR      ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161)
+    set(LSD161_LIBS             ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161/lib/liblsd_161.so)
+    set(DBOW2_INCLUDE_DIR       ${PROJECT_SOURCE_DIR}/Thirdparty/dbow2/include)
+    set(DBOW2_LIBS              ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so)
 
     if(CUSTOM_G2O)
         set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
         find_package(G2O REQUIRED)
         file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
-        list(APPEND G2O_LIBS cholmod cxsparse)
     else()
         find_package(G2O REQUIRED)
         list(APPEND G2O_LIBS
-            cholmod cxsparse
             g2o_cli g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d g2o_core
             g2o_interface g2o_solver_csparse g2o_solver_structure_only g2o_types_sba
             g2o_types_slam3d g2o_csparse_extension g2o_solver_dense g2o_stuff
             g2o_types_sclam2d g2o_parser g2o_solver_pcg g2o_types_data g2o_types_sim3
         )
     endif()
+
     if (G2O_FOUND)
         message("===> G2O Information: Root: ${G2O_ROOT}")
         message("===> G2O Information: Include Dir: ${G2O_INCLUDE_DIR}" )
@@ -144,7 +150,7 @@ else()
     else()
         message("===> G2O Not Found!!!" )
     endif()
-endif()
+endif(CROSS_COMPILE)
 
 ################################################################################
 # 链接库
@@ -156,18 +162,19 @@ include_directories(
     ${EIGEN_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
-    ${Cholmod_INCLUDE_DIR}
+#    ${CSPARSE_INCLUDE_DIR}
+    ${CHOLMOD_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
     ${DBOW2_INCLUDE_DIR}
     ${LSD161_INCLUDE_DIR}
-    ${LineDescriptor_INCLUDE_DIR}
+    ${LineDesc_INCLUDE_DIR}
 )
 
 list(APPEND LINK_LIBS
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
+    ${Boost_LIBRARIES}
 )
-
 
 ################################################################################
 # Build a lib
@@ -181,10 +188,12 @@ add_library(se2lam
 
 target_link_libraries(se2lam
     ${LINK_LIBS}
-    ${G2O_LIBS}
     ${DBOW2_LIBS}
     ${LSD161_LIBS}
-    ${LineDescriptor_LIBS}
+    ${LineDesc_LIBS}
+#    ${CSPARSE_LIBRARY}
+    ${CHOLMOD_LIBRARIES}
+    ${G2O_LIBS}
 )
 if(CROSS_COMPILE)
     target_link_libraries(se2lam -ltinyxml2)  # 交叉编译中ROS需要
@@ -203,6 +212,5 @@ install(TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-install(FILES launch/run_pipeline.launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 

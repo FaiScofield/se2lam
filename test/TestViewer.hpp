@@ -368,7 +368,7 @@ void TestViewer::publishKeyFrames()
     cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
     cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
-    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKFs();
     if (vKFsAll.empty())
         return;
 
@@ -519,7 +519,7 @@ void TestViewer::publishMapPoints()
     mMPsNoGoodPrl.points.clear();
 
     PtrKeyFrame pKFCur = mpMap->getCurrentKF();
-    vector<PtrMapPoint> vpMPAll = mpMap->getAllMP();
+    vector<PtrMapPoint> vpMPAll = mpMap->getAllMPs();
     vector<PtrMapPoint> vpMPAct = mpMap->getLocalMPs();
     set<PtrMapPoint> spMPNow= mpMap->getCurrentKF()->getAllObsMPs();
     vector<PtrMapPoint> vpMPNeg;

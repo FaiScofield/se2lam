@@ -205,7 +205,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
             // We do triangulation here because we need to produce constraint of
             // mNewKF to the matched old MapPoint.
             Mat Tcw = mpCurrentKF->getPose();
-            Point3f x3d = cvu::triangulate(pMP->getMainMeasure(), mpCurrentKF->mvKeyPoints[i].pt,
+            Point3f x3d = cvu::triangulate(pMP->getMainMeasureProjection(), mpCurrentKF->mvKeyPoints[i].pt,
                                            Config::Kcam * pMP->getMainKF()->getPose().rowRange(0, 3),
                                            Config::Kcam * Tcw.rowRange(0, 3));
             Point3f posNewKF = cvu::se3map(Tcw, x3d);

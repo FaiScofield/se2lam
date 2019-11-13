@@ -209,7 +209,7 @@ void OdoSLAM::saveMap()
     if (!towrite.is_open())
         cerr << "[Syste][Error] Save trajectory error! Please check the trajectory file correct." << endl;
     towrite << "#format: id x y z theta" << endl;
-    vector<PtrKeyFrame> vct = mpMap->getAllKF();
+    vector<PtrKeyFrame> vct = mpMap->getAllKFs();
     for (size_t i = 0, iend = vct.size(); i != iend; ++i) {
         if (!vct[i]->isNull()) {
             Mat Twb = cvu::inv(Config::Tbc * vct[i]->getPose());

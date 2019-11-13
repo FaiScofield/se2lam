@@ -34,32 +34,30 @@ class Frame
 {
 public:
     Frame();
-    Frame(const cv::Mat& imgGray, const Se2& odo, ORBextractor* extractor, const cv::Mat& K,
+    Frame(const cv::Mat& im, const Se2& odo, ORBextractor* extractor, const cv::Mat& K,
           const cv::Mat& distCoef);
-    Frame(const cv::Mat& imgGray, const double& time, const Se2& odo, ORBextractor* extractor,
+    Frame(const cv::Mat& im, const double time, const Se2& odo, ORBextractor* extractor,
           const cv::Mat& K, const cv::Mat& distCoef);
+    Frame(const cv::Mat& im, const Se2& odo, const std::vector<cv::KeyPoint>& vKPs,
+          ORBextractor* extractor); // klt创建Frame, 10.23日添加
 
     Frame(const Frame& f);
     Frame& operator=(const Frame& f);
     ~Frame();
 
-    // klt创建Frame, 10.23日添加
-    Frame(const cv::Mat& im, const Se2& odo, const std::vector<cv::KeyPoint>& vKPs,
-          ORBextractor* extractor);
-
-    void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
-
-    Se2 getTwb();
-    cv::Mat getTcr();
-    cv::Mat getPose();
-    cv::Point3f getCameraCenter();
     void setPose(const cv::Mat& _Tcw);
     void setPose(const Se2& _Twb);
     void setTcr(const cv::Mat& _Tcr);
     void setTrb(const Se2& _Trb);
+    Se2 getTwb();
+    Se2 getTrb();
+    cv::Mat getTcr();
+    cv::Mat getPose();
+    cv::Point3f getCameraCenter();
 
+    bool inImgBound(const cv::Point2f& pt);
+    void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
     bool posInGrid(cv::KeyPoint& kp, int& posX, int& posY);
-    bool inImgBound(cv::Point2f pt);
     std::vector<size_t> getFeaturesInArea(const float& x, const float& y, const float& r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
 

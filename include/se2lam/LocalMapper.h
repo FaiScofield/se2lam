@@ -10,13 +10,11 @@
 #pragma once
 
 #include "Map.h"
-#include "Track.h"
 #include "optimizer.h"
 
 namespace se2lam
 {
 
-class Track;
 class GlobalMapper;
 
 class LocalMapper
@@ -24,14 +22,13 @@ class LocalMapper
 public:
     LocalMapper();
 
-    void run();
-
     void setMap(Map* pMap) { mpMap = pMap; mpMap->setLocalMapper(this); }
     void setGlobalMapper(GlobalMapper* pGlobalMapper) { mpGlobalMapper = pGlobalMapper; }
 
-    void addNewKF(PtrKeyFrame& pKF, const std::vector<cv::Point3f>& localMPs,
-                  const std::vector<int>& vMatched12, const std::vector<bool>& vbGoodPrl);
+    void run();
 
+    void addNewKF(const PtrKeyFrame& pKF, const std::vector<cv::Point3f>& localMPs,
+                  const std::vector<int>& vMatched12, const std::vector<bool>& vbGoodPrl);
     void findCorrespd(const std::vector<int>& vMatched12, const std::vector<cv::Point3f>& localMPs,
                       const std::vector<bool>& vbGoodPrl);
 
@@ -40,8 +37,8 @@ public:
     void removeOutlierChi2();
     void localBA();
 
-    void setAbortBA() { mbAbortBA = true; }
     bool acceptNewKF();
+    void setAbortBA() { mbAbortBA = true; }
     void setAcceptNewKF(bool value);
     void setGlobalBABegin(bool value);
 
@@ -50,16 +47,22 @@ public:
 
     // For debugging by hbtang
     void printOptInfo(const SlamOptimizer& _optimizer);
-
     bool mbPrintDebugInfo;
     std::mutex mutexMapper;
 
 protected:
     bool checkFinish();
     void setFinish();
+    bool mbFinishRequested;
+    bool mbFinished;
+    std::mutex mMutexFinish;
 
     Map* mpMap;
     GlobalMapper* mpGlobalMapper;
+
+    int mnMaxLocalFrames;  // 局部KF的最大数量, 0表示无上限
+    int mnSearchLevel;     // 局部KF的搜索层数
+    float mfSearchRadius;  // 局部KF的FLANN近邻搜索半径
 
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
@@ -71,19 +74,6 @@ protected:
     bool mbAbortBA;
     bool mbGlobalBABegin;
     std::mutex mMutexLocalGraph;
-
-    bool mbFinishRequested;
-    bool mbFinished;
-    std::mutex mMutexFinish;
-
-    int mnMaxLocalFrames;  // 0表示无上限
-    int mnSearchLevel;
-    float mfSearchRadius;
-
-//    bool mbStopped;
-//    bool mbStopRequested;
-//    bool mbNotStop;
-//    std::mutex mMutexStop;
 };
 
 } // namespace se2lam

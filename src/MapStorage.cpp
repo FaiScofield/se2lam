@@ -47,8 +47,8 @@ void MapStorage::loadMap() {
 
 void MapStorage::saveMap() {
 
-    mvKFs = mpMap->getAllKF();
-    mvMPs = mpMap->getAllMP();
+    mvKFs = mpMap->getAllKFs();
+    mvMPs = mpMap->getAllMPs();
 
     sortKeyFrames();
 

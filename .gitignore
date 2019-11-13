@@ -7,8 +7,12 @@ odoslam.cbp
 CMakeLists.txt.user
 Makefile
 *build/
+Thirdparty/
+dependencies/
+.vscode
 *lib/
 *.bag
-**/*voc.bin
+*.bin
 *.rviz
-.vscode
+*.so
+*.a
