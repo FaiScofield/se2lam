@@ -112,7 +112,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
     bool bNoMP = (mpMap->countMPs() == 0);
 
     // Identify tracked map points
-    PtrKeyFrame pRefKF = mpMap->getCurrentKF();  // 这是上一参考帧KF
+    PtrKeyFrame pRefKF = mpMap->getCurrentKF();
     size_t nMPs = mpMap->countMPs();
     size_t nObs = pRefKF->countObservations();
 
@@ -140,7 +140,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs;
         ORBmatcher matcher;
-        matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);
+        int m = matcher.MatchByProjection(mpNewKF, vLocalMPs, 20, 2, vMatchedIdxMPs);
         for (int i = 0, iend = mpNewKF->N; i < iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
@@ -169,8 +169,8 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
 
         printf("[Local][Info ] #%ld(#KF%ld) 关联地图点1/3, 关联参考帧MP数/参考帧MP总数: %d/%ld\n",
                mpNewKF->id, mpNewKF->mIdKF, nCros, nObs);
-        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点2/3, 关联的MP数/当前MP总数: %d/%ld\n",
-               mpNewKF->id, mpNewKF->mIdKF, nProj, nMPs);
+        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点2/3, 关联的MP数/投影匹配数/当前MP总数: %d/%d/%ld\n",
+               mpNewKF->id, mpNewKF->mIdKF, nProj, m, nMPs);
     }
 
 

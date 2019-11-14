@@ -547,7 +547,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
     Mat H = Mat::eye(3, 3, CV_64FC1);
 
     if (!HA12.data)
-        std::cerr << "[Match][Warni] Input argument error for empty H!" << std::endl;
+        std::cerr << "[Match][Warni] Input argument error for empty A/H!" << std::endl;
     if (HA12.rows == 2)
         HA12.copyTo(H.rowRange(0, 2));
     else

@@ -28,6 +28,7 @@ MapPoint::MapPoint()
 {
     mMinDist = 0.f;
     mMaxDist = 10.f;
+    mvPosTmp.reserve(6);
 }
 
 //! 构造后请立即为其添加观测
@@ -38,6 +39,7 @@ MapPoint::MapPoint(const cv::Point3f& pos, bool goodPrl)
     mId = mNextId++;
     mMinDist = 0.f;
     mMaxDist = 10.f;
+    mvPosTmp.reserve(6);
 }
 
 MapPoint::~MapPoint()
@@ -346,6 +348,11 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
 {
     if (mbGoodParallax || mObservations.size() <= 2)
         return;
+    if (mvPosTmp.size() > 5) {
+        mbGoodParallax = true;
+        mvPosTmp.clear();
+        return;
+    }
 
     // Get the oldest KF in the last 6 KFs. 由从此KF往前最多10帧KF和此KF做三角化更新MP坐标
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
@@ -353,8 +360,25 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
         assert(pKFj != nullptr);
         if (pKF->mIdKF - pKFj->mIdKF > 10)  // 6
             continue;
-        if (updateParallaxCheck(pKFj, pKF))  // 和往前10帧内的KF都进行一次三角化, 直至更新成为止
-            break;
+        if (updateParallaxCheck(pKFj, pKF)) // 和往前10帧内的KF都进行一次三角化, 直至更新成为止
+            continue;
+    }
+
+    size_t n = mvPosTmp.size();
+    if (n > 0) {
+        cerr << "MP#" << mId << " 的临时视差: ";
+        Point3f poseTatal(0.f, 0.f, 0.f);
+        for (size_t i = 0; i < n; ++i) {
+            poseTatal += mvPosTmp[i];
+            cout << mvPosTmp[i] << ", ";
+        }
+        cout << endl;
+
+        locker lock(mMutexPos);
+        mPos = poseTatal * (1.f / n);
+        mbGoodParallax = true;
+        updateMeasureInKFs();
+        fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
     }
 
     // 如果和前面10帧的三角化后视差仍然没有更新到好则抛弃此MP
@@ -390,9 +414,10 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     // 视差良好, 则更新此点的三维坐标
     {
         locker lock(mMutexPos);
-        mPos = posW;
-        mbGoodParallax = true;
-        fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
+        //mPos = posW;
+        //mbGoodParallax = true;
+        //fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
+        mvPosTmp.push_back(posW);
     }
 
     // Update measurements in KFs. 更新约束和信息矩阵

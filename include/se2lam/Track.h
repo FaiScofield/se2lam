@@ -46,7 +46,6 @@ public:
     // for visulization message publisher
     size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
                       std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
-    void drawFrameForPub(cv::Mat& imgLeft);
     cv::Mat getImageMatches();
 
     bool isFinished();
@@ -68,9 +67,8 @@ private:
 
     void updateFramePose();
     int removeOutliers();
-
-    bool needNewKF();
     int doTriangulate();
+    bool needNewKF();
 
     void drawMatchesForPub(bool warp);
 
@@ -97,13 +95,13 @@ private:
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdx;         // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
-    int mnGoodPrl;  // count number of mLocalMPs with good parallax
+    int mnGoodPrl, mnGoodDepth;  // count number of mLocalMPs with good parallax
     int mnInliers, mnMatchSum, mnTrackedOld;
     int mnLostFrames;
 
     // New KeyFrame rules (according to fps)
-    int nMinFrames, nMaxFrames;
-    double mMaxAngle, mMaxDistance;
+    int nMinFrames, nMaxFrames, nMinMatches;
+    float mMaxAngle, mMaxDistance;
 
     // preintegration on SE2
     PreSE2 preSE2;

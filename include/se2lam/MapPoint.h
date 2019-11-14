@@ -88,6 +88,7 @@ private:
 
     //! 以下成员变量需加锁访问
     cv::Point3f mPos;  // 三维空间坐标
+    std::vector<cv::Point3f> mvPosTmp;  // 三角化出的临时坐标值
     std::mutex mMutexPos;
 
     // first = 观测到此MP的KF, second = 在其KP中的索引
