@@ -7,7 +7,6 @@
 
 #ifndef FRAME_H
 #define FRAME_H
-#pragma once
 
 #include "Config.h"
 #include "ORBextractor.h"

@@ -8,8 +8,6 @@
 #ifndef EDGE_SE2_XYZ_H
 #define EDGE_SE2_XYZ_H
 
-#pragma once
-
 #include <Eigen/Dense>
 #include <g2o/core/base_binary_edge.h>
 #include <g2o/core/base_vertex.h>

@@ -204,6 +204,81 @@ MapPublish::MapPublish(Map* pMap)
 MapPublish::~MapPublish()
 {}
 
+
+void MapPublish::run()
+{
+    assert(Config::NeedVisualization == 1);
+
+    image_transport::ImageTransport it(nh);
+    image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
+    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
+
+    int nSaveId = 1;
+    ros::Rate rate(Config::FPS /* / 3*/);
+    while (nh.ok()) {
+        if (checkFinish())
+            break;
+        if (mpMap->empty())
+            continue;
+
+//        Mat imgCurr, imgLast, imgRef;
+//        Point2f kpsCurr, kpsLast, kpsRef;
+//        vector<int> matchIdxToRef;
+
+//#ifdef USEKLT
+//        Mat imgShow = mpTracker->drawMatchesPointsToRefFrame("Match Ref KF");
+//#else
+//        Mat imgShow = mpTracker->getImageMatches();
+//#endif
+//        cv::Mat img = mpFramePub->drawFrame();
+//        if (img.empty())
+//            continue;
+
+        // 给参考帧标注KFid号
+//        PtrKeyFrame pKP = mpMap->getCurrentKF();
+//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
+
+//        sensor_msgs::ImagePtr msg =
+//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+//        pub.publish(msg);
+
+        // draw image matches
+        cv::Mat Tcw;
+        if (!mbIsLocalize) {
+            Mat imgMatch = mpTracker->getImageMatches();
+            sensor_msgs::ImagePtr msgMatch =
+                cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
+            pubImgMatches.publish(msgMatch);
+
+            // debug 存下match图片
+            if (Config::SaveMatchImage) {
+                string fileName = Config::MatchImageStorePath + to_string(nSaveId++) + ".jpg";
+                cv::imwrite(fileName, imgMatch);
+            }
+
+            Tcw = mpMap->getCurrentFramePose();
+        } else {
+            if (mpLocalizer->getKFCurr() == nullptr || mpLocalizer->getKFCurr()->isNull())
+                continue;
+
+            Tcw = mpLocalizer->getKFCurr()->getPose();
+        }
+
+        publishOdomInformation();
+        publishCameraCurr(cvu::inv(Tcw));
+        publishKeyFrames();
+        publishMapPoints();
+
+        rate.sleep();
+        ros::spinOnce();
+    }
+    cerr << "[MapPu][Info ] Exiting Mappublish..." << endl;
+
+    nh.shutdown();
+
+    setFinish();
+}
+
 void MapPublish::publishKeyFrames()
 {
     mKFsNeg.points.clear();
@@ -623,80 +698,6 @@ void MapPublish::publishOdomInformation()
 
     mOdomRawGraph.header.stamp = ros::Time::now();
     publisher.publish(mOdomRawGraph);
-}
-
-void MapPublish::run()
-{
-    assert(Config::NeedVisualization == 1);
-
-    image_transport::ImageTransport it(nh);
-    image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
-    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
-
-    int nSaveId = 1;
-    ros::Rate rate(Config::FPS /* / 3*/);
-    while (nh.ok()) {
-        if (checkFinish())
-            break;
-        if (mpMap->empty())
-            continue;
-
-//        Mat imgCurr, imgLast, imgRef;
-//        Point2f kpsCurr, kpsLast, kpsRef;
-//        vector<int> matchIdxToRef;
-
-//#ifdef USEKLT
-//        Mat imgShow = mpTracker->drawMatchesPointsToRefFrame("Match Ref KF");
-//#else
-//        Mat imgShow = mpTracker->getImageMatches();
-//#endif
-//        cv::Mat img = mpFramePub->drawFrame();
-//        if (img.empty())
-//            continue;
-
-        // 给参考帧标注KFid号
-//        PtrKeyFrame pKP = mpMap->getCurrentKF();
-//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
-
-//        sensor_msgs::ImagePtr msg =
-//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-//        pub.publish(msg);
-
-        // draw image matches
-        cv::Mat Tcw;
-        if (!mbIsLocalize) {
-            Mat imgMatch = mpTracker->getImageMatches();
-            sensor_msgs::ImagePtr msgMatch =
-                cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
-            pubImgMatches.publish(msgMatch);
-
-            // debug 存下match图片
-            if (Config::SaveMatchImage) {
-                string fileName = Config::MatchImageStorePath + to_string(nSaveId++) + ".jpg";
-                cv::imwrite(fileName, imgMatch);
-            }
-
-            Tcw = mpMap->getCurrentFramePose();
-        } else {
-            if (mpLocalizer->getKFCurr() == nullptr || mpLocalizer->getKFCurr()->isNull())
-                continue;
-
-            Tcw = mpLocalizer->getKFCurr()->getPose();
-        }
-
-        publishOdomInformation();
-        publishCameraCurr(cvu::inv(Tcw));
-        publishKeyFrames();
-        publishMapPoints();
-
-        rate.sleep();
-        ros::spinOnce();
-    }
-    cerr << "[MapPu][Info ] Exiting Mappublish..." << endl;
-
-    nh.shutdown();
-
-    setFinish();
 }
 
 void MapPublish::requestFinish()

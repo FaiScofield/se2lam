@@ -19,6 +19,8 @@
 namespace se2lam
 {
 
+#define USEKLT
+
 class Map;
 
 class MapPublish

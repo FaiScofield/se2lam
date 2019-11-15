@@ -4,12 +4,8 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
-#ifndef ODOSLAM_CPP
-#define ODOSLAM_CPP
 #include "OdoSLAM.h"
 #include <opencv2/highgui/highgui.hpp>
-
-#endif  // ODOSLAM_CPP
 
 namespace se2lam
 {

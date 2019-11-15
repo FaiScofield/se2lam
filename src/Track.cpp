@@ -36,11 +36,10 @@ Track::Track()
     mpORBmatcher = new ORBmatcher(0.9, true);
 
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1.f, -1.f, -1.f));
-
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(2 * Config::FPS);            // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
-    mMaxAngle = static_cast<float>(g2o::deg2rad(40.));
+    mMaxAngle = static_cast<float>(g2o::deg2rad(30.));
     mMaxDistance = 0.2f * Config::UpperDepth;
 
     mK = Config::Kcam;
@@ -104,9 +103,8 @@ void Track::run()
             }
             double t2 = timer.count();
             trackTimeTatal += t2;
-            fprintf(stdout, "[Track][Timer] #%ld T3.当前帧前端读取数据/追踪/总耗时为: "
-                            "%.2f/%.2f/%.2fmsm, 平均追踪耗时: %.2fms\n",
-                    mCurrentFrame.id, t1, t2, t1 + t2, trackTimeTatal / mCurrentFrame.id);
+            fprintf(stdout, "[Track][Timer] #%ld-#%ld T3.当前帧前端读取数据/追踪/总耗时为: %.2f/%.2f/%.2fms, 平均追踪耗时: %.2fms\n",
+                    mCurrentFrame.id, mpReferenceKF->id, t1, t2, t1 + t2, trackTimeTatal / mCurrentFrame.id);
 
             mLastOdom = odo;
         }
@@ -162,13 +160,13 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
 
     if (mnInliers >= 10) {
         drawMatchesForPub(true);
-        printf("[Track][Info ] #%ld T2.与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
-               mCurrentFrame.id, mnTrackedOld, mnInliers, mnMatchSum);
+        printf("[Track][Info ] #%ld-#%ld T2.与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
+               mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, mnInliers, mnMatchSum);
     } else {
         drawMatchesForPub(false);
         fprintf(stderr,
-                "[Track][Warni] #%ld T2.与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
-                mCurrentFrame.id, mnTrackedOld, mnMatchSum);
+                "[Track][Warni] #%ld-#%ld T2.与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
+                mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, mnMatchSum);
     }
 
     N1 += mnTrackedOld;
@@ -176,8 +174,8 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
     N3 += mnMatchSum;
     if (mbPrint && mCurrentFrame.id % 50 == 0) {  // 每隔50帧输出一次平均匹配情况
         float sum = mCurrentFrame.id - 1.0;
-        printf("[Track][Info ] #%ld 与参考帧匹配平均点数: tracked/matched/matchedSum = %.2f/%.2f/%.2f\n",
-               mCurrentFrame.id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
+        printf("[Track][Info ] #%ld-#%ld 与参考帧匹配平均点数: tracked/matched/matchedSum = %.2f/%.2f/%.2f\n",
+               mCurrentFrame.id, mpReferenceKF->id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
     }
 
     // Need new KeyFrame decision
@@ -473,14 +471,15 @@ int Track::removeOutliers()
 
 bool Track::needNewKF()
 {
-    int nOldKP = mpReferenceKF->countObservations();
+    int nOldObs = mpReferenceKF->countObservations();
     int deltaFrames = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id);
+
     bool c0 = deltaFrames > nMinFrames;
-    bool c1 = mnTrackedOld <= cvFloor(nOldKP * 0.5f);
-    bool c2 = mnGoodPrl > cvFloor(mnGoodDepth * 0.6);
-    bool c3 = deltaFrames > nMaxFrames;
-    bool c4 = mnMatchSum < nMinMatches;
-    bool bNeedNewKF = c0 && (c3 || c4 || (c1 && c2));
+    bool c1 = deltaFrames > nMaxFrames;
+    bool c2 = mnInliers < nMinMatches;
+    bool c3 = mnTrackedOld <= static_cast<int>(nOldObs * 0.5f);
+    bool c4 = mnGoodPrl > static_cast<int>(mnGoodDepth * 0.6);
+    bool bNeedNewKF = c0 && (c1 || c2 || (c3 && c4));
 
     bool bNeedKFByOdo = false;
     bool c5 = false, c6 = false;
@@ -496,37 +495,19 @@ bool Track::needNewKF()
     bNeedNewKF = bNeedNewKF || bNeedKFByOdo;  // 加上odom的移动条件, 把与改成了或
 
     if (bNeedNewKF)
-        printf("[Track][Info ] #%ld T4.应该成为KF, 其KF条件满足情况: %d/%d/%d/%d/%d/%d/%d\n", mCurrentFrame.id,
-               c0, c1, c2, c3, c4, c5, c6);
+        printf("[Track][Info ] #%ld-#%ld T4.应该成为KF, 其KF条件满足情况: %d/%d/%d/%d/%d/%d/%d\n",
+               mCurrentFrame.id, mpReferenceKF->id, c0, c1, c2, c3, c4, c5, c6);
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
     if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
-    } else if (c0 && (c4 || c3)/* && bNeedKFByOdo*/) {
+    } else if (c0 && c2 && bNeedKFByOdo) {
         fprintf(stderr, "[Track][Info ] #%ld(#KF%ld) 强制添加KF, 关键帧条件的满足情况: %d/%d/%d/%d/%d/%d/%d\n",
-                mCurrentFrame.id, KeyFrame::nextId, c0, c1, c2, c3, c4, c5, c6);
-        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap的优化,下一帧就可以变成KF
+                mCurrentFrame.id, KeyFrame::mNextIdKF, c0, c1, c2, c3, c4, c5, c6);
+        mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap优化
+        mpLocalMapper->setAcceptNewKF(true);
         return true;
     }
-
-//    int nMPObs = mpReferenceKF->countObservations();  // 注意初始帧观测数为0
-//    bool c1 = (float)mnTrackedOld > nMPObs * 0.5f;   // 2.关联MP数不能太多(要小于50%)
-//    if (nMPObs && c1) {
-//        printf("[Track][Info ] #%ld 不是KF, 因为关联MP数超过了50%%(%d)\n", mCurrentFrame.id,
-//               mnTrackedOld);
-//        return false;
-//    }
-
-//    bool c4 = mnInliers < 0.05f * Config::MaxFtrNumber;  // 3.3
-//    或匹配内点数小于1/10最大特征点数
-//    if (c4 && mpLocalMapper->acceptNewKF()) {
-//        printf("[Track][Info ] #%ld 成为了KF, 因为匹配内点数小于10%%\n", mCurrentFrame.id);
-//        return true;
-//    } else if (c4) {
-//        printf("[Track][Info ] #%ld 不是KF, 虽然匹配内点数小于10%%, 但局部地图正在工作!\n",
-//               mCurrentFrame.id);
-//        return false;
-//    }
 
     return false;
 }
@@ -588,8 +569,8 @@ int Track::doTriangulate()
             mvMatchIdx[i] = -1;
         }
     }
-    printf("[Track][Info ] #%ld T1.三角化, 良好视差点数/生成点数/因深度不符而剔除的匹配点对数: %d/%d/%d\n",
-           mCurrentFrame.id, mnGoodPrl, mnGoodDepth, nBadDepth);
+    printf("[Track][Info ] #%ld-#%ld T1.三角化, 良好视差点数/生成点数/因深度不符而剔除的匹配点对数: %d/%d/%d\n",
+           mCurrentFrame.id, mpReferenceKF->id, mnGoodPrl, mnGoodDepth, nBadDepth);
 
     return nTrackedOld;
 }

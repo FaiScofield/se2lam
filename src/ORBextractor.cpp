@@ -150,6 +150,7 @@ static float IC_Angle(const Mat& image, Point2f pt, const vector<int>& u_max)
     return fastAtan2((float)m_01, (float)m_10);
 }
 
+/* 目前这个函数花销最大 */
 static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Point* pattern,
                                  uchar* desc)
 {

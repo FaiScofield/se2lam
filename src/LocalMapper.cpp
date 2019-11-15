@@ -167,9 +167,9 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             nProj++;
         }
 
-        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点1/3, 关联参考帧MP数/参考帧MP总数: %d/%ld\n",
+        printf("[Local][Info ] #%ld(KF#%ld) 关联地图点1/3, 关联参考帧MP数/参考帧MP总数: %d/%ld\n",
                mpNewKF->id, mpNewKF->mIdKF, nCros, nObs);
-        printf("[Local][Info ] #%ld(#KF%ld) 关联地图点2/3, 关联的MP数/投影匹配数/当前MP总数: %d/%d/%ld\n",
+        printf("[Local][Info ] #%ld(KF#%ld) 关联地图点2/3, 关联的MP数/投影匹配数/当前MP总数: %d/%d/%ld\n",
                mpNewKF->id, mpNewKF->mIdKF, nProj, m, nMPs);
     }
 
@@ -198,7 +198,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新,
             //! 故这里不能生成MP! 照理说 localMPs[i] 有一个正常的值的话, 那么就应该有观测出现啊???
             if (localMPs[i].z < 0) {
-                fprintf(stderr, "[Local][Warni] #KF%ld的mvViewMPs[%ld].z < 0.\n", pRefKF->mIdKF, i);
+                fprintf(stderr, "[Local][Warni] KF#%ld的mvViewMPs[%ld].z < 0.\n", pRefKF->mIdKF, i);
                 continue;
             }
 
@@ -222,7 +222,7 @@ void LocalMapper::findCorrespd(const vector<int>& vMatched12, const vector<Point
             nAddNewMP++;
         }
     }
-    printf("[Local][Info ] #%ld(#KF%ld) 关联地图点3/3, 共添加了%d个新MP, 目前MP总数为%ld个\n",
+    printf("[Local][Info ] #%ld(KF#%ld) 关联地图点3/3, 共添加了%d个新MP, 目前MP总数为%ld个\n",
            mpNewKF->id, mpNewKF->mIdKF, nAddNewMP, mpMap->countMPs());
 }
 
@@ -235,6 +235,7 @@ void LocalMapper::removeOutlierChi2()
 {
     locker lockmapper(mutexMapper);
 
+    WorkTimer timer;
     SlamOptimizer optimizer;
     initOptimizer(optimizer);
 
@@ -247,8 +248,9 @@ void LocalMapper::removeOutlierChi2()
 
     optimizer.initializeOptimization(0);
     optimizer.optimize(10);
-    printf("[Local][Info ] #%ld(KF#%ld) 移除离群点前优化成功! 提取离群MP...", mpNewKF->id,
-           mpNewKF->mIdKF);
+    printf("[Local][Info ] #%ld(KF#%ld) 移除离群点前优化成功! 耗时%.2fms. 正在提取离群MP...", mpNewKF->id,
+           mpNewKF->mIdKF, timer.count());
+    timer.start();
 
     // 优化后去除离群MP
     const size_t nAllMP = vpEdgesAll.size();
@@ -278,6 +280,8 @@ void LocalMapper::removeOutlierChi2()
     }
 
     nBadMP = mpMap->removeLocalOutlierMP(vnOutlierIdxAll);
+    fprintf(stderr, "[Local][Info ] #%ld(KF#%ld) 提取+移除离群MP耗时: %.2fms\n", mpNewKF->id,
+            mpNewKF->mIdKF, timer.count());
 
     vpEdgesAll.clear();
     vnAllIdx.clear();
@@ -294,9 +298,8 @@ void LocalMapper::localBA()
     if (mbGlobalBABegin)
         return;
 
-    locker lockmapper(mutexMapper);
     printf("[Local][Info ] #%ld(KF#%ld) 正在执行localBA()...\n", mpNewKF->id, mpNewKF->mIdKF);
-
+    locker lockMapper(mutexMapper);
     WorkTimer timer;
     timer.start();
 
@@ -315,8 +318,8 @@ void LocalMapper::localBA()
         return;
     }
 
-    //    optimizer.verifyInformationMatrices(true);
-    //    assert(optimizer.verifyInformationMatrices(true));
+    // optimizer.verifyInformationMatrices(true);
+    // assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
     optimizer.optimize(Config::LocalIterNum);
@@ -357,42 +360,35 @@ void LocalMapper::run()
             setAcceptNewKF(false);  // 干活了，这单先处理，现在不接单了
 
             //! 更新了Map里面mLocalGraphKFs,mRefKFs和mLocalGraphMPs三个成员变量
-            printf("[Local][Info ] #%ld(KF#%ld) .....第1次更新局部地图.....\n", mpNewKF->id,
-                   mpNewKF->mIdKF);
+            printf("[Local][Info ] #%ld(KF#%ld) .....第1次更新局部地图.....\n", mpNewKF->id, mpNewKF->mIdKF);
             updateLocalGraphInMap();  // 加了新的KF进来，要更新一下Map里的Local Map 和 RefKFs.
             double t1 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L2.第1次更新局部地图耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t1);
+            printf("[Local][Timer] #%ld(KF#%ld) L2.第1次更新局部地图耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t1);
 
             //! 去除冗余的KF和MP，共视关系会被取消，mLocalGraphKFs和mLocalGraphMPs会更新
             timer.start();
             pruneRedundantKFinMap();
             double t2 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L3.修剪冗余KF耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t2);
+            printf("[Local][Timer] #%ld(KF#%ld) L3.修剪冗余KF耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t2);
 
             //! NOTE 原作者把这个步骤给注释掉了.
             timer.start();
             removeOutlierChi2();  // 这里做了一次LocalBA,并对离群MPs取消联接关系,但没有更新位姿
             double t3 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L4.删除离群MP耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t3);
+            printf("[Local][Timer] #%ld(KF#%ld) L4.删除离群MP耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t3);
 
             //! 再次更新LocalMap，由于冗余的KF和MP共视关系已经被取消，所以不必但心它们被添加回来
-            printf("[Local][Info ] #%ld(KF#%ld) .....第2次更新局部地图.....\n", mpNewKF->id,
-                   mpNewKF->mIdKF);
+            printf("[Local][Info ] #%ld(KF#%ld) .....第2次更新局部地图.....\n", mpNewKF->id, mpNewKF->mIdKF);
             timer.start();
             updateLocalGraphInMap();
             double t4 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L5.第2次更新局部地图耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t4);
+            printf("[Local][Timer] #%ld(KF#%ld) L5.第2次更新局部地图耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t4);
 
             //! LocalMap优化，并更新Local KFs和MPs的位姿
             timer.start();
             localBA();  // 这里又做了一次LocalBA，有更新位姿
             double t5 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L6.局部图优化耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t5);
+            printf("[Local][Timer] #%ld(KF#%ld) L6.局部图优化耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t5);
 
             //! 标志位置为false防止多次处理，直到加入新的KF才会再次启动
             mbUpdated = false;
@@ -401,17 +397,14 @@ void LocalMapper::run()
             mpGlobalMapper->waitIfBusy();
 
             //! 位姿优化后, 第三次更新LocalMap！
-            printf("[Local][Info ] #%ld(KF#%ld) .....第3次更新局部地图.....\n", mpNewKF->id,
-                   mpNewKF->mIdKF);
+            printf("[Local][Info ] #%ld(KF#%ld) .....第3次更新局部地图.....\n", mpNewKF->id, mpNewKF->mIdKF);
             timer.start();
-            updateLocalGraphInMap();
+            //updateLocalGraphInMap();
             double t6 = timer.count();
-            printf("[Local][Timer] #%ld(KF#%ld) L7.第3次更新局部地图耗时%.2fms\n", mpNewKF->id,
-                   mpNewKF->mIdKF, t6);
+            printf("[Local][Timer] #%ld(KF#%ld) L7.第3次更新局部地图耗时%.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t6);
 
             double t7 = t1 + t2 + t3 + t4 + t5 + t6;
-            fprintf(stdout, "[Local][Timer] #%ld(KF#%ld) L8.LocalMap线程本次运行总耗时: %.2fms\n",
-                    mpNewKF->id, mpNewKF->mIdKF, t7);
+            fprintf(stdout, "[Local][Timer] #%ld(KF#%ld) L8.LocalMap线程本次运行总耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t7);
 
             setAcceptNewKF(true);  // 干完了上一单才能告诉Tracker准备好干下一单了
         }

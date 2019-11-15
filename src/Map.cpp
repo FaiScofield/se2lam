@@ -34,7 +34,6 @@ Map::~Map()
 void Map::insertKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
-    printf("[ Map ][Info ] #%ld(KF#%ld) 当前新KF插入到地图里了!\n", pKF->id, pKF->mIdKF);
     pKF->setMap(this);
     mspKFs.insert(pKF);
     isEmpty = false;
@@ -44,7 +43,6 @@ void Map::insertKF(const PtrKeyFrame& pKF)
 void Map::insertMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
-    assert(pMP->countObservations() > 0);
     pMP->setMap(this);
     mspMPs.insert(pMP);
 }
@@ -113,6 +111,31 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
         *it = toKeep;
 }
 
+
+size_t Map::countKFs()
+{
+    locker lock(mMutexGlobalGraph);
+    return mspKFs.size();
+}
+
+size_t Map::countMPs()
+{
+    locker lock(mMutexGlobalGraph);
+    return mspMPs.size();
+}
+
+size_t Map::countLocalKFs()
+{
+    locker lock(mMutexLocalGraph);
+    return mvLocalGraphKFs.size();
+}
+
+size_t Map::countLocalMPs()
+{
+    locker lock(mMutexLocalGraph);
+    return mvLocalGraphMPs.size();
+}
+
 vector<PtrKeyFrame> Map::getAllKFs()
 {
     locker lock(mMutexGlobalGraph);
@@ -141,30 +164,6 @@ vector<PtrKeyFrame> Map::getRefKFs()
 {
     locker lock(mMutexLocalGraph);
     return vector<PtrKeyFrame>(mvRefKFs.begin(), mvRefKFs.end());
-}
-
-size_t Map::countKFs()
-{
-    locker lock(mMutexGlobalGraph);
-    return mspKFs.size();
-}
-
-size_t Map::countMPs()
-{
-    locker lock(mMutexGlobalGraph);
-    return mspMPs.size();
-}
-
-size_t Map::countLocalKFs()
-{
-    locker lock(mMutexLocalGraph);
-    return mvLocalGraphKFs.size();
-}
-
-size_t Map::countLocalMPs()
-{
-    locker lock(mMutexLocalGraph);
-    return mvLocalGraphMPs.size();
 }
 
 void Map::clear()
@@ -376,9 +375,9 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     //! 否则经过同一个地方不会考虑到之前添加的KF
     WorkTimer timer;
     addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius);
-    size_t s1 = setLocalKFs.size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) 使用FLANN搜索确定了%ld个Local KFs, 耗时%.2fms\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, s1 - 1, timer.count());
+//    size_t s1 = setLocalKFs.size();
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 使用FLANN搜索确定了%ld个Local KFs, 耗时%.2fms\n",
+//           mCurrentKF->id, mCurrentKF->mIdKF, s1 - 1, timer.count());
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
     timer.start();
@@ -392,10 +391,9 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
         }
         searchLevel--;
     }
-    size_t s2 = setLocalKFs.size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) 根据共视关系递归%d层搜索确定了%ld个Local KFs, "
-           "耗时%.2fms\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, maxLevel, s2 - s1, timer.count());
+//    size_t s2 = setLocalKFs.size();
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 根据共视关系递归%d层搜索确定了%ld个Local KFs, 耗时%.2fms\n",
+//           mCurrentKF->id, mCurrentKF->mIdKF, maxLevel, s2 - s1, timer.count());
 
     //! 获得localKFs的所有MPs, 不要求要有良好视差
     //! 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
@@ -406,9 +404,9 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
         set<PtrMapPoint> pMPs = pKF->getAllObsMPs(checkPrl);
         setLocalMPs.insert(pMPs.begin(), pMPs.end());
     }
-    size_t s3 = setLocalMPs.size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) 根据%ld个Local KFs添加了%ld个Local MPs, 耗时%.2fms\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, s2, s3, timer.count());
+//    size_t s3 = setLocalMPs.size();
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 根据%ld个Local KFs添加了%ld个Local MPs, 耗时%.2fms\n",
+//           mCurrentKF->id, mCurrentKF->mIdKF, s2, s3, timer.count());
 
     //!@Vance: 获得refKFs
     timer.start();
@@ -423,19 +421,16 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
             setRefKFs.insert((*j));
         }
     }
-    size_t s4 = setRefKFs.size();
-    printf(
-        "[ Map ][Info ] #%ld(KF#%ld) 根据%ld个Local MPs添加了%ld个Reference KFs, 耗时%.2fms\n",
-        mCurrentKF->id, mCurrentKF->mIdKF, s3, s4, timer.count());
+//    size_t s4 = setRefKFs.size();
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 根据%ld个Local MPs添加了%ld个Reference KFs, 耗时%.2fms\n",
+//           mCurrentKF->id, mCurrentKF->mIdKF, s3, s4, timer.count());
 
     mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
     mvRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
 
-    printf("[ Map ][Info ] #%ld(KF#%ld) 更新局部地图, 总共得到了%ld个LocalKFs, "
-           "%ld个LocalMPs和 %ld个RefKFs, 共耗时%.2fms\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, mvLocalGraphKFs.size(), mvLocalGraphMPs.size(),
-           mvRefKFs.size(), timeCounter.count());
+    printf("[ Map ][Info ] #%ld(KF#%ld) 更新局部地图, 总共得到了%ld个LocalKFs, %ld个LocalMPs和 %ld个RefKFs, 共耗时%.2fms\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, mvLocalGraphKFs.size(), mvLocalGraphMPs.size(), mvRefKFs.size(), timeCounter.count());
 }
 
 /**
@@ -554,6 +549,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
                          vector<vector<int>>& vnAllIdx)
 {
     locker lock(mMutexLocalGraph);
+    WorkTimer timer;
     printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载局部BA以移除离群MP. removeOutlierChi2()...\n",
            mCurrentKF->id, mCurrentKF->mIdKF);
 
@@ -589,8 +585,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         }
 
         int vertexIdKF = i;
-
         bool fixed = (pKF->mIdKF == minKFid) || (pKF->mIdKF == 1);
+
         // 添加位姿节点
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
         // 添加平面运动约束边
@@ -604,7 +600,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         if (pKF->isNull())
             continue;
 
-        PtrKeyFrame pKF1 = pKF->mOdoMeasureFrom.first;  //! 这里是From没错!
+        PtrKeyFrame pKF1 = pKF->mOdoMeasureFrom.first;
         auto it = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF1);
         if (it == mvLocalGraphKFs.end() || pKF1->isNull())
             continue;
@@ -628,9 +624,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, true);
     }
 
-
     //! 接下来给MP添加节点和边
-    maxKFid = nLocalKFs + nRefKFs + 1;
+    maxKFid = nLocalKFs + nRefKFs/* + 1*/;
 
     // Store xyz2uv edges
     const int N = mvLocalGraphMPs.size();
@@ -642,7 +637,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
     const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
-    for (int i = 0; i != N; ++i) {
+    for (int i = 0; i < N; ++i) {
         PtrMapPoint pMP = mvLocalGraphMPs[i];
         assert(!pMP->isNull());
 
@@ -650,34 +645,30 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), vertexIdMP);
 
-        std::set<PtrKeyFrame> pKFs = pMP->getObservations();  // 已可保证得到的都是有效的KF
         vector<EdgeProjectXYZ2UV*> vpEdges;
         vector<int> vnIdx;
-
-        // 如果MP视差不好则只加节点而不加边
-        if (!pMP->isGoodPrl()) {
+        if (!pMP->isGoodPrl()) {  // 如果MP视差不好则只加节点而不加边
             vpEdgesAll.push_back(vpEdges);
             vnAllIdx.push_back(vnIdx);
             continue;
         }
 
+        set<PtrKeyFrame> pKFs = pMP->getObservations();  // 已可保证得到的都是有效的KF
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
             PtrKeyFrame pKF = (*j);
             if (checkAssociationErr(pKF, pMP)) {  // 确认一下联接关系有没有错
-                fprintf(stderr, "[ Map ][Warni] removeOutlierChi2() Wrong Association! for KF#%ld "
-                                "and MP#%ld \n",
+                fprintf(stderr, "[ Map ][Warni] removeOutlierChi2() Wrong Association! for KF#%ld and MP#%ld \n",
                         pKF->mIdKF, pMP->mId);
                 continue;
             }
 
             int ftrIdx = pMP->getIndexInKF(pKF);
-            int octave = pMP->getOctave(pKF); //! TODO 可能返回负数
+            int octave = pMP->getOctave(pKF);
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
             Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
 
             int vertexIdKF = -1;
-
             auto it1 = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF);
             if (it1 != mvLocalGraphKFs.end()) {
                 vertexIdKF = it1 - mvLocalGraphKFs.begin();
@@ -686,23 +677,22 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
                 if (it2 != mvRefKFs.end())
                     vertexIdKF = it2 - mvRefKFs.begin() + nLocalKFs;
             }
-
             if (vertexIdKF == -1)
                 continue;
 
-            EdgeProjectXYZ2UV* ei =
-                addEdgeXYZ2UV(optimizer, uv, vertexIdMP, vertexIdKF, camParaId, info, delta);
+            EdgeProjectXYZ2UV* ei = addEdgeXYZ2UV(optimizer, uv, vertexIdMP, vertexIdKF, camParaId, info, delta);
             ei->setLevel(0);
 
             optimizer.addEdge(ei);  //! FIXME addEdgeXYZ2UV()函数里不是添加过了吗？
             vpEdges.push_back(ei);
-
             vnIdx.push_back(vertexIdKF);
         }
 
         vpEdgesAll.push_back(vpEdges);
         vnAllIdx.push_back(vnIdx);
     }
+    printf("[ Map ][Info ] #%ld(KF#%ld) 加载局部BA(removeOutlierChi2())耗时: %.2fms\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, timer.count());
     assert(vpEdgesAll.size() == mvLocalGraphMPs.size());
     assert(vnAllIdx.size() == mvLocalGraphMPs.size());
 }
@@ -760,7 +750,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, true);
     }
 
-    maxKFid = nLocalKFs + nRefKFs + 1;
+    maxKFid = nLocalKFs + nRefKFs/* + 1*/;
 
     // Store xyz2uv edges
     const int N = mvLocalGraphMPs.size();
@@ -1053,8 +1043,8 @@ bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
 //! 此函数在LocalMap的localBA()函数中调用
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-    printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
-           mCurrentKF->mIdKF);
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
+//           mCurrentKF->mIdKF);
 
     locker lock(mMutexLocalGraph);
 
@@ -1136,8 +1126,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
     // Store xyz2uv edges
     const int N = mvLocalGraphMPs.size();
 
-    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的顶点情况: nLocalKFs = %d, nRefKFs = %d, "
-           "nMPs = %d\n",
+    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的顶点情况: nLocalKFs = %d, nRefKFs = %d, nMPs = %d\n",
            mCurrentKF->id, mCurrentKF->mIdKF, nLocalKFs, nRefKFs, N);
 
     const float delta = Config::ThHuber;
@@ -1211,19 +1200,18 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     size_t nVertices = optimizer.vertices().size();
     size_t nEdges = optimizer.edges().size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) loadLocalGraph() optimizer nVertices = %ld, nEdges = "
-           "%ld\n",
+    printf("[ Map ][Info ] #%ld(KF#%ld) loadLocalGraph() optimizer nVertices = %ld, nEdges = %ld\n",
            mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nEdges);
-    // check optimizer
 
-    //    auto edges = optimizer.edges();
-    //    for (size_t i = 0; i < nEdges; ++i) {
-    //        auto v1 = edges[i]->vertices()[0];  // KF
-    //        auto v2 = edges[i]->vertices()[1];  // MP
-    //        fprintf(stderr, "[TEST] edge %ld vertex1.KFid = %ld, vertex2.MPid = %ld, oberservation
-    //        = %d\n",
-    //                i, v1)
-    //    }
+    // check optimizer
+//    auto edges = optimizer.edges();
+//    for (size_t i = 0; i < nEdges; ++i) {
+//        auto v1 = edges[i]->vertices()[0];  // KF
+//        auto v2 = edges[i]->vertices()[1];  // MP
+//        fprintf(stderr, "[TEST] edge %ld vertex1.KFid = %ld, vertex2.MPid = %ld, oberservation
+//        = %d\n",
+//                i, v1)
+//    }
 }
 
 void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN,

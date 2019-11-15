@@ -68,7 +68,7 @@ private:
     void relocalization(const cv::Mat& img, double imgTime, const Se2& odo) {}
     void updateFramePose();
 
-    bool needNewKF(int trackedRef);
+    bool needNewKF();
     int doTriangulate();
 
     void resetLocalTrack();
@@ -114,13 +114,13 @@ private:
     std::vector<cv::Point3f> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdxToRefKF;   // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
-    int mnGoodPrl;  // count number of mLocalMPs with good parallax
+    int mnGoodPrl, mnGoodDepth;  // count number of mLocalMPs with good parallax
     int mnInliers, mnMatchSum, mnTrackedOld;
     int mnLostFrames;
 
     // New KeyFrame rules (according to fps)
-    int nMinFrames, nMaxFrames;
-    double mMaxAngle, mMaxDistance;
+    int nMinFrames, nMaxFrames, nMinMatches;
+    float mMaxAngle, mMaxDistance;
 
     // preintegration on SE2
     PreSE2 preSE2;

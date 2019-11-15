@@ -7,7 +7,6 @@
 
 #ifndef LOCALMAPPER_H
 #define LOCALMAPPER_H
-#pragma once
 
 #include "Map.h"
 #include "optimizer.h"

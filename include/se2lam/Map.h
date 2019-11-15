@@ -38,16 +38,15 @@ public:
     void eraseKF(const PtrKeyFrame& pKF);
     void eraseMP(const PtrMapPoint& pMP);
     void mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete);
-
+    size_t countKFs();
+    size_t countMPs();
+    size_t countLocalKFs();
+    size_t countLocalMPs();
     std::vector<PtrKeyFrame> getAllKFs();
     std::vector<PtrMapPoint> getAllMPs();
     std::vector<PtrKeyFrame> getLocalKFs();
     std::vector<PtrMapPoint> getLocalMPs();
     std::vector<PtrKeyFrame> getRefKFs();
-    size_t countKFs();
-    size_t countMPs();
-    size_t countLocalKFs();
-    size_t countLocalMPs();
 
     PtrKeyFrame getCurrentKF();
     void setCurrentKF(const PtrKeyFrame& pKF);

@@ -52,7 +52,7 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
                 minXUn, maxXUn, minYUn, maxYUn);
     }
 
@@ -116,7 +116,7 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
                 minXUn, maxXUn, minYUn, maxYUn);
     }
 
@@ -189,7 +189,7 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: %.1f - %.1f, Y: %.1f - %.1f\n",
+        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
                 minXUn, maxXUn, minYUn, maxYUn);
     }
 
@@ -398,7 +398,7 @@ bool Frame::posInGrid(KeyPoint& kp, int& posX, int& posY)
 }
 
 /**
- * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点
+ * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点. 花销较大
  * @return 返回区域内特征点在KF里的索引
  */
 vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const float& r,
