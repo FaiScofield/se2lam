@@ -89,11 +89,13 @@ void OdoSLAM::start()
     // Construct the system
     mpMap = new Map;
     mpSensors = new Sensors;
+
 #ifdef USEKLT
     mpTrack = new TrackKlt;
 #else
     mpTrack = new Track;
 #endif
+
     mpLocalMapper = new LocalMapper;
     mpGlobalMapper = new GlobalMapper;
     mpMapStorage = new MapStorage();
@@ -101,6 +103,7 @@ void OdoSLAM::start()
     mpLocalizer = new Localizer();
 
     mpTrack->setLocalMapper(mpLocalMapper);
+    mpTrack->setGlobalMapper(mpGlobalMapper);
     mpTrack->setMap(mpMap);
     mpTrack->setSensors(mpSensors);
 

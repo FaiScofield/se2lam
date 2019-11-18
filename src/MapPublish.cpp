@@ -304,7 +304,7 @@ void MapPublish::publishKeyFrames()
 
     vector<PtrKeyFrame> vKFsAct;
     if (mbIsLocalize)
-        vKFsAct = mpLocalizer->GetLocalKFs();
+        vKFsAct = mpLocalizer->getLocalKFs();
     else
         vKFsAct = mpMap->getLocalKFs();
 
@@ -494,7 +494,7 @@ void MapPublish::publishMapPoints()
     vector<PtrMapPoint> vpMPAct;
     if (mbIsLocalize) {
         locker lock(mpLocalizer->mMutexLocalMap);
-        vpMPAct = mpLocalizer->GetLocalMPs();
+        vpMPAct = mpLocalizer->getLocalMPs();
         spMPNow = mpLocalizer->mpKFCurr->getAllObsMPs();
     } else {
         vpMPAct = mpMap->getLocalMPs();

@@ -11,6 +11,7 @@
 #include <ros/ros.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/flann.hpp>
 
 namespace se2lam
 {
@@ -60,7 +61,7 @@ void Localizer::run()
     WorkTimer timer;
     timer.start();
 
-    ComputeBowVecAll();
+    computeBowVecAll();
 
     timer.stop();
     fprintf(stderr, "[Localizer] Compute Bow Vectors all cost time: %.2fms\n", timer.time);
@@ -89,7 +90,7 @@ void Localizer::run()
             continue;
 
         mpSensors->readData(odo, img);
-        ReadFrameInfo(img, imgTime, odo);  // 每一帧都是KF，mpKFRef数据赋值
+        readFrameInfo(img, imgTime, odo);  // 每一帧都是KF，mpKFRef数据赋值
 
         //! 定位成功后会更新Tcw, 并由Tcw更新Twb
         if (getTrackingState() == cvu::FIRST_FRAME) {
@@ -127,7 +128,7 @@ void Localizer::run()
                        mpKFCurr->mIdKF, Twb.x / 1000, Twb.y / 1000);
             } else {
                 nLostFrames++;
-                UpdatePoseCurr(); // 重定位失败,暂时用odom信息更新位姿
+                updatePoseCurr(); // 重定位失败,暂时用odom信息更新位姿
                 Se2 Twb = mpKFCurr->getTwb();
                 fprintf(stderr, "[Localizer] #%ld Relocalization failed! Set pose to: [%.4f, %.4f]\n",
                        mpKFCurr->mIdKF, Twb.x / 1000, Twb.y / 1000);
@@ -137,23 +138,23 @@ void Localizer::run()
 
         if (getTrackingState() == cvu::OK) {
             // 根据mpKFRef的odom信息更新Tcw, 作为初始估计
-            UpdatePoseCurr();
+            updatePoseCurr();
 
-            MatchLocalMap();
+            matchLocalMap();
 
             size_t numMPCurr = mpKFCurr->countObservations();
             printf("[Local] #%ld(KF%ld) have %ld MPs observation.\n", mpKFCurr->id, mpKFCurr->mIdKF, numMPCurr);
             if (numMPCurr > 30) {
-                DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+                doLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
             }
 
-            UpdateCovisKFCurr();
+            updateCovisKFCurr();
 
-            UpdateLocalMap(1);
+            updateLocalMap(1);
 
-            DrawImgCurr();
+            drawImgCurr();
 
-            DetectIfLost();
+            detectIfLost();
         }
 
         mpKFCurrRefined = mpKFCurr;
@@ -177,7 +178,7 @@ void Localizer::run()
     ros::shutdown();
 }
 
-void Localizer::WriteTrajFile(ofstream& file)
+void Localizer::writeTrajFile(ofstream& file)
 {
     if (mpKFCurrRefined == nullptr || mpKFCurrRefined->isNull()) {
         return;
@@ -191,7 +192,7 @@ void Localizer::WriteTrajFile(ofstream& file)
          << euler(2) << endl;
 }
 
-void Localizer::ReadFrameInfo(const Mat& img, const float& imgTime, const Se2& odo)
+void Localizer::readFrameInfo(const Mat& img, float imgTime, const Se2& odo)
 {
     locker lock(mMutexKFLocal);
 
@@ -199,8 +200,6 @@ void Localizer::ReadFrameInfo(const Mat& img, const float& imgTime, const Se2& o
     mpKFRef = mpKFCurr;
 
     mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
-//    mFrameCurr.Tcw = Config::Tcb.clone();
-//    mFrameCurr.Twb = mFrameRef.Twb + (odo - mFrameRef.odom);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
     mFrameCurr.setPose(Twb);
 
@@ -208,10 +207,10 @@ void Localizer::ReadFrameInfo(const Mat& img, const float& imgTime, const Se2& o
     mpKFCurr->computeBoW(mpORBVoc);
 }
 
-void Localizer::MatchLocalMap()
+void Localizer::matchLocalMap()
 {
     //! Match in local map
-    vector<PtrMapPoint> vpMPLocal = GetLocalMPs();
+    vector<PtrMapPoint> vpMPLocal = getLocalMPs();
     vector<int> vIdxMPMatched;
     ORBmatcher matcher;
     int numMPMatched = matcher.MatchByProjection(mpKFCurr, vpMPLocal, 15, 2, vIdxMPMatched);
@@ -228,7 +227,7 @@ void Localizer::MatchLocalMap()
     }
 }
 
-void Localizer::DoLocalBA()
+void Localizer::doLocalBA()
 {
     locker lock(mutex mMutexKFLocal);  //!@Vance: 20190729新增,解决MapPub闪烁问题
 
@@ -301,7 +300,7 @@ void Localizer::DoLocalBA()
 }
 
 
-cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
+cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
 {
     locker lock(mutex mMutexKFLocal);  // 加锁, 解决MapPub闪烁问题
 
@@ -371,11 +370,11 @@ cv::Mat Localizer::DoPoseGraphOptimization(int iterNum)
     return Tcw;
 }
 
-void Localizer::DetectIfLost()
+void Localizer::detectIfLost()
 {
     locker lock(mMutexState);
 
-    bool haveKFLocal = GetLocalKFs().size() > 0;
+    bool haveKFLocal = getLocalKFs().size() > 0;
     if (!haveKFLocal) {
         fprintf(stderr, "[Localizer] #%ld Lost because with no local KFs!", mpKFCurr->mIdKF);
         mState = cvu::LOST;
@@ -415,7 +414,7 @@ void Localizer::setORBVoc(ORBVocabulary* pORBVoc)
     mpORBVoc = pORBVoc;
 }
 
-void Localizer::ComputeBowVecAll()
+void Localizer::computeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
@@ -430,7 +429,7 @@ void Localizer::ComputeBowVecAll()
     }
 }
 
-bool Localizer::DetectLoopClose()
+bool Localizer::detectLoopClose()
 {
     mvScores.clear();
     mvLocalScores.clear();
@@ -490,7 +489,7 @@ bool Localizer::DetectLoopClose()
     return bDetected;
 }
 
-bool Localizer::VerifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMatchGood,
+bool Localizer::verifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMatchGood,
                                 map<int, int>& mapMatchRaw)
 {
     if (mpKFCurr == nullptr || mpKFLoop == nullptr) {
@@ -503,7 +502,7 @@ bool Localizer::VerifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMat
     map<int, int> mapMatch;
 
     bool bVerified = false;
-    int numMinMatch = 45;
+    int numMinMatch = 45; // Config::MinKPMatchNum
 
     //! Match ORB KPs
     ORBmatcher matcher;
@@ -512,7 +511,7 @@ bool Localizer::VerifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMat
     mapMatchRaw = mapMatch;
 
     //! Remove Outliers: by RANSAC of Fundamental
-    RemoveMatchOutlierRansac(mpKFCurr, mpKFLoop, mapMatch);
+    removeMatchOutlierRansac(mpKFCurr, mpKFLoop, mapMatch);
     mapMatchGood = mapMatch;
     int numGoodMatch = mapMatch.size();
 
@@ -527,19 +526,19 @@ bool Localizer::VerifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMat
     return bVerified;
 }
 
-vector<PtrKeyFrame> Localizer::GetLocalKFs()
+vector<PtrKeyFrame> Localizer::getLocalKFs()
 {
     locker lock(mutex mMutexKFLocal);
     return vector<PtrKeyFrame>(mspKFLocal.begin(), mspKFLocal.end());
 }
 
-vector<PtrMapPoint> Localizer::GetLocalMPs()
+vector<PtrMapPoint> Localizer::getLocalMPs()
 {
     locker lock(mutex mMutexMPLocal);
     return vector<PtrMapPoint>(mspMPLocal.begin(), mspMPLocal.end());
 }
 
-void Localizer::DrawImgCurr()
+void Localizer::drawImgCurr()
 {
     locker lockImg(mMutexImg);
 
@@ -566,7 +565,7 @@ void Localizer::DrawImgCurr()
     }
 }
 
-void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
+void Localizer::drawImgMatch(const map<int, int>& mapMatch)
 {
     locker lockImg(mMutexImg);
 
@@ -671,7 +670,7 @@ void Localizer::DrawImgMatch(const map<int, int>& mapMatch)
     }
 }
 
-void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
+void Localizer::removeMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
                                          map<int, int>& mapMatch)
 {
     int numMinMatch = 10;
@@ -714,7 +713,7 @@ void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
     mapMatch = mapMatchGood;
 }
 
-void Localizer::UpdatePoseCurr()
+void Localizer::updatePoseCurr()
 {
     locker lock(mMutexKFLocal);
 
@@ -727,19 +726,13 @@ void Localizer::UpdatePoseCurr()
     mpKFCurr->setPose(mpKFCurr->getTcr() * mpKFRef->getPose());
 }
 
-void Localizer::ResetLocalMap()
+void Localizer::resetLocalMap()
 {
     mspKFLocal.clear();
     mspMPLocal.clear();
 }
 
-void Localizer::UpdateLocalMapTrack()
-{
-//    mspKFLocal.clear();
-//    mspMPLocal.clear();
-}
-
-void Localizer::UpdateLocalMap(int searchLevel)
+void Localizer::updateLocalMap(int searchLevel)
 {
     locker lock(mMutexLocalMap);
     mspKFLocal.clear();
@@ -776,7 +769,7 @@ void Localizer::UpdateLocalMap(int searchLevel)
 }
 
 
-void Localizer::MatchLoopClose(map<int, int> mapMatchGood)
+void Localizer::matchLoopClose(map<int, int> mapMatchGood)
 {
     // mapMatchGood: KP index map from KFCurr to KFLoop
 
@@ -793,20 +786,20 @@ void Localizer::MatchLoopClose(map<int, int> mapMatchGood)
     }
 }
 
-void Localizer::UpdateCovisKFCurr()
+void Localizer::updateCovisKFCurr()
 {
     for (auto iter = mspKFLocal.begin(); iter != mspKFLocal.end(); iter++) {
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKF = *iter;
 
-        FindCommonMPs(mpKFCurr, pKF, spMPs);
+        findCommonMPs(mpKFCurr, pKF, spMPs);
 
         if (spMPs.size() > 0.1 * mpKFCurr->countObservations())
             mpKFCurr->addCovisibleKF(pKF);
     }
 }
 
-int Localizer::FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2,
+int Localizer::findCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2,
                              set<PtrMapPoint>& spMPs)
 {
     spMPs.clear();
@@ -872,11 +865,11 @@ bool Localizer::relocalization()
     bool bIfLoopCloseDetected = false;
     bool bIfLoopCloseVerified = false;
 
-    bIfLoopCloseDetected = DetectLoopClose();
+    bIfLoopCloseDetected = detectLoopClose();
 
     if (bIfLoopCloseDetected) {
         map<int, int> mapMatchMP, mapMatchGood, mapMatchRaw;
-        bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
+        bIfLoopCloseVerified = verifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
 
         if (bIfLoopCloseVerified) {
             locker lock(mMutexKFLocal);
@@ -886,20 +879,20 @@ bool Localizer::relocalization()
 
             // Update local map from KFLoop. 更新LocalMap里的KF和MP
             lock.unlock();
-            UpdateLocalMap(2);
+            updateLocalMap(2);
             lock.lock();
 
             // Set MP observation of KFCurr from KFLoop. KFLoop里的MP关联到当前KF观测中
-            MatchLoopClose(mapMatchGood);
+            matchLoopClose(mapMatchGood);
 
             // Do Local BA and Do outlier rejection. 根据观测的MP做位姿图优化
-            DoLocalBA();
+            doLocalBA();
 
             // Set MP observation of KFCurr from local map. LocalMap里的MP添加到当前KF观测中
-            MatchLocalMap();
+            matchLocalMap();
 
             // Do local BA again and do outlier rejection
-            DoLocalBA();
+            doLocalBA();
 
             // output scores
             string file = Config::MatchImageStorePath + "../loop/scores.txt";
@@ -917,11 +910,11 @@ bool Localizer::relocalization()
             ofs.close();
 
             // draw after sorted
-            DrawImgCurr();
-            DrawImgMatch(mapMatchGood);
+            drawImgCurr();
+            drawImgMatch(mapMatchGood);
         } else {
-            DrawImgCurr();
-            ResetLocalMap();
+            drawImgCurr();
+            resetLocalMap();
         }
     }
 
@@ -955,51 +948,52 @@ cvu::eTrackingState Localizer::getLastTrackingState()
 void Localizer::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs)
 {
     vector<PtrKeyFrame> vKFsAll = mpMap->getAllKFs();
-    vector<Point3f> vKFPoses;
-    for (size_t i = 0; i < vKFsAll.size(); ++i) {
+    vector<Point3f> vKFPoses(vKFsAll.size());
+    for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twb = cvu::inv(vKFsAll[i]->getPose()) * Config::Tcb;
-        Point3f pose(Twb.at<float>(0, 3)/1000.f, Twb.at<float>(1, 3)/1000.f, Twb.at<float>(2, 3)/1000.f);
-        vKFPoses.push_back(pose);
+        Point3f pose(Twb.at<float>(0, 3) * 0.001f, Twb.at<float>(1, 3) * 0.001f,
+                     Twb.at<float>(2, 3) * 0.001f);
+        vKFPoses[i] = pose;
     }
 
     cv::flann::KDTreeIndexParams kdtreeParams;
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
     Se2 pose = getCurrKFPose();
-    std::vector<float> query = {pose.x/1000.f, pose.y/1000.f, 0.f};
-    int size = std::min(vKFsAll.size(), static_cast<size_t>(15));    // 最近的5个KF
+    std::vector<float> query = {pose.x * 0.001f, pose.y * 0.001f, 0.f};
     std::vector<int> indices;
     std::vector<float> dists;
-    kdtree.knnSearch(query, indices, dists, size, cv::flann::SearchParams());
-    for (size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i] > 0 && dists[i] < 0.3 && vKFsAll[indices[i]]) // 距离在0.3m以内
+    kdtree.radiusSearch(query, indices, dists, Config::LocalFrameSearchRadius,
+                        Config::Config::MaxLocalFrameNum * 0.5, cv::flann::SearchParams());
+    for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
+        if (indices[i] > 0 && vKFsAll[indices[i]])
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }
 
-bool Localizer::TrackLocalMap()
+bool Localizer::trackLocalMap()
 {
-    UpdatePoseCurr();
+    updatePoseCurr();
 
-    MatchLocalMap();
+    matchLocalMap();
 
     int numMPCurr = mpKFCurr->countObservations();
     if (numMPCurr > 30) {
-        DoLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
+        doLocalBA();  // 用局部图优化更新Tcw, 并以此更新Twb
     }
 
-    UpdateCovisKFCurr();
+    updateCovisKFCurr();
 
-    UpdateLocalMap(1);
+    updateLocalMap(1);
 
-    DrawImgCurr();
+    drawImgCurr();
 
-    DetectIfLost();
+    detectIfLost();
 
 
-    UpdateLocalMap(1);
-    MatchLocalMap();    // 添加观测信息
-    Mat Tcw = DoPoseGraphOptimization(20);  // 根据观测做位姿图优化
+    updateLocalMap(1);
+    matchLocalMap();    // 添加观测信息
+    Mat Tcw = doPoseGraphOptimization(20);  // 根据观测做位姿图优化
 
     // 验证优化结果的准确性
 

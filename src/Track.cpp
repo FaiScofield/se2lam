@@ -8,6 +8,7 @@
 #include "Track.h"
 #include "Config.h"
 #include "LocalMapper.h"
+#include "GlobalMapper.h"
 #include "Map.h"
 #include "ORBmatcher.h"
 #include "converter.h"
@@ -29,7 +30,8 @@ bool Track::mbUseOdometry = true;
 
 Track::Track()
     : mState(cvu::NO_READY_YET), mLastState(cvu::NO_READY_YET), mbPrint(true),
-      mbNeedVisualization(false), mnGoodPrl(0), mnInliers(0), mnMatchSum(0), mnTrackedOld(0),
+      mbNeedVisualization(false), mpReferenceKF(nullptr), mpCurrentKF(nullptr), mpLoopKF(nullptr),
+      mnGoodPrl(0), mnInliers(0), mnMatchSum(0), mnTrackedOld(0),
       mnLostFrames(0), mbFinishRequested(false), mbFinished(false)
 {
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
@@ -98,6 +100,14 @@ void Track::run()
                     trackReferenceKF(img, imgTime, odo);
                 } else {
                     relocalization(img, imgTime, odo);
+                }
+                if (detectIfLost()) {
+                    mnLostFrames++;
+                    mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
+                    mState = cvu::LOST;
+                } else {
+                    mnLostFrames = 0;
+                    mState = cvu::OK;
                 }
                 mpMap->setCurrentFramePose(mCurrentFrame.getPose());
             }
@@ -599,10 +609,291 @@ void Track::setFinish()
     mbFinished = true;
 }
 
+bool Track::detectIfLost()
+{
+    int df = mCurrentFrame.id - mpReferenceKF->id;
+    Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
+    Se2 dVo = mCurrentFrame.getTwb() - mpReferenceKF->getTwb();
+
+
+    if (normalizeAngle(abs(dVo.theta)) > mMaxAngle) {
+        fprintf(stderr, "[Track][Info ] #%ld-#%ld 因VO角度过大而丢失!\n", mCurrentFrame.id, mpReferenceKF->id);
+        return true;
+    }
+    if (cv::norm(Point2f(dVo.x, dVo.y)) > mMaxDistance * df) {
+        fprintf(stderr, "[Track][Info ] #%ld-#%ld 因VO距离过大而丢失!\n", mCurrentFrame.id, mpReferenceKF->id);
+        return true;
+    }
+    if (normalizeAngle(abs(dVo.theta - dOdo.theta)) > mMaxAngle) {
+        fprintf(stderr, "[Track][Info ] #%ld-#%ld 因VO角度和Odo相差过大而丢失!\n", mCurrentFrame.id, mpReferenceKF->id);
+        return true;
+    }
+    if (cv::norm(Point2f(dVo.x, dVo.y)) - cv::norm(Point2f(dOdo.x, dOdo.y)) > mMaxDistance * df) {
+        fprintf(stderr, "[Track][Info ] #%ld-#%ld 因VO距离和Odo相差过大而丢失!\n", mCurrentFrame.id, mpReferenceKF->id);
+        return true;
+    }
+    return false;
+}
+
 //! TODO 完成重定位功能
 void Track::relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo)
 {
-    return;
+    mCurrentFrame = Frame(img, imgTime, odo, mpORBextractor, mK, mD);
+    updateFramePose();
+    mpCurrentKF = make_shared<KeyFrame>(mCurrentFrame);
+
+    bool bDetected = detectLoopClose();
+    bool bVerified = false;
+    if (bDetected) {
+        map<int, int> mapMatchMP, mapMatchGood, mapMatchRaw;
+        bVerified = verifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
+        if (bVerified) {
+            // 设置 mpCurrentKF 属性
+            mpCurrentKF->setPose(mpLoopKF->getPose());
+            mpCurrentKF->addCovisibleKF(mpLoopKF);
+            mpLoopKF->addCovisibleKF(mpCurrentKF);
+            for (auto iter = mapMatchGood.begin(); iter != mapMatchGood.end(); iter++) {
+                int idxCurr = iter->first;
+                int idxLoop = iter->second;
+                bool isMPLoop = mpLoopKF->hasObservation(idxLoop);
+
+                if (isMPLoop) {
+                    PtrMapPoint pMP = mpLoopKF->getObservation(idxLoop);
+                    mpCurrentKF->addObservation(pMP, idxCurr);
+                    mpCurrentKF->mvViewMPs[idxCurr] = mpCurrentKF->getViewMPPoseInCamareFrame(idxCurr);
+                    pMP->addObservation(mpCurrentKF, idxCurr);
+                }
+            }
+
+            mpMap->insertKF(mpCurrentKF);
+
+            // Get Local Map
+            set<PtrKeyFrame> spLocalKFs;
+            set<PtrMapPoint> spLocalMPs;
+            set<PtrKeyFrame> spRefKFs;
+            mpMap->addLocalGraphThroughKdtree(spLocalKFs, Config::MaxLocalFrameNum *0.5,
+                                              Config::LocalFrameSearchRadius);
+            int searchLevel = Config::LocalFrameSearchLevel;
+            while (searchLevel > 0) {
+                std::set<PtrKeyFrame> currentLocalKFs = spLocalKFs;
+                for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
+                    PtrKeyFrame pKF = *iter;
+                    std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
+                    spLocalKFs.insert(spKF.begin(), spKF.end());
+                }
+                searchLevel--;
+            }
+            for (auto iter = spLocalKFs.begin(), iend = spLocalKFs.end(); iter != iend; iter++) {
+                PtrKeyFrame pKF = *iter;
+                set<PtrMapPoint> spMP = pKF->getAllObsMPs(true);    // MP要有良好视差
+                spLocalMPs.insert(spMP.begin(), spMP.end());
+            }
+            for (auto i = spLocalMPs.begin(), iend = spLocalMPs.end(); i != iend; ++i) {
+                PtrMapPoint pMP = (*i);
+                set<PtrKeyFrame> pKFs = pMP->getObservations();
+                for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
+                    if (spLocalKFs.find((*j)) != spLocalKFs.end() ||
+                        spRefKFs.find((*j)) != spRefKFs.end())
+                        continue;
+                    spRefKFs.insert((*j));
+                }
+            }
+
+            doLocalBA();  // 重定位成功
+
+            mState = cvu::OK;
+        } else {
+            mpCurrentKF->setNull();
+            mnLostFrames++;
+        }
+    } else {
+        mpCurrentKF->setNull();
+        mnLostFrames++;
+    }
+}
+
+bool Track::detectLoopClose()
+{
+    assert(mpCurrentKF != nullptr);
+
+    bool bDetected = false;
+    int minKFIdOffset = Config::MinKFidOffset;   // 25
+    double minScoreBest = Config::MinScoreBest;  // 0.005
+
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
+    for_each(vpKFsAll.begin(), vpKFsAll.end(), [&](PtrKeyFrame& pKF){
+        if (!pKF->mbBowVecExist)
+            pKF->computeBoW(mpGlobalMapper->mpORBVoc);
+    });
+
+    DBoW2::BowVector& BowVecCurr = mpCurrentKF->mBowVec;
+    PtrKeyFrame pKFBest = nullptr;
+    int idKFCurr = mpCurrentKF->mIdKF;
+    double scoreBest = 0;
+
+    for (int i = 0, iend = vpKFsAll.size(); i < iend; ++i) {
+        PtrKeyFrame& pKFi = vpKFsAll[i];
+        DBoW2::BowVector& BowVec = pKFi->mBowVec;
+
+        int idKFi = pKFi->mIdKF;
+        if (abs(idKFi - idKFCurr) < minKFIdOffset)
+            continue;
+
+        double score = mpGlobalMapper->mpORBVoc->score(BowVecCurr, BowVec);
+        if (score > scoreBest) {
+            scoreBest = score;
+            pKFBest = pKFi;
+        }
+    }
+
+    if (pKFBest != nullptr && scoreBest > minScoreBest) {
+        mpLoopKF = pKFBest;
+        bDetected = true;
+    } else {
+        mpLoopKF.reset();
+    }
+
+    return bDetected;
+}
+
+bool Track::verifyLoopClose(std::map<int, int>& _mapMatchMP, std::map<int, int>& _mapMatchGood,
+                            std::map<int, int>& _mapMatchRaw)
+{
+    assert(mpCurrentKF != nullptr && mpLoopKF != nullptr);
+
+    _mapMatchMP.clear();
+    _mapMatchGood.clear();
+    _mapMatchRaw.clear();
+    map<int, int> mapMatch;
+
+    bool bVerified = false;
+    int numMinMatchKP = Config::MinKPMatchNum;         // 30, KP最少匹配数
+
+    //! Match ORB KPs
+    ORBmatcher matcher;
+    bool bIfMatchMPOnly = false;
+    matcher.SearchByBoW(mpCurrentKF, mpLoopKF, mapMatch, bIfMatchMPOnly);
+    _mapMatchRaw = mapMatch;
+
+    //! Remove Outliers: by RANSAC of Fundamental
+    removeMatchOutlierRansac(mpCurrentKF, mpLoopKF, mapMatch);
+    _mapMatchGood = mapMatch;
+    int nGoodKFMatch = mapMatch.size();  // KP匹配数,包含了MP匹配数
+
+    if (nGoodKFMatch >= numMinMatchKP) {
+        fprintf(stderr, "[Localizer] #%ld Loop close verification PASSED! numGoodMatch = %d >= %d\n",
+               mpCurrentKF->mIdKF, nGoodKFMatch, numMinMatchKP);
+        bVerified = true;
+    } else {
+        fprintf(stderr, "[Localizer] #%ld Loop close verification FAILED! numGoodMatch = %d < %d\n",
+                mpCurrentKF->mIdKF, nGoodKFMatch, numMinMatchKP);
+    }
+
+    return bVerified;
+}
+
+void Track::removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurr, const PtrKeyFrame& _pKFLoop,
+                                     map<int, int>& mapMatch)
+{
+    int numMinMatch = 10;
+
+    int numMatch = mapMatch.size();
+    if (numMatch < numMinMatch) {
+        mapMatch.clear();
+        return;
+    }
+
+    map<int, int> mapMatchGood;
+    vector<int> vIdxCurr, vIdxLoop;
+    vector<Point2f> vPtCurr, vPtLoop;
+
+    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+        int idxCurr = iter->first;
+        int idxLoop = iter->second;
+
+        vIdxCurr.push_back(idxCurr);
+        vIdxLoop.push_back(idxLoop);
+
+        vPtCurr.push_back(_pKFCurr->mvKeyPoints[idxCurr].pt);
+        vPtLoop.push_back(_pKFLoop->mvKeyPoints[idxLoop].pt);
+    }
+
+    // RANSAC with fundemantal matrix
+    vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
+    findHomography(vPtCurr, vPtLoop, FM_RANSAC, 3.0, vInlier);
+    for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
+        int idxCurr = vIdxCurr[i];
+        int idxLoop = vIdxLoop[i];
+        if (vInlier[i] == true) {
+            mapMatchGood[idxCurr] = idxLoop;
+        }
+    }
+
+    mapMatch = mapMatchGood;
+}
+
+void Track::doLocalBA()
+{
+    WorkTimer timer;
+
+    SlamOptimizer optimizer;
+    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    optimizer.setAlgorithm(solver);
+    optimizer.setVerbose(Config::LocalVerbose);
+
+    int camParaId = 0;
+    addCamPara(optimizer, Config::Kcam, camParaId);
+
+    // Add KFCurr
+    addVertexSE3Expmap(optimizer, toSE3Quat(mpCurrentKF->getPose()), 0, false);
+    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpCurrentKF->getPose()), 0, Config::Tbc);
+    int vertexId = 1;
+
+    // Add MPs in local map as fixed
+    const float delta = Config::ThHuber;
+    set<PtrMapPoint> setMPs = mpCurrentKF->getAllObsMPs(true);
+    map<PtrMapPoint, size_t> Observations = mpCurrentKF->getObservations();
+    for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
+        PtrMapPoint pMP = *iter;
+
+        bool marginal = false;
+        bool fixed = true;
+        addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), vertexId, marginal, fixed);
+
+        int ftrIdx = Observations[pMP];
+        int octave = pMP->getOctave(mpCurrentKF); //! TODO 可能返回负数
+        const float invSigma2 = mpCurrentKF->mvInvLevelSigma2[octave];
+        Eigen::Vector2d uv = toVector2d(mpCurrentKF->mvKeyPoints[ftrIdx].pt);
+        Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
+
+        g2o::EdgeProjectXYZ2UV* ei = new g2o::EdgeProjectXYZ2UV();
+        ei->setVertex(
+            0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(vertexId)));
+        ei->setVertex(
+            1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+        ei->setMeasurement(uv);
+        ei->setParameterId(0, camParaId);
+        ei->setInformation(info);
+        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+        ei->setRobustKernel(rk);
+        rk->setDelta(delta);
+        ei->setLevel(0);
+        optimizer.addEdge(ei);
+
+        vertexId++;
+    }
+
+    optimizer.initializeOptimization(0);
+    optimizer.optimize(20);
+
+    Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, 0));
+    mpCurrentKF->setPose(Tcw);  // 更新Tcw和Twb
+
+    Se2 Twb = mpCurrentKF->getTwb();
+    printf("[Localizer] #%ld localBA Time = %.2fms, set pose to [%.4f, %.4f]\n", mpCurrentKF->mIdKF,
+           timer.count(), Twb.x / 1000, Twb.y / 1000);
 }
 
 

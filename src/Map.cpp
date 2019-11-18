@@ -398,9 +398,9 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     //! 获得localKFs的所有MPs, 不要求要有良好视差
     //! 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
     timer.start();
+    bool checkPrl = mCurrentKF->id < 5 ? false : true;
     for (auto i = setLocalKFs.begin(), iend = setLocalKFs.end(); i != iend; ++i) {
         PtrKeyFrame pKF = *i;
-        bool checkPrl = false;
         set<PtrMapPoint> pMPs = pKF->getAllObsMPs(checkPrl);
         setLocalMPs.insert(pMPs.begin(), pMPs.end());
     }
@@ -1236,10 +1236,9 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int max
     std::vector<float> dists;
     kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
-        if (indices[i] > 0 && dists[i] < searchRadius && vKFsAll[indices[i]])  // 距离在0.3m以内
+        if (indices[i] > 0/* && dists[i] < searchRadius*/ && vKFsAll[indices[i]])  // 距离在0.3m以内
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }
-
 
 }  // namespace se2lam

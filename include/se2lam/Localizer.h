@@ -35,43 +35,42 @@ public:
     void setORBVoc(ORBVocabulary* pORBVoc);
     void setSensors(Sensors* pSensors);
 
-    void ReadFrameInfo(const cv::Mat& img, const float& imgTime, const Se2& odo);
+    void readFrameInfo(const cv::Mat& img, float imgTime, const Se2& odo);
 
-    void MatchLocalMap();
+    void matchLocalMap();
 
     // Loop closing
-    bool DetectLoopClose();
-    bool VerifyLoopClose(std::map<int, int>& mapMatchMP, std::map<int, int>& mapMatchAll,
+    bool detectLoopClose();
+    bool verifyLoopClose(std::map<int, int>& mapMatchMP, std::map<int, int>& mapMatchAll,
                          std::map<int, int>& mapMatchRaw);
-    void MatchLoopClose(std::map<int, int> mapMatchGood);
+    void matchLoopClose(std::map<int, int> mapMatchGood);
 
-    void DoLocalBA();
-    void DetectIfLost();
-    cv::Mat DoPoseGraphOptimization(int iterNum);
-    bool TrackLocalMap();
+    void doLocalBA();
+    void detectIfLost();
+    cv::Mat doPoseGraphOptimization(int iterNum);
+    bool trackLocalMap();
 
     // Local map
-    void UpdateLocalMap(int searchLevel = 3);
-    void UpdateLocalMapTrack();
-    void ResetLocalMap();
+    void updateLocalMap(int searchLevel = 3);
+    void resetLocalMap();
 
     // Subfunctions
-    void RemoveMatchOutlierRansac(PtrKeyFrame pKFCurr, PtrKeyFrame pKFLoop,
+    void removeMatchOutlierRansac(PtrKeyFrame pKFCurr, PtrKeyFrame pKFLoop,
                                   std::map<int, int>& mapMatch);
-    void ComputeBowVecAll();
-    std::vector<PtrKeyFrame> GetLocalKFs();
-    std::vector<PtrMapPoint> GetLocalMPs();
+    void computeBowVecAll();
+    std::vector<PtrKeyFrame> getLocalKFs();
+    std::vector<PtrMapPoint> getLocalMPs();
 
     // IO
-    void UpdatePoseCurr();
-    void DrawImgMatch(const std::map<int, int>& mapMatch);
-    void DrawImgCurr();
+    void updatePoseCurr();
+    void drawImgMatch(const std::map<int, int>& mapMatch);
+    void drawImgCurr();
 
-    void UpdateCovisKFCurr();
-    int FindCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);
+    void updateCovisKFCurr();
+    int findCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);
 
     // DEBUG
-    void WriteTrajFile(std::ofstream& file);
+    void writeTrajFile(std::ofstream& file);
 
     void requestFinish();
     bool isFinished();

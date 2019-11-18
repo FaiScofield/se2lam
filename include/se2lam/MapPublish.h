@@ -19,7 +19,7 @@
 namespace se2lam
 {
 
-#define USEKLT
+//#define USEKLT
 
 class Map;
 
