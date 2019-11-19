@@ -170,12 +170,16 @@ void Map::clear()
 {
     locker lock1(mMutexGlobalGraph);
     locker lock2(mMutexLocalGraph);
+    locker lock3(mMutexCurrentKF);
+    locker lock4(mMutexCurrentFrame);
     mspKFs.clear();
     mspMPs.clear();
     mvLocalGraphKFs.clear();
     mvLocalGraphMPs.clear();
     mvRefKFs.clear();
     isEmpty = true;
+    //mCurrentKF = nullptr;
+    //mCurrentFramePose.release();
     KeyFrame::mNextIdKF = 1;
     MapPoint::mNextId = 1;
 }
@@ -1218,6 +1222,11 @@ void Map::addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int max
                                      float searchRadius)
 {
     vector<PtrKeyFrame> vKFsAll = getAllKFs();
+    if (vKFsAll.size() < 3) {
+        setLocalKFs.insert(vKFsAll.begin(), vKFsAll.end());
+        return;
+    }
+
     vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());

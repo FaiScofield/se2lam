@@ -23,22 +23,20 @@ unsigned long MapPoint::mNextId = 1;
 
 
 MapPoint::MapPoint()
-    : mId(0), mbNull(false), mbGoodParallax(false), mNormalVector(0.f, 0.f, 0.f), mMainKF(nullptr),
-      mMainOctave(0), mLevelScaleFactor(Config::ScaleFactor)
+    : mId(0), mpMap(nullptr), mbNull(false), mbGoodParallax(false), mMinDist(0.f), mMaxDist(10.f),
+      mNormalVector(0.f, 0.f, 0.f), mMainKF(nullptr), mMainOctave(0),
+      mLevelScaleFactor(Config::ScaleFactor)
 {
-    mMinDist = 0.f;
-    mMaxDist = 10.f;
     mvPosTmp.reserve(6);
 }
 
 //! 构造后请立即为其添加观测
 MapPoint::MapPoint(const cv::Point3f& pos, bool goodPrl)
-    : mbNull(false), mbGoodParallax(goodPrl), mPos(pos), mNormalVector(Point3f(0.f, 0.f, 0.f)),
-      mMainKF(nullptr), mMainOctave(0), mLevelScaleFactor(Config::ScaleFactor)
+    : mId(mNextId++), mpMap(nullptr), mbNull(false), mbGoodParallax(goodPrl), mMinDist(0.f),
+      mMaxDist(10.f), mPos(pos), mNormalVector(Point3f(0.f, 0.f, 0.f)), mMainKF(nullptr),
+      mMainOctave(0), mLevelScaleFactor(Config::ScaleFactor)
 {
-    mId = mNextId++;
-    mMinDist = 0.f;
-    mMaxDist = 10.f;
+
     mvPosTmp.reserve(6);
 }
 
@@ -70,7 +68,8 @@ void MapPoint::setNullSelf()
     mObservations.clear();
     mMainDescriptor.release();
 
-    mpMap->eraseMP(pThis);
+    if (mpMap != nullptr)
+        mpMap->eraseMP(pThis);
 }
 
 // 可以保证返回的KF都是有效的
@@ -360,7 +359,7 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
         assert(pKFj != nullptr);
         if (pKF->mIdKF - pKFj->mIdKF > 10)  // 6
             continue;
-        if (updateParallaxCheck(pKFj, pKF)) // 和往前10帧内的KF都进行一次三角化, 直至更新成为止
+        if (updateParallaxCheck(pKFj, pKF))  // 和往前10帧内的KF都进行一次三角化, 直至更新成为止
             continue;
     }
 
@@ -414,9 +413,9 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     // 视差良好, 则更新此点的三维坐标
     {
         locker lock(mMutexPos);
-        //mPos = posW;
-        //mbGoodParallax = true;
-        //fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
+        // mPos = posW;
+        // mbGoodParallax = true;
+        // fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
         mvPosTmp.push_back(posW);
     }
 

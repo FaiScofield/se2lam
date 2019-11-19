@@ -66,22 +66,6 @@ void Sensors::updateImu(double theta_, double time_)
     timeImu = time_;
     imuUpdated = true;
 }
-/*
-void Sensors::updateOdoSequence(std::vector<Se2>& odoQue_)
-{
-    std::unique_lock<std::mutex> lock(mMutexOdo);
-
-    while (odoUpdated) {
-        cndvSensorUpdate.wait(lock);
-    }
-
-    mvOdoSeq = odoQue_;
-    if (mvOdoSeq.empty())
-        std::cerr << "[Sensor] No odom data between two image!" << std::endl;
-
-    odoUpdated = true;
-}
-*/
 
 void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_)
 {
@@ -112,66 +96,11 @@ void Sensors::readData(Se2& dataOdo_, cv::Mat& dataImg_, double &theta)
     cndvSensorUpdate.notify_all();
 }
 
-/*
-void Sensors::readDataSequence(std::vector<Se2>& dataOdoSeq_, cv::Mat& dataImg_, double& timeImg_)
-{
-    std::unique_lock<std::mutex> lock1(mMutexImg);
-    std::unique_lock<std::mutex> lock2(mMutexOdo);
-
-    mImg.copyTo(dataImg_);
-    timeImg_ = timeImg;
-    dataOdoSeq_ = mvOdoSeq;
-
-    odoUpdated = false;
-    imgUpdated = false;
-    cndvSensorUpdate.notify_all();
-}
-
-void Sensors::readDataWithTime(Se2& odo, cv::Mat& img, double& time)
-{
-    std::unique_lock<std::mutex> lock1(mMutexImg);
-    std::unique_lock<std::mutex> lock2(mMutexOdo);
-
-    odo = dataAlignment(mvOdoSeq, timeImg);
-    mOdo = odo;
-    mImg.copyTo(img);
-    time = timeImg;
-
-    odoUpdated = false;
-    imgUpdated = false;
-    cndvSensorUpdate.notify_all();
-}
-*/
 
 void Sensors::forceSetUpdate(bool val)
 {
     odoUpdated = val;
     imgUpdated = val;
 }
-
-/*
-Se2 Sensors::dataAlignment(const std::vector<Se2>& dataOdoSeq_, const double& timeImg_)
-{
-    Se2 res;
-    size_t n = dataOdoSeq_.size();
-    if (n < 2) {
-        std::cerr << "[Sensor][Warni] Less odom sequence input!" << std::endl;
-        return res;
-    }
-
-    //! 计算单帧图像时间内的平均速度
-    Se2 tranSum = dataOdoSeq_[n - 1] - dataOdoSeq_[0];
-    float dt = dataOdoSeq_[n - 1].timeStamp - dataOdoSeq_[0].timeStamp;
-    float r = (timeImg_ - dataOdoSeq_[n - 1].timeStamp) / dt;
-
-    assert(r >= 0.f);
-
-    Se2 transDelta(tranSum.x * r, tranSum.y * r, tranSum.theta * r);
-    res = dataOdoSeq_[n - 1] + transDelta;
-    res.timeStamp = timeImg_;
-
-    return res;
-}
-*/
 
 }  // namespace se2lam

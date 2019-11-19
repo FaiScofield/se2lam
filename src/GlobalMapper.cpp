@@ -270,9 +270,9 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     map<int, int> mapMatch;
 
     bool bVerified = false;
-    int numMinMatchMP = Config::MinMPMatchNum;         // 15, MP最少匹配数
-    int numMinMatchKP = Config::MinKPMatchNum;         // 30, KP最少匹配数
-    double ratioMinMatchMP = Config::MinMPMatchRatio;  // 0.05
+    const int numMinMatchMP = Config::MinMPMatchNum;         // 15, MP最少匹配数
+    const int numMinMatchKP = Config::MinKPMatchNum;         // 30, KP最少匹配数
+    const double ratioMinMatchMP = Config::MinMPMatchRatio;  // 0.05
 
     //! Match ORB KPs
     ORBmatcher matcher;

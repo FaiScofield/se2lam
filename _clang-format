@@ -68,9 +68,9 @@ PenaltyBreakFirstLessLess: 1200
 # 在一个字符串字面量中引入换行的penalty
 PenaltyBreakString: 5000
 # 对于每个在行字符数限制之外的字符的penalty
-PenaltyExcessCharacter: 10
+PenaltyExcessCharacter: 1
 # 将函数的返回类型放到它自己的行的penalty
-PenaltyReturnTypeOnItsOwnLine: 0
+PenaltyReturnTypeOnItsOwnLine: 200
 # 指针和引用和类型绑定
 PointerBindsToType: true
 # 在赋值运算符之前添加空格

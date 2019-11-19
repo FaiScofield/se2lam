@@ -14,13 +14,14 @@ namespace se2lam
 
 using namespace cv;
 using namespace std;
+using namespace Eigen;
 
 typedef unique_lock<mutex> locker;
 
 unsigned long KeyFrame::mNextIdKF = 1;  //! F,KF和MP的编号都是从1开始
 
 
-KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mbNull(false)
+KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mpMap(nullptr), mbNull(false)
 {
     PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
@@ -30,14 +31,12 @@ KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mbNull(false)
 }
 
 
-KeyFrame::KeyFrame(const Frame& frame) : Frame(frame), mbBowVecExist(false), mbNull(false)
+KeyFrame::KeyFrame(const Frame& frame)
+    : Frame(frame), mIdKF(mNextIdKF++), mbBowVecExist(false), mpMap(nullptr), mbNull(false)
 {
-    mIdKF = mNextIdKF++;
-
     const size_t& n = frame.N;
     mvViewMPs = vector<Point3f>(n, Point3f(-1.f, -1.f, -1.f));
-    mvViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>(
-        n, Eigen::Matrix3d::Identity() * -1);
+    mvViewMPsInfo = vector<Matrix3d, aligned_allocator<Matrix3d>>(n, Matrix3d::Identity() * -1);
 
     PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
@@ -116,7 +115,9 @@ void KeyFrame::setNull()
     mvViewMPs.clear();
     mvViewMPsInfo.clear();
 
-    mpMap->eraseKF(pThis);
+    if (mpMap != nullptr)
+        mpMap->eraseKF(pThis);
+
     fprintf(stderr, "[KeyFrame] KF#%ld 被Map设置为null, 处理好各种变量后的引用计数 =  %ld\n", mIdKF,
             pThis.use_count());
 }
@@ -131,8 +132,7 @@ vector<PtrKeyFrame> KeyFrame::getBestCovisibleKFs(size_t n)
 {
     locker lock(mMutexCovis);
     if (n > 0)
-        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(),
-                                   mvpCovisibleKFsSorted.begin() + n);
+        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
     else
         return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.end());
 }
@@ -253,8 +253,7 @@ vector<PtrMapPoint> KeyFrame::getMapPointMatches()
 {
     locker lock(mMutexObs);
     vector<PtrMapPoint> ret(N, nullptr);
-    for (auto iter = mDualObservations.begin(), iend = mDualObservations.end(); iter != iend;
-         ++iter)
+    for (auto iter = mDualObservations.begin(), iend = mDualObservations.end(); iter != iend; ++iter)
         ret[iter->first] = iter->second;
 
     return ret;
@@ -330,7 +329,7 @@ size_t KeyFrame::countObservations()
     return mObservations.size();
 }
 
-void KeyFrame::setViewMP(const Point3f& pt3f, size_t idx, const Eigen::Matrix3d& info)
+void KeyFrame::setViewMP(const Point3f& pt3f, size_t idx, const Matrix3d& info)
 {
     locker lock(mMutexObs);
     if (idx < N) {

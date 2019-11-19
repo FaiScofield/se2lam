@@ -106,13 +106,13 @@ if(CROSS_COMPILE)
     set(G2O_INCLUDE_DIR         ${PROJECT_SOURCE_DIR}/dependencies/g2o/include)
     file(GLOB G2O_LIBS          ${PROJECT_SOURCE_DIR}/dependencies/g2o/lib/*.so)
 else(CROSS_COMPILE)
-#    find_package(CSparse REQUIRED)
-#    if(CSPARSE_FOUND)
-#        message("===> CSparse Information: Include Dir: ${CSPARSE_INCLUDE_DIR}" )
-#        message("===> CSparse Information: Libs Dir: ${CSPARSE_LIBRARY}" )
-#    else()
-#        message("===> CSparse Not Found!!!")
-#    endif()
+    find_package(CSparse REQUIRED)
+    if(CSPARSE_FOUND)
+        message("===> CSparse Information: Include Dir: ${CSPARSE_INCLUDE_DIR}" )
+        message("===> CSparse Information: Libs Dir: ${CSPARSE_LIBRARY}" )
+    else()
+        message("===> CSparse Not Found!!!")
+    endif()
 
     find_package(Cholmod REQUIRED)
     if(CHOLMOD_FOUND)
@@ -162,7 +162,7 @@ include_directories(
     ${EIGEN_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
-#    ${CSPARSE_INCLUDE_DIR}
+    ${CSPARSE_INCLUDE_DIR}
     ${CHOLMOD_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
     ${DBOW2_INCLUDE_DIR}
@@ -191,7 +191,7 @@ target_link_libraries(se2lam
     ${DBOW2_LIBS}
     ${LSD161_LIBS}
     ${LineDesc_LIBS}
-#    ${CSPARSE_LIBRARY}
+    ${CSPARSE_LIBRARY}
     ${CHOLMOD_LIBRARIES}
     ${G2O_LIBS}
 )

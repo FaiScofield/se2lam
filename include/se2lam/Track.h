@@ -62,7 +62,6 @@ public:
 private:
     void createFirstFrame(const cv::Mat& img, const double& imgTime, const Se2& odo);
     void trackReferenceKF(const cv::Mat& img, const double& imgTime, const Se2& odo);
-    void relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo);
     void resetLocalTrack();
     bool detectIfLost();
 
@@ -76,14 +75,16 @@ private:
     bool checkFinish();
     void setFinish();
 
+    // relocalization
+    bool relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo);
     bool detectLoopClose();
-    bool verifyLoopClose(std::map<int, int>& _mapMatchMP, std::map<int, int>& _mapMatchAll,
-                         std::map<int, int>& _mapMatchRaw);
+    bool verifyLoopClose(std::map<int, int>& _mapMatchAll, std::map<int, int>& _mapMatchRaw);
     void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
     void removeKPMatch(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                        std::map<int, int>& mapiMatch);
     void doLocalBA();
+    void resetTracking();
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
@@ -102,7 +103,6 @@ private:
     Frame mCurrentFrame;
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpCurrentKF, mpLoopKF;
-    std::vector<cv::Point2f> mPrevMatched;  // 其实就是参考帧的特征点, 匹配过程中会更新
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdx;         // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;

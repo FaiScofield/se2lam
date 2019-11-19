@@ -700,7 +700,8 @@ void Localizer::removeMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
 
     // RANSAC with fundemantal matrix
     vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
-    findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
+    // findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
+    findHomography(vPtCurr, vPtLoop, FM_RANSAC, 3.0, vInlier);
     for (unsigned int i = 0; i < vInlier.size(); ++i) {
         int idxCurr = vIdxCurr[i];
         int idxLoop = vIdxLoop[i];

@@ -436,7 +436,8 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         HA12.copyTo(H.rowRange(0, 3));
 
     int nmatches = 0;
-    vnMatches12 = vector<int>(frame1.N, -1);
+    vnMatches12.clear();
+    vnMatches12.resize(frame1.N, -1);
 
     vector<int> rotHist[HISTO_LENGTH];
     for (int i = 0; i < HISTO_LENGTH; ++i)
