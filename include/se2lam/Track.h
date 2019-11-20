@@ -104,10 +104,10 @@ private:
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpCurrentKF, mpLoopKF;
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
-    std::vector<int> mvMatchIdx;         // Matches12, 参考帧到当前帧的KP匹配索引
+    std::vector<int> mvMatchIdx, mvMatchIdxGood;   // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
-    int mnGoodPrl, mnGoodDepth;  // count number of mLocalMPs with good parallax
-    int mnInliers, mnMatchSum, mnTrackedOld;
+    int mnGoodPrl, mnGoodDepth, mnBadDepth;  // count number of mLocalMPs with good parallax
+    int mnInliers, mnInliersGood, mnTrackedOld;
     int mnLostFrames;
 
     // New KeyFrame rules (according to fps)

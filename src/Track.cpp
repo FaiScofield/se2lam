@@ -31,14 +31,14 @@ bool Track::mbUseOdometry = true;
 Track::Track()
     : mState(cvu::NO_READY_YET), mLastState(cvu::NO_READY_YET), mbPrint(true),
       mbNeedVisualization(false), mpReferenceKF(nullptr), mpCurrentKF(nullptr), mpLoopKF(nullptr),
-      mnGoodPrl(0), mnInliers(0), mnMatchSum(0), mnTrackedOld(0),
+      mnGoodPrl(0), mnInliers(0), mnInliersGood(0), mnTrackedOld(0),
       mnLostFrames(0), mbFinishRequested(false), mbFinished(false)
 {
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
     mpORBmatcher = new ORBmatcher(0.9, true);
 
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1.f, -1.f, -1.f));
-    nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
+    nMinFrames = min(1, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(2 * Config::FPS);            // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
     mMaxAngle = static_cast<float>(g2o::deg2rad(30.));
@@ -108,7 +108,7 @@ void Track::run()
                             PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
                             mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
                             pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
-                            mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdx, mvbGoodPrl);
+                            mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdxGood, mvbGoodPrl);
                             mpReferenceKF = pKF;
                             mLocalMPs = pKF->mvViewMPs;
                         }
@@ -126,7 +126,7 @@ void Track::run()
                         mpReferenceKF->preOdomFromSelf = make_pair(mpCurrentKF, preSE2);
                         mpCurrentKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
 
-                        mpLocalMapper->addNewKF(mpCurrentKF, mLocalMPs, mvMatchIdx, mvbGoodPrl);
+                        mpLocalMapper->addNewKF(mpCurrentKF, mLocalMPs, mvMatchIdxGood, mvbGoodPrl);
                         mpReferenceKF = mpCurrentKF;
                         resetLocalTrack();
                     } else {
@@ -189,30 +189,25 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
     updateFramePose();
 
     //! 基于A仿射变换先验估计投影Cell的位置
-    mnMatchSum = mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix,
-                                                 mvMatchIdx, 25);
+    mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvMatchIdx, 25);
 
     //! 利用仿射矩阵A计算匹配内点，内点数大于10才能继续
     mnInliers = removeOutliers();    // A在此更新
     mnTrackedOld = doTriangulate();  // 更新viewMPs
 
-    if (mnInliers >= 10) {
+    if (mnInliers >= 10)
         drawMatchesForPub(true);
-        printf("[Track][Info ] #%ld-#%ld T2.与参考帧匹配获得的点数: trackedOld/inliers/matchedSum = %d/%d/%d.\n",
-               mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, mnInliers, mnMatchSum);
-    } else {
+    else
         drawMatchesForPub(false);
-        fprintf(stderr,
-                "[Track][Warni] #%ld-#%ld T2.与参考帧匹配内点数少于10! trackedOld/matchedSum = %d/%d.\n",
-                mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, mnMatchSum);
-    }
+    printf("[Track][Info ] #%ld-#%ld T2.与参考帧匹配获得的点数: trackedOld/inliersGood/inliers = %d/%d/%d.\n",
+           mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, mnInliersGood, mnInliers);
 
     N1 += mnTrackedOld;
-    N2 += mnInliers;
-    N3 += mnMatchSum;
+    N2 += mnInliersGood;
+    N3 += mnInliers;
     if (mbPrint && mCurrentFrame.id % 50 == 0) {  // 每隔50帧输出一次平均匹配情况
         float sum = mCurrentFrame.id - 1.0;
-        printf("[Track][Info ] #%ld-#%ld 与参考帧匹配平均点数: tracked/matched/matchedSum = %.2f/%.2f/%.2f\n",
+        printf("[Track][Info ] #%ld-#%ld 与参考帧匹配平均点数: tracked/inliersGood/inliers = %.2f/%.2f/%.2f\n",
                mCurrentFrame.id, mpReferenceKF->id, N1 * 1.f / sum, N2 * 1.f / sum, N3 * 1.f / sum);
     }
 
@@ -226,7 +221,7 @@ void Track::trackReferenceKF(const Mat& img, const double& imgTime, const Se2& o
 
         // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
         // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
-        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdx, mvbGoodPrl);
+        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdxGood, mvbGoodPrl);
 
         mpReferenceKF = pKF;
         resetLocalTrack();
@@ -348,10 +343,9 @@ void Track::drawMatchesForPub(bool warp)
 
     char strMatches[64];
     std::snprintf(strMatches, 64, "F: %ld, KF: %ld-%ld, M: %d/%d", mCurrentFrame.id,
-                  mpReferenceKF->mIdKF, mCurrentFrame.id - mpReferenceKF->id, mnInliers, mnMatchSum);
+                  mpReferenceKF->mIdKF, mCurrentFrame.id - mpReferenceKF->id, mnInliersGood, mnInliers);
     putText(mImgOutMatch, strMatches, Point(240, 15), 1, 1, Scalar(0, 0, 255), 2);
 
-    int nMatches = 0;
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
         if (mvMatchIdx[i] < 0) {
             continue;
@@ -368,14 +362,16 @@ void Track::drawMatchesForPub(bool warp)
                 ptr = ptCur + Point2f(imgRef.cols, 0);
             }
 
-            // 匹配上KP的为绿色
-            circle(mImgOutMatch, ptRef, 3, Scalar(0, 255, 0));
-            circle(mImgOutMatch, ptr, 3, Scalar(0, 255, 0));
-            line(mImgOutMatch, ptRef, ptr, Scalar(255, 255, 0, 0.5));
-            nMatches++;
+            if (mvMatchIdxGood[i] < 0) {
+                circle(mImgOutMatch, ptRef, 3, Scalar(0, 255, 0));
+                circle(mImgOutMatch, ptr, 3, Scalar(0, 255, 0));
+            } else { // 深度好的匹配点才连线
+                circle(mImgOutMatch, ptRef, 3, Scalar(0, 255, 255), -1);
+                circle(mImgOutMatch, ptr, 3, Scalar(0, 255, 255), -1);
+                line(mImgOutMatch, ptRef, ptr, Scalar(255, 255, 20));
+            }
         }
     }
-    assert(nMatches == mnInliers);
 }
 
 cv::Mat Track::getImageMatches()
@@ -492,9 +488,12 @@ int Track::removeOutliers()
 //   Mat H = findHomography(pt1, pt2, RANSAC, 3, mask);  // 朝天花板摄像头应该用H矩阵, F会退化
 
     int nInlier = 0;
+    assert(idxRef.size() == mask.size());
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
-        if (!mask[i])
+        if (!mask[i]) {
+            assert(mvMatchIdx[idxRef[i]] >= 0);
             mvMatchIdx[idxRef[i]] = -1;
+        }
         else
             nInlier++;
     }
@@ -510,7 +509,7 @@ bool Track::needNewKF()
     bool c0 = deltaFrames > nMinFrames;
     bool c1 = deltaFrames > nMaxFrames;
     bool c2 = mnInliers < nMinMatches;
-    bool c3 = mnTrackedOld <= static_cast<int>(nOldObs * 0.5f);
+    bool c3 = mnTrackedOld <= static_cast<int>(nOldObs * 0.5f); // 太近可能为0
     bool c4 = mnGoodPrl > static_cast<int>(mnGoodDepth * 0.6);
     bool bNeedNewKF = c0 && (c1 || c2 || (c3 && c4));
 
@@ -568,15 +567,18 @@ int Track::doTriangulate()
     Point3f Ocam1 = Point3f(0.f, 0.f, 0.f);
     Point3f Ocam2 = Point3f(Tc1c2.rowRange(0, 3).col(3));
     mvbGoodPrl = vector<bool>(mpReferenceKF->N, false);
+    mvMatchIdxGood = mvMatchIdx;
+    mnInliersGood = mnInliers;
     mnGoodPrl = 0;
     mnGoodDepth = 0;
+    mnBadDepth = 0;
 
     // 相机1和2的投影矩阵
     cv::Mat Proj1 = Config::PrjMtrxEye;                 // P1 = K * cv::Mat::eye(3, 4, CV_32FC1)
     cv::Mat Proj2 = Config::Kcam * Tcr.rowRange(0, 3);  // P2 = K * Tc2c1(3*4)
 
     // 1.遍历参考帧的KP
-    int nTrackedOld(0), nBadDepth(0);
+    int nTrackedOld = 0;
     for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
@@ -603,13 +605,14 @@ int Track::doTriangulate()
                 mnGoodPrl++;
                 mvbGoodPrl[i] = true;
             }
-        } else {  // 3.如果深度计算不符合预期，就剔除此匹配点对
-            nBadDepth++;
-            mvMatchIdx[i] = -1;
+        } else {  // 3.如果深度计算不符合预期，剔除此匹配对
+            mnBadDepth++;
+            mnInliersGood--;
+            mvMatchIdxGood[i] = -1;
         }
     }
     printf("[Track][Info ] #%ld-#%ld T1.三角化, 良好视差点数/生成点数/因深度不符而剔除的匹配点对数: %d/%d/%d\n",
-           mCurrentFrame.id, mpReferenceKF->id, mnGoodPrl, mnGoodDepth, nBadDepth);
+           mCurrentFrame.id, mpReferenceKF->id, mnGoodPrl, mnGoodDepth, mnBadDepth);
 
     return nTrackedOld;
 }
@@ -707,14 +710,14 @@ bool Track::relocalization(const cv::Mat& img, const double& imgTime, const Se2&
 
             mnInliers = mapMatchGood.size();
             mnTrackedOld = mapMatchRaw.size();
-            mvMatchIdx.clear();
-            mvMatchIdx.resize(mpReferenceKF->N, -1);
+            mvMatchIdxGood.clear();
+            mvMatchIdxGood.resize(mpReferenceKF->N, -1);
             mvbGoodPrl.clear();
             mvbGoodPrl.resize(mpReferenceKF->N, false);
             for (auto iter = mapMatchGood.begin(); iter != mapMatchGood.end(); iter++) {
                 int idxCurr = iter->first;
                 int idxLoop = iter->second;
-                mvMatchIdx[idxLoop] = idxCurr;
+                mvMatchIdxGood[idxLoop] = idxCurr;
                 mvbGoodPrl[idxLoop] = true;
 
                 bool isMPLoop = mpLoopKF->hasObservation(idxLoop);
@@ -973,6 +976,7 @@ void Track::resetTracking()
     mpLoopKF = nullptr;
     mLocalMPs.clear();
     mvMatchIdx.clear();
+    mvMatchIdxGood.clear();
     mvbGoodPrl.clear();
     N1 = N2 = N3 = 0;
     mnLostFrames = 0;
