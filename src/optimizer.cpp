@@ -240,8 +240,8 @@ void addVertexSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int id, bo
 {
     g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
     v->setEstimate(pose);
-    v->setFixed(fixed);
     v->setId(id);
+    v->setFixed(fixed);
     opt.addVertex(v);
 }
 

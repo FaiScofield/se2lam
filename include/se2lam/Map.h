@@ -42,6 +42,7 @@ public:
     size_t countMPs();
     size_t countLocalKFs();
     size_t countLocalMPs();
+    size_t countRefKFs();
     std::vector<PtrKeyFrame> getAllKFs();
     std::vector<PtrMapPoint> getAllMPs();
     std::vector<PtrKeyFrame> getLocalKFs();
@@ -122,14 +123,14 @@ protected:
     std::mutex mMutexCurrentFrame;
 
     //! for new temporary map
-    PtrKeyFrame mNewCurrentKF;
-    cv::Mat mNewCurrentFramePose;
-    std::set<PtrMapPoint, MapPoint::IdLessThan> mNewMPs;
-    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mNewKFs;
-    std::vector<PtrMapPoint> mvNewLocalMPs;
-    std::vector<PtrKeyFrame> mvNewLocalKFs;
-    std::vector<PtrKeyFrame> mvNewRefKFs;
-    std::mutex mMutexNewMap;
+//    PtrKeyFrame mNewCurrentKF;
+//    cv::Mat mNewCurrentFramePose;
+//    std::set<PtrMapPoint, MapPoint::IdLessThan> mNewMPs;
+//    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mNewKFs;
+//    std::vector<PtrMapPoint> mvNewLocalMPs;
+//    std::vector<PtrKeyFrame> mvNewLocalKFs;
+//    std::vector<PtrKeyFrame> mvNewRefKFs;
+//    std::mutex mMutexNewMap;
 
 };  // class Map
 

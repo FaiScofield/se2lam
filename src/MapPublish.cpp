@@ -220,6 +220,8 @@ void MapPublish::run()
             break;
         if (mpMap->empty())
             continue;
+        if (mpMap->getCurrentKF() == nullptr)
+            continue;
 
 //        Mat imgCurr, imgLast, imgRef;
 //        Point2f kpsCurr, kpsLast, kpsRef;

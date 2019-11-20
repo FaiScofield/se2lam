@@ -19,7 +19,7 @@ using namespace cv;
 using namespace std;
 typedef unique_lock<mutex> locker;
 
-unsigned long MapPoint::mNextId = 1;
+unsigned long MapPoint::mNextId = 0;
 
 
 MapPoint::MapPoint()

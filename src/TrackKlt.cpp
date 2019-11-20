@@ -649,7 +649,7 @@ bool TrackKlt::needNewKF()
     if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
     } else if (c0 && c2 && bNeedKFByOdo) {
-        fprintf(stderr, "[Track][Info ] #%ld(#KF%ld) 强制添加KF, 关键帧条件的满足情况: %d/%d/%d/%d/%d/%d/%d\n",
+        fprintf(stderr, "[Track][Info ] #%ld(KF#%ld) 强制添加KF, 关键帧条件的满足情况: %d/%d/%d/%d/%d/%d/%d\n",
                 mCurrentFrame.id, KeyFrame::mNextIdKF, c0, c1, c2, c3, c4, c5, c6);
         mpLocalMapper->setAbortBA();
         mpLocalMapper->setAcceptNewKF(true);

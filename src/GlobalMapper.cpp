@@ -361,7 +361,7 @@ void GlobalMapper::globalBA()
             continue;
 
         Mat Twc = cvu::inv(pKF->getPose());
-        bool bIfFix = (pKF->mIdKF == 1);
+        bool bIfFix = (pKF->mIdKF == 0);
 
 //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(Twc), pKF->mIdKF,

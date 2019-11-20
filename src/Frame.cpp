@@ -18,7 +18,7 @@ using namespace std;
 
 typedef unique_lock<mutex> locker;
 
-unsigned long Frame::nextId = 1;
+unsigned long Frame::nextId = 0;
 bool Frame::bIsInitialComputation = true;
 bool Frame::bNeedVisualization = true;
 float Frame::minXUn, Frame::minYUn, Frame::maxXUn, Frame::maxYUn;

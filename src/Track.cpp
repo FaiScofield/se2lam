@@ -351,6 +351,7 @@ void Track::drawMatchesForPub(bool warp)
                   mpReferenceKF->mIdKF, mCurrentFrame.id - mpReferenceKF->id, mnInliers, mnMatchSum);
     putText(mImgOutMatch, strMatches, Point(240, 15), 1, 1, Scalar(0, 0, 255), 2);
 
+    int nMatches = 0;
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
         if (mvMatchIdx[i] < 0) {
             continue;
@@ -371,8 +372,10 @@ void Track::drawMatchesForPub(bool warp)
             circle(mImgOutMatch, ptRef, 3, Scalar(0, 255, 0));
             circle(mImgOutMatch, ptr, 3, Scalar(0, 255, 0));
             line(mImgOutMatch, ptRef, ptr, Scalar(255, 255, 0, 0.5));
+            nMatches++;
         }
     }
+    assert(nMatches == mnInliers);
 }
 
 cv::Mat Track::getImageMatches()
@@ -528,20 +531,20 @@ bool Track::needNewKF()
         return false;
 
     if (mpLocalMapper->acceptNewKF()) {
-        fprintf(stderr, "[Track][Info ] #%ld-#%ld 成为了新的KF, 其KF条件满足情况: "
+        printf("[Track][Info ] #%ld-#%ld 成为了新的KF, 其KF条件满足情况: "
                 "下限(%d)/上限(%d)/内点(%d)/关联(%d)/视差(%d)/旋转(%d)/平移(%d)\n",
                 mCurrentFrame.id, mpReferenceKF->id, c0, c1, c2, c3, c4, c5, c6);
         return true;
     } else {
         if (c0 && c2 && bNeedKFByOdo) {
-            fprintf(stderr, "[Track][Info ] #%ld-#%ld 强制添加KF, 其KF条件满足情况: "
+            printf("[Track][Info ] #%ld-#%ld 强制添加KF, 其KF条件满足情况: "
                     "下限(%d)/上限(%d)/内点(%d)/关联(%d)/视差(%d)/旋转(%d)/平移(%d)\n",
                     mCurrentFrame.id, mpReferenceKF->id, c0, c1, c2, c3, c4, c5, c6);
             mpLocalMapper->setAbortBA();  // 如果必须要加入关键帧,则终止LocalMap优化
             mpLocalMapper->setAcceptNewKF(true);
             return true;
         } else {
-            fprintf(stderr, "[Track][Warni] #%ld-#%ld 应该成为了新的KF, 但局部地图繁忙!\n",
+            printf("[Track][Warni] #%ld-#%ld 应该成为了新的KF, 但局部地图繁忙!\n",
                     mCurrentFrame.id, mpReferenceKF->id);
         }
     }
@@ -581,7 +584,6 @@ int Track::doTriangulate()
         // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则可见地图点更新为此MP
         if (mpReferenceKF->hasObservation(i)) {
             mLocalMPs[i] = mpReferenceKF->mvViewMPs[i];
-            // mLocalMPs[i] = mpReferenceKF->getViewMPPoseInCamareFrame(i);
             nTrackedOld++;
             continue;
         }

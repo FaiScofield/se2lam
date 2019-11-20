@@ -23,7 +23,7 @@ using namespace g2o;
 
 typedef unique_lock<mutex> locker;
 
-Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr), mNewCurrentKF(nullptr)
+Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 {
     mCurrentFramePose = cv::Mat::eye(4, 4, CV_32FC1);
 }
@@ -136,6 +136,12 @@ size_t Map::countLocalMPs()
     return mvLocalGraphMPs.size();
 }
 
+size_t Map::countRefKFs()
+{
+    locker lock(mMutexLocalGraph);
+    return mvRefKFs.size();
+}
+
 vector<PtrKeyFrame> Map::getAllKFs()
 {
     locker lock(mMutexGlobalGraph);
@@ -178,10 +184,10 @@ void Map::clear()
     mvLocalGraphMPs.clear();
     mvRefKFs.clear();
     isEmpty = true;
-    //mCurrentKF = nullptr;
-    //mCurrentFramePose.release();
-    KeyFrame::mNextIdKF = 1;
-    MapPoint::mNextId = 1;
+    mCurrentKF = nullptr;
+    mCurrentFramePose.release();
+    KeyFrame::mNextIdKF = 0;
+    MapPoint::mNextId = 0;
 }
 
 //! 没用到
@@ -219,11 +225,9 @@ Mat Map::getCurrentFramePose()
  */
 bool Map::pruneRedundantKF()
 {
-    printf("[ Map ][Info ] #%ld(KF#%ld) 正在修剪冗余KF...\n", mCurrentKF->id,
-           mCurrentKF->mIdKF);
-
-    std::vector<PtrMapPoint> vLocalGraphMPs;
-    std::vector<PtrKeyFrame> vLocalGraphKFs;
+    WorkTimer timer;
+    vector<PtrMapPoint> vLocalGraphMPs;
+    vector<PtrKeyFrame> vLocalGraphKFs;
 
     {
         locker lock1(mMutexLocalGraph);
@@ -235,123 +239,71 @@ bool Map::pruneRedundantKF()
         return false;
 
     bool pruned = false;
-    int prunedIdxLocalKF = -1;
+    int nPruned = 0;
 
-    vector<int> goodIdxLocalKF;
-    vector<int> goodIdxLocalMP;
-    size_t nKFsBefore = vLocalGraphKFs.size();
-    size_t nMPsBefore = vLocalGraphMPs.size();
+    const double theshl = 10000;                 // 10m
+    const double thesht = 45 * 3.1415926 / 180;  // 45 degree to rad
 
     //! FIXME 每次修剪都从0开始重新计算，LocalMapper重复调用时会有很多重复计算
     for (int i = 0, iend = vLocalGraphKFs.size(); i != iend; ++i) {
-        bool prunedThis = false;
-        if (!pruned) {  //! FIXME 这使得一次只会去除1帧
-            PtrKeyFrame thisKF = vLocalGraphKFs[i];
+        PtrKeyFrame& thisKF = vLocalGraphKFs[i];
 
-            // 首帧和当前帧不能被修剪
-            if (thisKF->isNull() || mCurrentKF->mIdKF == thisKF->mIdKF || thisKF->mIdKF == 1)
-                continue;
+        // 首帧和当前帧不能被修剪
+        if (thisKF->isNull() || mCurrentKF->mIdKF == thisKF->mIdKF || thisKF->mIdKF == 0)
+            continue;
 
-            // Count MPs in thisKF observed by covKFs 2 times
-            //! 共视KF中观测到本KF中MP两次以上的比例大于80%则视此KF为冗余的
-            set<PtrMapPoint> spMPs;
-            set<PtrKeyFrame> covKFs = thisKF->getAllCovisibleKFs();
-            float ratio = compareViewMPs(thisKF, covKFs, spMPs, 2);
-            bool bIsThisKFRedundant = (ratio >= 0.7f);  //! orig: 0.8
+        // Count MPs in thisKF observed by covKFs 2 times
+        //! 共视KF中观测到本KF中MP两次以上的比例大于80%则视此KF为冗余的
+        set<PtrMapPoint> spMPs;
+        set<PtrKeyFrame> covKFs = thisKF->getAllCovisibleKFs();
+        float ratio = compareViewMPs(thisKF, covKFs, spMPs, 2);
+        bool bIsThisKFRedundant = (ratio >= 0.8f);
 
-            // Do Prune if pass threashold test
-            //! Local KF中的一帧thisKF要被修剪，则需要更新它们的联接关系
-            if (bIsThisKFRedundant) {
-                PtrKeyFrame lastKF = thisKF->mOdoMeasureTo.first;
-                PtrKeyFrame nextKF = thisKF->mOdoMeasureFrom.first;
+        // Do Prune if pass threashold test
+        //! Local KF中的一帧thisKF要被修剪，则需要更新它们的联接关系
+        if (bIsThisKFRedundant) {
+            PtrKeyFrame lastKF = thisKF->mOdoMeasureTo.first;
+            PtrKeyFrame nextKF = thisKF->mOdoMeasureFrom.first;
 
-                // 这两句多余
-                bool bIsInitKF = (thisKF->mIdKF == 1);
-                bool bHasFeatEdge = (thisKF->mFtrMeasureFrom.size() != 0);
+            bool bHasFeatEdge = (thisKF->mFtrMeasureFrom.size() != 0);
 
-                // Prune this KF and link a new odometry constrait
-                //! 非首尾帧
-                if (lastKF && nextKF && !bIsInitKF && !bHasFeatEdge) {
-                    Se2 dOdoLastThis = thisKF->odom - lastKF->odom;
-                    Se2 dOdoThisNext = nextKF->odom - thisKF->odom;
+            // Prune this KF and link a new odometry constrait
+            if (lastKF && nextKF && !bHasFeatEdge) {
+                Se2 dOdoLastThis = thisKF->odom - lastKF->odom;
+                Se2 dOdoThisNext = nextKF->odom - thisKF->odom;
 
-                    double theshl = 10000;                 // 10m
-                    double thesht = 45 * 3.1415926 / 180;  // 45 degree to rad
+                double dl1 =
+                    sqrt(dOdoLastThis.x * dOdoLastThis.x + dOdoLastThis.y * dOdoLastThis.y);
+                double dt1 = abs(dOdoLastThis.theta);
+                double dl2 =
+                    sqrt(dOdoThisNext.x * dOdoThisNext.x + dOdoThisNext.y * dOdoThisNext.y);
+                double dt2 = abs(dOdoThisNext.theta);
 
-                    double dl1 =
-                        sqrt(dOdoLastThis.x * dOdoLastThis.x + dOdoLastThis.y * dOdoLastThis.y);
-                    double dt1 = abs(dOdoLastThis.theta);
-                    double dl2 =
-                        sqrt(dOdoThisNext.x * dOdoThisNext.x + dOdoThisNext.y * dOdoThisNext.y);
-                    double dt2 = abs(dOdoThisNext.theta);
+                //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
+                if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
+                    thisKF->setNull();
+                    fprintf(stderr, "[ Map ][Info ] KF#%ld 此KF被修剪, 引用计数 = %ld\n",
+                            thisKF->mIdKF, thisKF.use_count());
 
-                    //! 被修剪帧的前后帧之间位移不能超过10m，角度不能超过45°，防止修剪掉在大旋转大平移之间的KF
-                    if (dl1 < theshl && dl2 < theshl && dt1 < thesht && dt2 < thesht) {
-                        //                        mspKFs.erase(thisKF);
-                        thisKF->setNull();
-                        fprintf(stderr, "[ Map ][Info ] KF#%ld 此KF被修剪, 引用计数 = %ld\n",
-                                thisKF->mIdKF, thisKF.use_count());
+                    // 给前后帧之间添加共视关联和约束
+                    Mat measure;
+                    g2o::Matrix6d info;
+                    Track::calcOdoConstraintCam(nextKF->odom - lastKF->odom, measure, info);
+                    nextKF->setOdoMeasureTo(lastKF, measure, toCvMat6f(info));
+                    lastKF->setOdoMeasureFrom(nextKF, measure, toCvMat6f(info));
 
-                        // 给前后帧之间添加共视关联和约束
-                        Mat measure;
-                        g2o::Matrix6d info;
-                        Track::calcOdoConstraintCam(nextKF->odom - lastKF->odom, measure, info);
-                        nextKF->setOdoMeasureTo(lastKF, measure, toCvMat6f(info));
-                        lastKF->setOdoMeasureFrom(nextKF, measure, toCvMat6f(info));
+                    nextKF->addCovisibleKF(lastKF);
+                    lastKF->addCovisibleKF(nextKF);
 
-                        nextKF->addCovisibleKF(lastKF);
-                        lastKF->addCovisibleKF(nextKF);
-
-                        pruned = true;
-                        prunedThis = true;
-                        prunedIdxLocalKF = i;
-                    }
+                    pruned = true;
+                    nPruned++;
                 }
             }
         }
+    }  // 修剪后不用特意更新局部地图, 后面会重新更新.
 
-        if (!prunedThis) {
-            goodIdxLocalKF.push_back(i);
-        }
-    }
-
-    //! Remove useless MP. 去除无用的MP(标记了null)
-    //! NOTE 对KF的修剪基本不会影响到MP, 只是取消了对冗余KF的关联. 但MP观测数为0时会被置为null.
-    if (pruned) {
-        locker lock2(mMutexGlobalGraph);
-        for (int i = 0, iend = vLocalGraphMPs.size(); i != iend; ++i) {
-            PtrMapPoint pMP = vLocalGraphMPs[i];
-            if (pMP->isNull()) {
-                mspMPs.erase(pMP);
-            } else {
-                goodIdxLocalMP.push_back(i);
-            }
-        }
-    }
-
-    // 修剪后更新mLocalGraphMPs和mLocalGraphKFs
-    if (pruned) {
-        vector<PtrMapPoint> vpMPs;
-        vector<PtrKeyFrame> vpKFs;
-        vpMPs.reserve(goodIdxLocalMP.size());
-        vpKFs.reserve(goodIdxLocalKF.size());
-
-        for (int i = 0, iend = goodIdxLocalKF.size(); i != iend; ++i) {
-            vpKFs.push_back(vLocalGraphKFs[goodIdxLocalKF[i]]);
-        }
-
-        for (int i = 0, iend = goodIdxLocalMP.size(); i != iend; ++i) {
-            vpMPs.push_back(vLocalGraphMPs[goodIdxLocalMP[i]]);
-        }
-
-        locker lock3(mMutexLocalGraph);
-        std::swap(vpMPs, mvLocalGraphMPs);
-        std::swap(vpKFs, mvLocalGraphKFs);
-    }
-
-    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap 修剪量: KFs: %ld, Mps: %ld\n", mCurrentKF->id,
-           mCurrentKF->mIdKF, nKFsBefore - mvLocalGraphKFs.size(),
-           nMPsBefore - mvLocalGraphMPs.size());
+    printf("[ Map ][Info ] #%ld(KF#%ld) 共修剪了%d帧KF, 耗时:%.2fms.\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, nPruned, timer.count());
     return pruned;
 }
 
@@ -361,13 +313,13 @@ bool Map::pruneRedundantKF()
  */
 void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 {
-    locker lock(mMutexLocalGraph);
-
     WorkTimer timeCounter;
 
+    locker lock(mMutexLocalGraph);
+
     mvLocalGraphKFs.clear();
-    mvRefKFs.clear();
     mvLocalGraphMPs.clear();
+    mvRefKFs.clear();
 
     std::set<PtrKeyFrame> setLocalKFs;
     std::set<PtrKeyFrame> setRefKFs;
@@ -375,8 +327,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 
     setLocalKFs.insert(mCurrentKF);
 
-    //! kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中,
-    //! 否则经过同一个地方不会考虑到之前添加的KF
+    //! kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中, 否则经过同一个地方不会考虑到之前添加的KF
     WorkTimer timer;
     addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius);
 //    size_t s1 = setLocalKFs.size();
@@ -385,7 +336,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 
     //! 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
     timer.start();
-    int searchLevel = maxLevel;  // 3
+    int searchLevel = maxLevel;  // 2
     while (searchLevel > 0) {
         std::set<PtrKeyFrame> currentLocalKFs = setLocalKFs;
         for (auto i = currentLocalKFs.begin(), iend = currentLocalKFs.end(); i != iend; ++i) {
@@ -402,7 +353,8 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     //! 获得localKFs的所有MPs, 不要求要有良好视差
     //! 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
     timer.start();
-    bool checkPrl = mCurrentKF->id < 5 ? false : true;
+    //bool checkPrl = mCurrentKF->id < 5 ? false : true;
+    bool checkPrl = false;
     for (auto i = setLocalKFs.begin(), iend = setLocalKFs.end(); i != iend; ++i) {
         PtrKeyFrame pKF = *i;
         set<PtrMapPoint> pMPs = pKF->getAllObsMPs(checkPrl);
@@ -433,7 +385,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     mvRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
 
-    printf("[ Map ][Info ] #%ld(KF#%ld) 更新局部地图, 总共得到了%ld个LocalKFs, %ld个LocalMPs和 %ld个RefKFs, 共耗时%.2fms\n",
+    printf("[ Map ][Timer] #%ld(KF#%ld) 更新局部地图, 总共得到了%ld个LocalKFs, %ld个LocalMPs和 %ld个RefKFs, 共耗时%.2fms\n",
            mCurrentKF->id, mCurrentKF->mIdKF, mvLocalGraphKFs.size(), mvLocalGraphMPs.size(), mvRefKFs.size(), timeCounter.count());
 }
 
@@ -509,7 +461,7 @@ float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& spK
     spMPsRet.clear();
     set<PtrMapPoint> spMPsAll = pKFNow->getAllObsMPs(false);
     if (spMPsAll.size() == 0) {
-        return -1.0;
+        return -1.0f;
     }
 
     for (auto iter = spMPsAll.begin(); iter != spMPsAll.end(); iter++) {
@@ -548,22 +500,23 @@ int Map::getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2)
     return count;
 }
 
-//! 此函数在LocalMap的removeOutlierChi2()函数中调用
+//! 在LocalMap::removeOutlierChi2()中调用
 void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2UV*>>& vpEdgesAll,
                          vector<vector<int>>& vnAllIdx)
 {
-    locker lock(mMutexLocalGraph);
     WorkTimer timer;
     printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载局部BA以移除离群MP. removeOutlierChi2()...\n",
            mCurrentKF->id, mCurrentKF->mIdKF);
+
+    locker lock(mMutexLocalGraph);
 
     int camParaId = 0;
     addCamPara(optimizer, Config::Kcam, camParaId);
 
     unsigned long maxKFid = 0;
     unsigned long minKFid = 0;
-    // If no reference KF, the KF with minId should be fixed
 
+    // If no reference KF, the KF with minId should be fixed
     if (mvRefKFs.empty()) {
         minKFid = (*(mvLocalGraphKFs.begin()))->mIdKF;
         for (auto i = mvLocalGraphKFs.begin(), iend = mvLocalGraphKFs.end(); i != iend; ++i) {
@@ -579,17 +532,12 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
     const int nRefKFs = mvRefKFs.size();
 
     // Add local graph KeyFrames
-    for (int i = 0; i != nLocalKFs; ++i) {
-        PtrKeyFrame pKF = mvLocalGraphKFs[i];
-
-        //! TODO 如果下面情况发生，vertexIdKF不就不连续了？出现空的Vertex？
-        if (pKF->isNull()) {
-            fprintf(stderr, "节点ID不连续，因为第%d个LocalKF是null!\n", i);
-            continue;
-        }
+    for (int i = 0; i < nLocalKFs; ++i) {
+        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
+        assert(!pKF->isNull());
 
         int vertexIdKF = i;
-        bool fixed = (pKF->mIdKF == minKFid) || (pKF->mIdKF == 1);
+        bool fixed = (pKF->mIdKF == minKFid) || (pKF->mIdKF == 0);
 
         // 添加位姿节点
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
@@ -599,14 +547,15 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 
     // Add odometry based constraints. 添加里程计约束边
     for (int i = 0; i != nLocalKFs; ++i) {
-        PtrKeyFrame pKF = mvLocalGraphKFs[i];
-
-        if (pKF->isNull())
-            continue;
+        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
+        assert(!pKF->isNull());
 
         PtrKeyFrame pKF1 = pKF->mOdoMeasureFrom.first;
+        if (pKF1 == nullptr || pKF1->isNull())
+            continue;
+
         auto it = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF1);
-        if (it == mvLocalGraphKFs.end() || pKF1->isNull())
+        if (it == mvLocalGraphKFs.end())
             continue;
 
         int id1 = it - mvLocalGraphKFs.begin();  // 这里id1倒是可以跟上面的i对应上
@@ -618,10 +567,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 
     // Add Reference KeyFrames as fixed. 将RefKFs固定
     for (int i = 0; i != nRefKFs; ++i) {
-        PtrKeyFrame pKF = mvRefKFs[i];
-
-        if (pKF->isNull())
-            continue;
+        const PtrKeyFrame& pKF = mvRefKFs[i];
+        assert(!pKF->isNull());
 
         int vertexIdKF = i + nLocalKFs;
 
@@ -642,11 +589,10 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 
     // Add local graph MapPoints
     for (int i = 0; i < N; ++i) {
-        PtrMapPoint pMP = mvLocalGraphMPs[i];
+        const PtrMapPoint& pMP = mvLocalGraphMPs[i];
         assert(!pMP->isNull());
 
         int vertexIdMP = maxKFid + i;  // MP的节点编号
-
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), vertexIdMP);
 
         vector<EdgeProjectXYZ2UV*> vpEdges;
@@ -666,8 +612,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
                 continue;
             }
 
-            int ftrIdx = pMP->getIndexInKF(pKF);
-            int octave = pMP->getOctave(pKF);
+            const int ftrIdx = pMP->getIndexInKF(pKF);
+            const int octave = pMP->getOctave(pKF);
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
             Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
@@ -687,7 +633,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
             EdgeProjectXYZ2UV* ei = addEdgeXYZ2UV(optimizer, uv, vertexIdMP, vertexIdKF, camParaId, info, delta);
             ei->setLevel(0);
 
-            optimizer.addEdge(ei);  //! FIXME addEdgeXYZ2UV()函数里不是添加过了吗？
+            //optimizer.addEdge(ei);  //! FIXME addEdgeXYZ2UV()函数里不是添加过了吗？
             vpEdges.push_back(ei);
             vnIdx.push_back(vertexIdKF);
         }
@@ -738,7 +684,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
 
         int vertexIdKF = i;
 
-        bool fixed = (pKF->mIdKF == minKFid) || pKF->mIdKF == 1;
+        bool fixed = (pKF->mIdKF == minKFid) || pKF->mIdKF == 0;
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
     }
 
@@ -928,19 +874,19 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
 
         Point3f pos = toCvPt3f(estimateVertexSBAXYZ(optimizer, i + maxKFid));
         pMP->setPos(pos);
-        // pMP->updateMeasureInKFs(); // 现在setPos后会自动调用
+        // pMP->updateMeasureInKFs(); // 现在在MapPoint::setPos()后会自动调用
     }
 }
 
-//! 新添的KF在关联MP和生成新的MP之后，如果与Local
-//! KFs的共同MP观测数超过自身观测总数的30%，则为他们之间添加共视关系
+//! 新添的KF在关联MP和生成新的MP之后，如果与LocalKFs的共同MP观测数超过自身观测总数的30%，则为他们之间添加共视关系
+//! 在LocalMap::addNewKF()里调用
 void Map::updateCovisibility(const PtrKeyFrame& pNewKF)
 {
     locker lock1(mMutexLocalGraph);
     locker lock2(mMutexGlobalGraph);
 
-    printf("[ Map ][Info ] #%ld(KF#%ld) 正在更新共视关系... Local KFs数量为: %ld\n",
-           pNewKF->id, pNewKF->mIdKF, mvLocalGraphKFs.size());
+//    printf("[ Map ][Info ] #%ld(KF#%ld) 正在更新共视关系... Local KFs数量为: %ld\n",
+//           pNewKF->id, pNewKF->mIdKF, mvLocalGraphKFs.size());
     for (auto i = mvLocalGraphKFs.begin(), iend = mvLocalGraphKFs.end(); i != iend; ++i) {
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKFi = *i;
@@ -948,8 +894,8 @@ void Map::updateCovisibility(const PtrKeyFrame& pNewKF)
         if (ratios.x > 0.3 || ratios.y > 0.3) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
-            printf("[ Map ][Info ] #%ld(KF#%ld) 和(KF#%ld)添加了共视关系, 共视比例为%.2f, %.2f.\n",
-                   pNewKF->id, pNewKF->mIdKF, pKFi->mIdKF, ratios.x, ratios.y);
+//            printf("[ Map ][Info ] #%ld(KF#%ld) 和(KF#%ld)添加了共视关系, 共视比例为%.2f, %.2f.\n",
+//                   pNewKF->id, pNewKF->mIdKF, pKFi->mIdKF, ratios.x, ratios.y);
         }
     }
 }
@@ -1044,18 +990,18 @@ bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
     return true;
 }
 
-//! 此函数在LocalMap的localBA()函数中调用
+//! 在LocalMap::localBA()中调用
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-//    printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
-//           mCurrentKF->mIdKF);
+    printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
+           mCurrentKF->mIdKF);
 
     locker lock(mMutexLocalGraph);
 
     int camParaId = 0;
     CamPara* campr = addCamPara(optimizer, Config::Kcam, camParaId);
 
-    int maxKFid = -1;
+    unsigned long maxKFid = 0;
     unsigned long minKFid = 0;  // LocalKFs里最小的KFid
 
     // If no reference KF, the KF with minId should be fixed
@@ -1075,30 +1021,22 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     // Add local graph KeyFrames
     for (int i = 0; i < nLocalKFs; ++i) {
-        PtrKeyFrame pKF = mvLocalGraphKFs[i];
-
-        if (pKF->isNull())
-            continue;
+        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
+        assert(!pKF->isNull());
 
         int vertexIdKF = i;
-
-        bool fixed = (pKF->id == minKFid) || (pKF->id == 1);
-        if (fixed)
-            printf("[ Map ][Info ] #%ld(KF#%ld) vertex of #KF%ld is fixed! minKFid = %ld\n",
-                   mCurrentKF->id, mCurrentKF->mIdKF, pKF->id, minKFid);
+        bool fixed = (pKF->id == minKFid) || (pKF->id == 0);
 
         Se2 Twb = pKF->getTwb();
         g2o::SE2 pose(Twb.x, Twb.y, Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
     }
 
-    // Add odometry based constraints
+    // Add odometry based constraints. 添加里程计约束边
     //! TODO preOdomFromSelf这个变量暂时都是0
     for (int i = 0; i < nLocalKFs; ++i) {
-        PtrKeyFrame pKF = mvLocalGraphKFs[i];
-
-        if (pKF->isNull())
-            continue;
+        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
+        assert(!pKF->isNull());
 
         PtrKeyFrame pKF1 = pKF->preOdomFromSelf.first;
         PreSE2 meas = pKF->preOdomFromSelf.second;
@@ -1111,12 +1049,10 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
     }
 
-    // Add Reference KeyFrames as fixed
+    // Add Reference KeyFrames as fixed. 将RefKFs固定
     for (int i = 0; i < nRefKFs; ++i) {
-        PtrKeyFrame pKF = mvRefKFs[i];
-
-        if (pKF->isNull())
-            continue;
+        const PtrKeyFrame& pKF = mvRefKFs[i];
+        assert(!pKF->isNull());
 
         int vertexIdKF = i + nLocalKFs;
 
@@ -1129,39 +1065,32 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     // Store xyz2uv edges
     const int N = mvLocalGraphMPs.size();
-
-    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的顶点情况: nLocalKFs = %d, nRefKFs = %d, nMPs = %d\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, nLocalKFs, nRefKFs, N);
-
     const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
     for (int i = 0; i < N; ++i) {
-        PtrMapPoint pMP = mvLocalGraphMPs[i];
-        assert(!pMP->isNull());  // TODO to delete
+        const PtrMapPoint& pMP = mvLocalGraphMPs[i];
+        assert(!pMP->isNull());
 
         int vertexIdMP = maxKFid + i;
         Vector3d lw = toVector3d(pMP->getPos());
-
         addVertexSBAXYZ(optimizer, lw, vertexIdMP);
 
         std::set<PtrKeyFrame> pKFs = pMP->getObservations();
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
             PtrKeyFrame pKF = (*j);
             if (checkAssociationErr(pKF, pMP)) {
-                fprintf(stderr,
-                        "[ Map ][Warni] localBA() Wrong Association! for KF#%ld-%d and MP#%ld-%d\n",
+                fprintf(stderr, "[ Map ][Warni] localBA() 索引错误! For KF#%ld-%d and MP#%ld-%d\n",
                         pKF->mIdKF, pKF->getFeatureIndex(pMP), pMP->mId, pMP->getIndexInKF(pKF));
                 continue;
             }
 
-            int octave = pMP->getOctave(pKF);
-            size_t ftrIdx = pMP->getIndexInKF(pKF);
+            const int octave = pMP->getOctave(pKF);
+            const int ftrIdx = pMP->getIndexInKF(pKF);
             const float Sigma2 = pKF->mvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
 
             int vertexIdKF = -1;
-
             auto it1 = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF);
             if (it1 != mvLocalGraphKFs.end()) {
                 vertexIdKF = it1 - mvLocalGraphKFs.begin();
@@ -1170,7 +1099,6 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
                 if (it2 != mvRefKFs.end())
                     vertexIdKF = it2 - mvRefKFs.begin() + nLocalKFs;
             }
-
             if (vertexIdKF == -1)
                 continue;
 
@@ -1192,8 +1120,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
             Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
             Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);
-            float Sigma_rotxy = 1. / Config::PlaneMotionInfoXrot;
-            float Sigma_z = 1. / Config::PlaneMotionInfoZ;
+            const float Sigma_rotxy = 1. / Config::PlaneMotionInfoXrot;
+            const float Sigma_z = 1. / Config::PlaneMotionInfoZ;
             Matrix2d Sigma_all = Sigma_rotxy * J_rotxy * J_rotxy.transpose() +
                                  Sigma_z * J_z * J_z.transpose() + Sigma_u;
 
@@ -1204,8 +1132,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     size_t nVertices = optimizer.vertices().size();
     size_t nEdges = optimizer.edges().size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) loadLocalGraph() optimizer nVertices = %ld, nEdges = %ld\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nEdges);
+    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的Graph: 节点数为%ld个(LocalKFs=%d, nRefKFs=%d, nMPs=%d), 边数为%ld条\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nLocalKFs, nRefKFs, N, nEdges);
 
     // check optimizer
 //    auto edges = optimizer.edges();

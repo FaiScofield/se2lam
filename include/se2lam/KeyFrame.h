@@ -145,8 +145,8 @@ protected:
     std::map<size_t, PtrMapPoint> mDualObservations;
 
     std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
-    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
-    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
+//    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
+//    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
 
     std::mutex mMutexObs;
     std::mutex mMutexCovis;

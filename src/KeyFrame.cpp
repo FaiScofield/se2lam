@@ -18,7 +18,7 @@ using namespace Eigen;
 
 typedef unique_lock<mutex> locker;
 
-unsigned long KeyFrame::mNextIdKF = 1;  //! F,KF和MP的编号都是从1开始
+unsigned long KeyFrame::mNextIdKF = 0;  //! F,KF和MP的编号都是从1开始
 
 
 KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mpMap(nullptr), mbNull(false)
@@ -58,7 +58,7 @@ void KeyFrame::setNull()
     locker lckObs(mMutexObs);
     locker lckCov(mMutexCovis);
 
-    if (mIdKF == 1)
+    if (mIdKF == 0)
         return;
 
     mbNull = true;
@@ -85,10 +85,26 @@ void KeyFrame::setNull()
         fprintf(stderr, "[KeyFrame] KF#%ld 取消特征约束之后引用计数 = %ld\n", mIdKF, pThis.use_count());
     mFtrMeasureFrom.clear();
     mFtrMeasureTo.clear();
-    mOdoMeasureFrom.first = nullptr;
-    mOdoMeasureTo.first = nullptr;
-    preOdomFromSelf.first = nullptr;
-    preOdomToSelf.first = nullptr;
+    if (mOdoMeasureFrom.first != nullptr) {
+        if (mOdoMeasureFrom.first->mOdoMeasureTo.first->mIdKF == mIdKF)
+            mOdoMeasureFrom.first->mOdoMeasureTo.first = nullptr;
+        mOdoMeasureFrom.first = nullptr;
+    }
+    if (mOdoMeasureTo.first != nullptr) {
+        if (mOdoMeasureTo.first->mOdoMeasureFrom.first->mIdKF == mIdKF)
+            mOdoMeasureTo.first->mOdoMeasureFrom.first = nullptr;
+        mOdoMeasureTo.first = nullptr;
+    }
+    if (preOdomFromSelf.first != nullptr) {
+        if (preOdomFromSelf.first->preOdomToSelf.first->mIdKF == mIdKF)
+            preOdomFromSelf.first->preOdomToSelf.first = nullptr;
+        preOdomFromSelf.first = nullptr;
+    }
+    if (preOdomToSelf.first != nullptr) {
+        if (preOdomToSelf.first->preOdomFromSelf.first->mIdKF == mIdKF)
+            preOdomToSelf.first->preOdomFromSelf.first = nullptr;
+        preOdomToSelf.first = nullptr;
+    }
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
     fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测前(%ld)引用计数 = %ld\n", mIdKF,
@@ -108,15 +124,17 @@ void KeyFrame::setNull()
         (*it)->eraseCovisibleKF(pThis);
     }
     mspCovisibleKFs.clear();
-    mCovisibleKFsWeight.clear();
-    mvpCovisibleKFsSorted.clear();
+//    mCovisibleKFsWeight.clear();
+//    mvpCovisibleKFsSorted.clear();
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     mvViewMPs.clear();
     mvViewMPsInfo.clear();
 
-    if (mpMap != nullptr)
+    if (mpMap != nullptr) {
+        assert(mIdKF != mpMap->getCurrentKF()->mIdKF);
         mpMap->eraseKF(pThis);
+    }
 
     fprintf(stderr, "[KeyFrame] KF#%ld 被Map设置为null, 处理好各种变量后的引用计数 =  %ld\n", mIdKF,
             pThis.use_count());
@@ -128,14 +146,14 @@ set<PtrKeyFrame> KeyFrame::getAllCovisibleKFs()
     return mspCovisibleKFs;
 }
 
-vector<PtrKeyFrame> KeyFrame::getBestCovisibleKFs(size_t n)
-{
-    locker lock(mMutexCovis);
-    if (n > 0)
-        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
-    else
-        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.end());
-}
+//vector<PtrKeyFrame> KeyFrame::getBestCovisibleKFs(size_t n)
+//{
+//    locker lock(mMutexCovis);
+//    if (n > 0)
+//        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
+//    else
+//        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.end());
+//}
 
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
@@ -143,76 +161,76 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
     mspCovisibleKFs.insert(pKF);
 }
 
-void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
-{
-    locker lock(mMutexCovis);
-    mCovisibleKFsWeight.emplace(pKF, weight);
-    mspCovisibleKFs.insert(pKF);
-}
+//void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
+//{
+//    locker lock(mMutexCovis);
+//    mCovisibleKFsWeight.emplace(pKF, weight);
+//    mspCovisibleKFs.insert(pKF);
+//}
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
     locker lock(mMutexCovis);
     mspCovisibleKFs.erase(pKF);
-    mCovisibleKFsWeight.erase(pKF);
+//    mCovisibleKFsWeight.erase(pKF);
 }
 
-void KeyFrame::sortCovisibleKFs()
-{
-    locker lock(mMutexCovis);
+//void KeyFrame::sortCovisibleKFs()
+//{
+//    locker lock(mMutexCovis);
 
-    vector<pair<PtrKeyFrame, int>> vpCovisbleKFsWeight(mCovisibleKFsWeight.begin(),
-                                                       mCovisibleKFsWeight.end());
-    std::sort(vpCovisbleKFsWeight.begin(), vpCovisbleKFsWeight.end(), SortByValueGreater());
+//    vector<pair<PtrKeyFrame, int>> vpCovisbleKFsWeight(mCovisibleKFsWeight.begin(),
+//                                                       mCovisibleKFsWeight.end());
+//    std::sort(vpCovisbleKFsWeight.begin(), vpCovisbleKFsWeight.end(), SortByValueGreater());
 
-    size_t n = vpCovisbleKFsWeight.size();
-    mvpCovisibleKFsSorted.clear();
-    mvpCovisibleKFsSorted.resize(n);
-    for (size_t i = 0; i < n; ++i)
-        mvpCovisibleKFsSorted[i] = vpCovisbleKFsWeight[i].first;
-}
+//    size_t n = vpCovisbleKFsWeight.size();
+//    mvpCovisibleKFsSorted.clear();
+//    mvpCovisibleKFsSorted.resize(n);
+//    for (size_t i = 0; i < n; ++i)
+//        mvpCovisibleKFsSorted[i] = vpCovisbleKFsWeight[i].first;
+//}
 
 //! TODO  test funciton. 不要加锁
-void KeyFrame::updateCovisibleKFs()
-{
-    map<PtrKeyFrame, int> KFCounter;
-    set<PtrMapPoint> spMP = getAllObsMPs(false);  // mMutexObs
+//void KeyFrame::updateCovisibleKFs()
+//{
+//    map<PtrKeyFrame, int> KFCounter;
+//    set<PtrMapPoint> spMP = getAllObsMPs(false);  // mMutexObs
 
-    for (auto iter = spMP.begin(), iend = spMP.end(); iter != iend; iter++) {
-        PtrMapPoint pMP = *iter;
-        if (!pMP || pMP->isNull())
-            continue;
+//    for (auto iter = spMP.begin(), iend = spMP.end(); iter != iend; iter++) {
+//        PtrMapPoint pMP = *iter;
+//        if (!pMP || pMP->isNull())
+//            continue;
 
-        set<PtrKeyFrame> sKFObs = pMP->getObservations();
-        for (auto mit = sKFObs.begin(), mend = sKFObs.end(); mit != mend; mit++) {
-            PtrKeyFrame pKFObs = *mit;
-            if (pKFObs->mIdKF == mIdKF)
-                continue;  // 除去自身，自己与自己不算共视
-            KFCounter[pKFObs]++;
-        }
-    }
+//        set<PtrKeyFrame> sKFObs = pMP->getObservations();
+//        for (auto mit = sKFObs.begin(), mend = sKFObs.end(); mit != mend; mit++) {
+//            PtrKeyFrame pKFObs = *mit;
+//            if (pKFObs->mIdKF == mIdKF)
+//                continue;  // 除去自身，自己与自己不算共视
+//            KFCounter[pKFObs]++;
+//        }
+//    }
 
-    if (KFCounter.empty())
-        return;  // This should not happen
+//    if (KFCounter.empty())
+//        return;  // This should not happen
 
-    vector<pair<PtrKeyFrame, int>> vpKFsWeight(KFCounter.begin(), KFCounter.end());
-    std::sort(vpKFsWeight.begin(), vpKFsWeight.end(), SortByValueGreater());
+//    vector<pair<PtrKeyFrame, int>> vpKFsWeight(KFCounter.begin(), KFCounter.end());
+//    std::sort(vpKFsWeight.begin(), vpKFsWeight.end(), SortByValueGreater());
 
-    int th = 5;
-    if (vpKFsWeight[0].second < th) {
-        addCovisibleKF(vpKFsWeight[0].first, vpKFsWeight[0].second);  // mMutexCovis
-        (vpKFsWeight[0].first)->addCovisibleKF(shared_from_this(), vpKFsWeight[0].second);
-    } else {
-        for (auto mit = vpKFsWeight.begin(), mend = vpKFsWeight.end(); mit != mend; mit++) {
-            if (mit->second >= th) {
-                addCovisibleKF(mit->first, mit->second);  // mMutexCovis
-                (mit->first)->addCovisibleKF(shared_from_this(), mit->second);
-            }
-        }
-    }
+//    int th = 5;
+//    if (vpKFsWeight[0].second < th) {
+//        addCovisibleKF(vpKFsWeight[0].first, vpKFsWeight[0].second);  // mMutexCovis
+//        (vpKFsWeight[0].first)->addCovisibleKF(shared_from_this(), vpKFsWeight[0].second);
+//    } else {
+//        for (auto mit = vpKFsWeight.begin(), mend = vpKFsWeight.end(); mit != mend; mit++) {
+//            if (mit->second >= th) {
+//                addCovisibleKF(mit->first, mit->second);  // mMutexCovis
+//                (mit->first)->addCovisibleKF(shared_from_this(), mit->second);
+//            }
+//        }
+//    }
 
-    sortCovisibleKFs();  // mMutexCovis
-}
+//    sortCovisibleKFs();  // mMutexCovis
+//}
 
 size_t KeyFrame::countCovisibleKFs()
 {

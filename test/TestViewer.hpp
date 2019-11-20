@@ -523,7 +523,7 @@ void TestViewer::publishMapPoints()
     vector<PtrMapPoint> vpMPAct = mpMap->getLocalMPs();
     set<PtrMapPoint> spMPNow= mpMap->getCurrentKF()->getAllObsMPs();
     vector<PtrMapPoint> vpMPNeg;
-    fprintf(stdout, "[Viewe] #%ld(#KF%ld) MPsAll = %ld, MPsLocal = %ld, MPsObs = %ld\n",
+    fprintf(stdout, "[Viewe] #%ld(KF#%ld) MPsAll = %ld, MPsLocal = %ld, MPsObs = %ld\n",
             pKFCur->id, pKFCur->mIdKF, vpMPAll.size(), vpMPAct.size(), spMPNow.size());
 
     // MPsAll 包含了 MPsNeg 和 MPsAct
@@ -544,13 +544,13 @@ void TestViewer::publishMapPoints()
     }
     vpMPAct.swap(vpMPActGood); // MPsAct 去掉 MPsNow
 
-    fprintf(stdout, "[Viewe] #%ld(#KF%ld) MPsAll = %ld, MPsNeg = %ld, MPsAct = %ld, MPsNow = %ld\n",
+    fprintf(stdout, "[Viewe] #%ld(KF#%ld) MPsAll = %ld, MPsNeg = %ld, MPsAct = %ld, MPsNow = %ld\n",
             pKFCur->id, pKFCur->mIdKF, vpMPAll.size(), vpMPNeg.size(), vpMPAct.size(), spMPNow.size());
 
     mMPsNeg.points.reserve(vpMPNeg.size());
     for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
         if (vpMPNeg[i]->isNull()) {
-            fprintf(stdout, "[Viewe] #%ld(#KF%ld) Negtive MPs里面有坏点(id%ld)没有析构!\n",
+            fprintf(stdout, "[Viewe] #%ld(KF#%ld) Negtive MPs里面有坏点(id%ld)没有析构!\n",
                     pKFCur->id, pKFCur->mIdKF, vpMPNeg[i]->mId);
             continue;
         }
@@ -569,7 +569,7 @@ void TestViewer::publishMapPoints()
     mMPsAct.points.reserve(vpMPAct.size());
     for (int i = 0, iend = vpMPAct.size(); i != iend; ++i) {
         if (vpMPAct[i]->isNull()) {
-            fprintf(stderr, "[Viewe] #%ld(#KF%ld) Active MPs里面有坏点(id%ld)没有析构!\n",
+            fprintf(stderr, "[Viewe] #%ld(KF#%ld) Active MPs里面有坏点(id%ld)没有析构!\n",
                     pKFCur->id, pKFCur->mIdKF, vpMPAct[i]->mId);
             continue;
         }
@@ -589,7 +589,7 @@ void TestViewer::publishMapPoints()
     for (auto iter = spMPNow.begin(); iter != spMPNow.end(); iter++) {
         PtrMapPoint pMPtmp = *iter;
         if (pMPtmp->isNull()) {
-            fprintf(stderr, "[Viewe] #%ld(#KF%ld) Now MPs里面有坏点(id%ld)没有析构!\n",
+            fprintf(stderr, "[Viewe] #%ld(KF#%ld) Now MPs里面有坏点(id%ld)没有析构!\n",
                     pKFCur->id, pKFCur->mIdKF, pMPtmp->mId);
             continue;
         }

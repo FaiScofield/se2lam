@@ -74,7 +74,7 @@ public:
     int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                           std::map<int, int>& matches12, const int winSize);
 
-    int MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
+    int MatchByProjection(PtrKeyFrame& pNewKF, const std::vector<PtrMapPoint>& localMPs,
                           const int winSize, const int levelOffset,
                           std::vector<int>& vMatchesIdxMP);
 

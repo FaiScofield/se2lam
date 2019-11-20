@@ -240,7 +240,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
             //! TODO to delete, for debug.
             //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新, 故这里不能生成MP
             if (posW.z < 0.f) {
-                fprintf(stderr, "[LocalMap] #KF%ld的mvViewMPs[%ld].z < 0. \n", mpReferenceKF->mIdKF, i);
+                fprintf(stderr, "[LocalMap] KF#%ld的mvViewMPs[%ld].z < 0. \n", mpReferenceKF->mIdKF, i);
                 cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << mpReferenceKF->mvViewMPs[i] << endl;
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
                 continue;

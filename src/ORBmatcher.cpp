@@ -670,7 +670,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
  * @param vMatchesIdxMP 匹配上的MP索引[output]
  * @return              返回匹配成功的点对数
  */
-int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>& localMPs,
+int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, const std::vector<PtrMapPoint>& localMPs,
                                   const int winSize, const int levelOffset,
                                   std::vector<int>& vMatchesIdxMP)
 {
@@ -680,7 +680,7 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame& pNewKF, std::vector<PtrMapPoint>&
     vector<int> vMatchesDistance(pNewKF->N, INT_MAX);
 
     for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
-        PtrMapPoint pMP = localMPs[i];
+        const PtrMapPoint& pMP = localMPs[i];
         if (pMP->isNull() || !pMP->isGoodPrl()) // NOTE 视差暂时不好的不能投影! 20191022
             continue;
         if (pNewKF->hasObservation(pMP))
