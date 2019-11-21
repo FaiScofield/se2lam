@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "converter.h"
 #include "cvutil.h"
+#include "MapPoint.h"
 
 namespace se2lam
 {
@@ -16,27 +17,26 @@ using namespace std;
 using namespace Eigen;
 
 
-EdgeSE2XYZ *addEdgeSE2XYZ(SlamOptimizer &opt, const Vector2D &meas, int id0, int id1,
-                          CamPara *campara, const SE3Quat &_Tbc, const Matrix2D &info,
-                          double thHuber)
+EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
+                          CamPara* campara, const SE3Quat& _Tbc, const Matrix2D& info, double thHuber)
 {
-    EdgeSE2XYZ *e = new EdgeSE2XYZ;
+    EdgeSE2XYZ* e = new EdgeSE2XYZ;
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setCameraParameter(campara);
     e->setExtParameter(_Tbc);
     e->setMeasurement(meas);
     e->setInformation(info);
-    g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     rk->setDelta(thHuber);
     e->setRobustKernel(rk);
     opt.addEdge(e);
     return e;
 }
 
-VertexSE2 *addVertexSE2(SlamOptimizer &opt, const SE2 &pose, int id, bool fixed)
+VertexSE2* addVertexSE2(SlamOptimizer& opt, const SE2& pose, int id, bool fixed)
 {
-    VertexSE2 *v = new VertexSE2;
+    VertexSE2* v = new VertexSE2;
     v->setId(id);
     v->setEstimate(pose);
     v->setFixed(fixed);
@@ -44,16 +44,15 @@ VertexSE2 *addVertexSE2(SlamOptimizer &opt, const SE2 &pose, int id, bool fixed)
     return v;
 }
 
-SE2 estimateVertexSE2(SlamOptimizer &opt, int id)
+SE2 estimateVertexSE2(SlamOptimizer& opt, int id)
 {
-    VertexSE2 *v = static_cast<VertexSE2 *>(opt.vertex(id));
+    VertexSE2* v = static_cast<VertexSE2*>(opt.vertex(id));
     return v->estimate();
 }
 
-PreEdgeSE2 *addEdgeSE2(SlamOptimizer &opt, const Vector3D &meas, int id0, int id1,
-                       const Matrix3D &info)
+PreEdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
 {
-    PreEdgeSE2 *e = new PreEdgeSE2;
+    PreEdgeSE2* e = new PreEdgeSE2;
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(meas);
@@ -62,7 +61,7 @@ PreEdgeSE2 *addEdgeSE2(SlamOptimizer &opt, const Vector3D &meas, int id0, int id
     return e;
 }
 
-Matrix3D Jl(const Vector3D &v3d)
+Matrix3D Jl(const Vector3D& v3d)
 {
     double theta = v3d.norm();
     double invtheta = 1. / theta;
@@ -75,7 +74,7 @@ Matrix3D Jl(const Vector3D &v3d)
     return Jl;
 }
 
-Matrix3D invJl(const Vector3D &v3d)
+Matrix3D invJl(const Vector3D& v3d)
 {
     double theta = v3d.norm();
     double thetahalf = theta * 0.5;
@@ -89,7 +88,7 @@ Matrix3D invJl(const Vector3D &v3d)
     return invJl;
 }
 
-Matrix6d AdjTR(const g2o::SE3Quat &pose)
+Matrix6d AdjTR(const g2o::SE3Quat& pose)
 {
     Matrix3D R = pose.rotation().toRotationMatrix();
     Matrix6d res;
@@ -102,7 +101,7 @@ Matrix6d AdjTR(const g2o::SE3Quat &pose)
 
 //! 计算BCH近似表达式中的inv(J_l),
 //! @see: 视觉SLAM十四讲试(4.30)-(4.32)
-Matrix6d invJJl(const Vector6d &v6d)
+Matrix6d invJJl(const Vector6d& v6d)
 {
 
     //! rho: translation; phi: rotation
@@ -138,8 +137,7 @@ Matrix6d invJJl(const Vector6d &v6d)
 
     Matrix3D Ql = 0.5 * Rho + (theta - sint) * invtheta3 * (PhiRho + RhoPhi + PhiRhoPhi) -
                   temp * (PhiPhiRho + RhoPhiPhi - 3. * PhiRhoPhi) -
-                  0.5 * (temp - (3. * (theta - sint) + theta3 * 0.5) * invtheta5) *
-                      (PhiRhoPhiPhi + PhiPhiRhoPhi);
+                  0.5 * (temp - (3. * (theta - sint) + theta3 * 0.5) * invtheta5) * (PhiRhoPhiPhi + PhiPhiRhoPhi);
 
 
     double thetahalf = theta * 0.5;
@@ -169,12 +167,12 @@ EdgeSE3ExpmapPrior::EdgeSE3ExpmapPrior() : BaseUnaryEdge<6, SE3Quat, VertexSE3Ex
  */
 void EdgeSE3ExpmapPrior::computeError()
 {
-    VertexSE3Expmap *v = static_cast<VertexSE3Expmap *>(_vertices[0]);
+    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
     SE3Quat err = _measurement * v->estimate().inverse();
     _error = err.log();
 }
 
-void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat &m)
+void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat& m)
 {
     _measurement = m;
 }
@@ -182,46 +180,44 @@ void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat &m)
 void EdgeSE3ExpmapPrior::linearizeOplus()
 {
     //! NOTE 0917改成和PPT上一致
-    VertexSE3Expmap *v = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    Vector6d err = (_measurement * v->estimate().inverse()).log() ;
+    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
+    Vector6d err = (_measurement * v->estimate().inverse()).log();
     _jacobianOplusXi = -invJJl(-err);
-//    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
+    //    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
 }
 
-bool EdgeSE3ExpmapPrior::read(istream &is)
+bool EdgeSE3ExpmapPrior::read(istream& is)
 {
     return true;
 }
 
-bool EdgeSE3ExpmapPrior::write(ostream &os) const
+bool EdgeSE3ExpmapPrior::write(ostream& os) const
 {
     return true;
 }
 
-
-void initOptimizer(SlamOptimizer &opt, bool verbose)
+void initOptimizer(SlamOptimizer& opt, bool verbose)
 {
-    SlamLinearSolver *linearSolver = new SlamLinearSolver();
-    SlamBlockSolver *blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm *solver = new SlamAlgorithm(blockSolver);
+    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
     opt.setAlgorithm(solver);
     opt.setVerbose(verbose);
 }
 
-CamPara *addCamPara(SlamOptimizer &opt, const cv::Mat &K, int id)
+CamPara* addCamPara(SlamOptimizer& opt, const cv::Mat& K, int id)
 {
     Eigen::Vector2d principal_point(K.at<float>(0, 2), K.at<float>(1, 2));
-    CamPara *campr = new CamPara(K.at<float>(0, 0), principal_point, 0.);
+    CamPara* campr = new CamPara(K.at<float>(0, 0), principal_point, 0.);
     campr->setId(id);
     opt.addParameter(campr);
 
     return campr;
 }
 
-g2o::ParameterSE3Offset *addParaSE3Offset(SlamOptimizer &opt, const g2o::Isometry3D &se3offset,
-                                          int id)
+g2o::ParameterSE3Offset* addParaSE3Offset(SlamOptimizer& opt, const g2o::Isometry3D& se3offset, int id)
 {
-    g2o::ParameterSE3Offset *para = new g2o::ParameterSE3Offset();
+    g2o::ParameterSE3Offset* para = new g2o::ParameterSE3Offset();
     para->setOffset(se3offset);
     para->setId(id);
     opt.addParameter(para);
@@ -236,9 +232,9 @@ g2o::ParameterSE3Offset *addParaSE3Offset(SlamOptimizer &opt, const g2o::Isometr
  * @param id    KF id
  * @param fixed 要优化相机位姿, 这里是false
  */
-void addVertexSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int id, bool fixed)
+void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bool fixed)
 {
-    g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
+    g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
     v->setEstimate(pose);
     v->setId(id);
     v->setFixed(fixed);
@@ -253,8 +249,8 @@ void addVertexSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int id, bo
  * @param extPara   Config::bTc
  * @return
  */
-EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int vId,
-                                            const cv::Mat &extPara)
+EdgeSE3ExpmapPrior* addPlaneMotionSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
+                                            const cv::Mat& extPara)
 {
 
 //#define USE_EULER
@@ -320,7 +316,7 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
         for (int j = 0; j < i; ++j)
             Info_cw(i, j) = Info_cw(j, i);
 
-    EdgeSE3ExpmapPrior *planeConstraint = new EdgeSE3ExpmapPrior();
+    EdgeSE3ExpmapPrior* planeConstraint = new EdgeSE3ExpmapPrior();
     planeConstraint->setInformation(Info_cw);
 #ifdef USE_EULER
     planeConstraint->setMeasurement(toSE3Quat(Tcw));
@@ -341,10 +337,9 @@ EdgeSE3ExpmapPrior *addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Qu
  * @param marginal  节点是否边缘化
  * @param fixed     节点是否固定, default = false
  */
-void addVertexSBAXYZ(SlamOptimizer &opt, const Eigen::Vector3d &xyz, int id, bool marginal,
-                     bool fixed)
+void addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal, bool fixed)
 {
-    g2o::VertexSBAPointXYZ *v = new g2o::VertexSBAPointXYZ();
+    g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
     v->setEstimate(xyz);
     v->setId(id);
     v->setMarginalized(marginal);
@@ -354,21 +349,21 @@ void addVertexSBAXYZ(SlamOptimizer &opt, const Eigen::Vector3d &xyz, int id, boo
 
 
 // 6d vector (x,y,z,qx,qy,qz) (note that we leave out the w part of the quaternion)
-void addVertexSE3(SlamOptimizer &opt, const g2o::Isometry3D &pose, int id, bool fixed)
+void addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed)
 {
-    g2o::VertexSE3 *v = new g2o::VertexSE3();
+    g2o::VertexSE3* v = new g2o::VertexSE3();
     v->setEstimate(pose);
     v->setFixed(fixed);
     v->setId(id);
     opt.addVertex(v);
 }
 
-g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isometry3D &pose, int id,
-                                           const cv::Mat &extPara, int paraSE3OffsetId, bool fixed)
+g2o::EdgeSE3Prior* addVertexSE3PlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
+                                           const cv::Mat& extPara, int paraSE3OffsetId, bool fixed)
 {
     //#define USE_OLD_SE3_PRIOR_JACOB
 
-    g2o::VertexSE3 *v = new g2o::VertexSE3();
+    g2o::VertexSE3* v = new g2o::VertexSE3();
     v->setEstimate(pose);
     v->setFixed(fixed);
     v->setId(id);
@@ -384,8 +379,7 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
     float yaw = euler(2);
 
     // fix pitch and raw to zero, only yaw remains
-    cv::Mat R_w_b =
-        (cv::Mat_<float>(3, 3) << cos(yaw), -sin(yaw), 0, sin(yaw), cos(yaw), 0, 0, 0, 1);
+    cv::Mat R_w_b = (cv::Mat_<float>(3, 3) << cos(yaw), -sin(yaw), 0, sin(yaw), cos(yaw), 0, 0, 0, 1);
     R_w_b.copyTo(T_w_b.rowRange(0, 3).colRange(0, 3));
     T_w_b.at<float>(2, 3) = 0;  // fix height to zero
 
@@ -403,8 +397,7 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
                           vq_w_b[3] * vq_w_b[3]);
     q_w_b = q_w_b / norm_w_b;
 
-    cv::Mat Info_q_bm_b =
-        (cv::Mat_<float>(4, 4) << 1e-6, 0, 0, 0, 0, 1e4, 0, 0, 0, 0, 1e4, 0, 0, 0, 0, 1e-6);
+    cv::Mat Info_q_bm_b = (cv::Mat_<float>(4, 4) << 1e-6, 0, 0, 0, 0, 1e4, 0, 0, 0, 0, 1e4, 0, 0, 0, 0, 1e-6);
 
 
     //    Info_q_bm_b = Info_q_bm_b + 1e6 * q_w_b * q_w_b.t();
@@ -472,7 +465,7 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
     Isometry3D Iso_w_c = Twc;
 
 #endif
-    g2o::EdgeSE3Prior *planeConstraint = new g2o::EdgeSE3Prior();
+    g2o::EdgeSE3Prior* planeConstraint = new g2o::EdgeSE3Prior();
     planeConstraint->setInformation(Info_pose);
     planeConstraint->setMeasurement(Iso_w_c);
     planeConstraint->vertices()[0] = v;
@@ -485,9 +478,9 @@ g2o::EdgeSE3Prior *addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isomet
 }
 
 // 地图点观测节点
-void addVertexXYZ(SlamOptimizer &opt, const g2o::Vector3D &xyz, int id, bool marginal)
+void addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal)
 {
-    g2o::VertexPointXYZ *v = new g2o::VertexPointXYZ();
+    g2o::VertexPointXYZ* v = new g2o::VertexPointXYZ();
     v->setEstimate(xyz);
     v->setId(id);
     v->setMarginalized(marginal);
@@ -504,12 +497,11 @@ void addVertexXYZ(SlamOptimizer &opt, const g2o::Vector3D &xyz, int id, bool mar
  * @param id1       T2的id
  * @param info      信息矩阵
  */
-void addEdgeSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &measure, int id0, int id1,
-                      const g2o::Matrix6d &info)
+void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, int id1, const g2o::Matrix6d& info)
 {
     assert(verifyInfo(info));
 
-    g2o::EdgeSE3Expmap *e = new g2o::EdgeSE3Expmap();
+    g2o::EdgeSE3Expmap* e = new g2o::EdgeSE3Expmap();
     e->setMeasurement(measure);
     e->vertices()[0] = opt.vertex(id0);  // from
     e->vertices()[1] = opt.vertex(id1);  // to
@@ -536,16 +528,15 @@ void addEdgeSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &measure, int id0, 
  * @param thHuber   鲁棒核
  * @return
  */
-g2o::EdgeProjectXYZ2UV *addEdgeXYZ2UV(SlamOptimizer &opt, const Eigen::Vector2d &measure, int id0,
-                                      int id1, int paraId, const Eigen::Matrix2d &info,
-                                      double thHuber)
+g2o::EdgeProjectXYZ2UV* addEdgeXYZ2UV(SlamOptimizer& opt, const Eigen::Vector2d& measure, int id0,
+                                      int id1, int paraId, const Eigen::Matrix2d& info, double thHuber)
 {
-    g2o::EdgeProjectXYZ2UV *e = new g2o::EdgeProjectXYZ2UV();
+    g2o::EdgeProjectXYZ2UV* e = new g2o::EdgeProjectXYZ2UV();
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(measure);
     e->setInformation(info);
-    g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     rk->setDelta(thHuber);
     e->setRobustKernel(rk);
     e->setParameterId(0, paraId);
@@ -554,10 +545,10 @@ g2o::EdgeProjectXYZ2UV *addEdgeXYZ2UV(SlamOptimizer &opt, const Eigen::Vector2d 
     return e;
 }
 
-g2o::EdgeSE3 *addEdgeSE3(SlamOptimizer &opt, const g2o::Isometry3D &measure, int id0, int id1,
-                         const g2o::Matrix6d &info)
+g2o::EdgeSE3* addEdgeSE3(SlamOptimizer& opt, const g2o::Isometry3D& measure, int id0, int id1,
+                         const g2o::Matrix6d& info)
 {
-    g2o::EdgeSE3 *e = new g2o::EdgeSE3();
+    g2o::EdgeSE3* e = new g2o::EdgeSE3();
     e->setMeasurement(measure);
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
@@ -568,17 +559,16 @@ g2o::EdgeSE3 *addEdgeSE3(SlamOptimizer &opt, const g2o::Isometry3D &measure, int
     return e;
 }
 
-g2o::EdgeSE3PointXYZ *addEdgeSE3XYZ(SlamOptimizer &opt, const g2o::Vector3D &measure, int idse3,
-                                    int idxyz, int paraSE3OffsetId, const g2o::Matrix3D &info,
-                                    double thHuber)
+g2o::EdgeSE3PointXYZ* addEdgeSE3XYZ(SlamOptimizer& opt, const g2o::Vector3D& measure, int idse3, int idxyz,
+                                    int paraSE3OffsetId, const g2o::Matrix3D& info, double thHuber)
 {
-    g2o::EdgeSE3PointXYZ *e = new g2o::EdgeSE3PointXYZ();
+    g2o::EdgeSE3PointXYZ* e = new g2o::EdgeSE3PointXYZ();
     e->vertices()[0] = opt.vertex(idse3);
     e->vertices()[1] = opt.vertex(idxyz);
     e->setMeasurement(measure);
     e->setParameterId(0, paraSE3OffsetId);
     e->setInformation(info);
-    g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     rk->setDelta(thHuber);
     e->setRobustKernel(rk);
     opt.addEdge(e);
@@ -587,31 +577,31 @@ g2o::EdgeSE3PointXYZ *addEdgeSE3XYZ(SlamOptimizer &opt, const g2o::Vector3D &mea
 }
 
 
-g2o::Vector3D estimateVertexSBAXYZ(SlamOptimizer &opt, int id)
+g2o::Vector3D estimateVertexSBAXYZ(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSBAPointXYZ *v = static_cast<g2o::VertexSBAPointXYZ *>(opt.vertex(id));
+    g2o::VertexSBAPointXYZ* v = static_cast<g2o::VertexSBAPointXYZ*>(opt.vertex(id));
     return v->estimate();
 }
 
-g2o::SE3Quat estimateVertexSE3Expmap(SlamOptimizer &opt, int id)
+g2o::SE3Quat estimateVertexSE3Expmap(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSE3Expmap *v = static_cast<g2o::VertexSE3Expmap *>(opt.vertex(id));
+    g2o::VertexSE3Expmap* v = static_cast<g2o::VertexSE3Expmap*>(opt.vertex(id));
     return v->estimate();
 }
 
-g2o::Isometry3D estimateVertexSE3(SlamOptimizer &opt, int id)
+g2o::Isometry3D estimateVertexSE3(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSE3 *v = static_cast<g2o::VertexSE3 *>(opt.vertex(id));
+    g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(opt.vertex(id));
     return v->estimate();
 }
 
-g2o::Vector3D estimateVertexXYZ(SlamOptimizer &opt, int id)
+g2o::Vector3D estimateVertexXYZ(SlamOptimizer& opt, int id)
 {
-    g2o::VertexPointXYZ *v = static_cast<g2o::VertexPointXYZ *>(opt.vertex(id));
+    g2o::VertexPointXYZ* v = static_cast<g2o::VertexPointXYZ*>(opt.vertex(id));
     return v->estimate();
 }
 
-bool verifyInfo(const g2o::Matrix6d &info)
+bool verifyInfo(const g2o::Matrix6d& info)
 {
     bool symmetric = true;
     double th = 0.0001;
@@ -621,12 +611,151 @@ bool verifyInfo(const g2o::Matrix6d &info)
     return symmetric;
 }
 
-bool verifyInfo(const Eigen::Matrix3d &info)
+bool verifyInfo(const Eigen::Matrix3d& info)
 {
     double th = 0.0001;
     return (std::abs(info(0, 1) - info(1, 0)) < th && std::abs(info(0, 2) - info(2, 0)) < th &&
             std::abs(info(1, 2) - info(2, 1)) < th);
 }
 
+
+void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
+{
+    VertexSE3Expmap* vi = static_cast<VertexSE3Expmap*>(_vertices[0]);
+    Vector3d xyz_trans = vi->estimate() * (Xw);
+
+    double x = xyz_trans[0];
+    double y = xyz_trans[1];
+    double invz = 1.0 / xyz_trans[2];
+    double invz_2 = invz * invz;
+
+    _jacobianOplusXi(0, 0) = x * y * invz_2 * fx;
+    _jacobianOplusXi(0, 1) = -(1 + (x * x * invz_2)) * fx;
+    _jacobianOplusXi(0, 2) = y * invz * fx;
+    _jacobianOplusXi(0, 3) = -invz * fx;
+    _jacobianOplusXi(0, 4) = 0;
+    _jacobianOplusXi(0, 5) = x * invz_2 * fx;
+
+    _jacobianOplusXi(1, 0) = (1 + y * y * invz_2) * fy;
+    _jacobianOplusXi(1, 1) = -x * y * invz_2 * fy;
+    _jacobianOplusXi(1, 2) = -x * invz * fy;
+    _jacobianOplusXi(1, 3) = 0;
+    _jacobianOplusXi(1, 4) = -invz * fy;
+    _jacobianOplusXi(1, 5) = y * invz_2 * fy;
+}
+
+Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
+{
+    Vector2d proj = trans_xyz.head<2>() / trans_xyz[2];
+    Vector2d res;
+    res[0] = proj[0] * fx + cx;
+    res[1] = proj[1] * fy + cy;
+    return res;
+}
+
+int poseOptimization(Frame* pFrame, double& error)
+{
+    g2o::SparseOptimizer optimizer;
+    g2o::BlockSolver_6_3::LinearSolverType* linearSolver;
+    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
+    g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    optimizer.setAlgorithm(solver);
+
+    int nCorrespondences = 0;
+
+    // Set Frame vertex
+    g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
+    vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
+    vSE3->setId(0);
+    vSE3->setFixed(false);
+    optimizer.addVertex(vSE3);
+
+    // Set MapPoint vertices
+    const int N = pFrame->N;
+
+    vector<se2lam::EdgeSE3ProjectXYZOnlyPose*> vpEdges;
+    vector<size_t> vnIndexEdge;
+    vpEdges.reserve(N);
+    vnIndexEdge.reserve(N);
+
+    const float delta = sqrt(5.991);
+    for (int i = 0; i < N; i++) {
+        const PtrMapPoint& pMP = pFrame->mvpMapPoints[i];
+        if (pMP != nullptr) {
+            nCorrespondences++;
+            pFrame->mvbOutlier[i] = false;
+
+            Eigen::Matrix<double, 2, 1> obs;
+            const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
+            obs << kpUn.pt.x, kpUn.pt.y;
+
+            se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
+
+            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+            e->setMeasurement(obs);
+            const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+            e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            e->setRobustKernel(rk);
+            rk->setDelta(delta);
+
+            e->Xw = toVector3d(pMP->getPos());
+            optimizer.addEdge(e);
+            vpEdges.push_back(e);
+            vnIndexEdge.push_back(i);
+        }
+    }
+
+    if (nCorrespondences < 3)
+        return 0;
+
+    // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
+    // At the next optimization, outliers are not included, but at the end they can be classified as
+    // inliers again.
+    const float chi2Mono[4] = {5.991, 5.991, 5.991, 5.991};
+    const int its[4] = {10, 10, 10, 10};
+
+    for (size_t it = 0; it < 4; it++) {
+        vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
+        optimizer.initializeOptimization(0);
+        optimizer.optimize(its[it]);
+
+        for (size_t i = 0, iend = vpEdges.size(); i < iend; i++) {
+            se2lam::EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
+
+            const size_t idx = vnIndexEdge[i];
+
+            if (pFrame->mvbOutlier[idx])
+                e->computeError();
+
+            const float chi2 = e->chi2();
+
+            if (chi2 > chi2Mono[it]) {
+                pFrame->mvbOutlier[idx] = true;
+                e->setLevel(1);
+                nCorrespondences--;
+            } else {
+                pFrame->mvbOutlier[idx] = false;
+                e->setLevel(0);
+            }
+
+            if (it == 2)
+                e->setRobustKernel(0);
+        }
+
+        if (optimizer.edges().size() < 10)
+            break;
+    }
+
+    // Recover optimized pose and return number of inliers
+    g2o::VertexSE3Expmap* vSE3_recov = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
+    pFrame->setPose(toCvMat(vSE3_recov->estimate()));
+
+    error = optimizer.chi2();
+
+    return nCorrespondences;
+}
 
 }  // namespace se2lam

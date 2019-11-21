@@ -118,7 +118,7 @@ void TestTrack::createFirstFrame(const Mat& img, const double& imgTime, const Se
     } else {
         cout << "[Track] Failed to create first frame for too less keyPoints: "
              << mCurrentFrame.mvKeyPoints.size() << endl;
-        Frame::nextId = 1;
+        Frame::nextId = 0;
 
         mState = cvu::FIRST_FRAME;
     }

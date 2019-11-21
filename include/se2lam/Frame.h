@@ -17,7 +17,8 @@
 namespace se2lam
 {
 
-// class MapPoint;
+class MapPoint;
+typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 struct PreSE2 {
 public:
@@ -43,6 +44,9 @@ public:
     Frame(const Frame& f);
     Frame& operator=(const Frame& f);
     ~Frame();
+
+    bool isNull() { return mbNull; }
+    virtual void setNull() { mbNull = true; }
 
     void setPose(const cv::Mat& _Tcw);
     void setPose(const Se2& _Twb);
@@ -86,6 +90,8 @@ public:
     cv::Mat mImage;
     cv::Mat mDescriptors;
     std::vector<cv::KeyPoint> mvKeyPoints;
+    std::vector<PtrMapPoint> mvpMapPoints;   // 对应的MP
+    std::vector<bool> mvbOutlier;
     std::vector<std::size_t> mGrid[GRID_COLS][GRID_ROWS];
 
     // 图像金字塔相关
@@ -101,6 +107,8 @@ protected:
     cv::Mat Tcw;  // Current Camera frame to World frame
     Se2 Trb;      // reference KF body to current frame body
     Se2 Twb;      // world to body
+
+    bool mbNull;
 
     std::mutex mMutexPose;
 };

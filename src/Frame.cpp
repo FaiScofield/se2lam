@@ -40,7 +40,7 @@ Frame::~Frame()
  * @date    2019.10.23
  */
 Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBextractor* extractor)
-    : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo), mvKeyPoints(vKPs)
+    : mpORBExtractor(extractor), mTimeStamp(-1.f), odom(odo), mvKeyPoints(vKPs)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputation) {
@@ -61,7 +61,13 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
     //! 计算描述子
     mpORBExtractor->getDescriptors(im, mvKeyPoints, mDescriptors);
     N = mvKeyPoints.size();
-    assert(N != 0);
+    if (N == 0) {
+        cerr << "[Frame][Error] #" << id << " No features in this frame!" << endl;
+        this->setNull();
+        return;
+    }
+    mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
+    mvbOutlier.resize(N, true);
 
     if (bNeedVisualization)
         im.copyTo(mImage);
@@ -102,9 +108,8 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
  * @param K         相机内参
  * @param distCoef  相机畸变参数
  */
-Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& K,
-             const Mat& distCoef)
-    : mpORBExtractor(extractor), mTimeStamp(0.f), odom(odo)
+Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& K, const Mat& distCoef)
+    : mpORBExtractor(extractor), mTimeStamp(-1.f), odom(odo)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputation) {
@@ -138,7 +143,13 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
     //! 提取特征点
     (*mpORBExtractor)(imgClahed, Mat(), mvKeyPoints, mDescriptors);
     N = mvKeyPoints.size();
-    assert(N != 0);
+    if (N == 0) {
+        cerr << "[Frame][Error] #" << id << " No features in this frame!" << endl;
+        this->setNull();
+        return;
+    }
+    mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
+    mvbOutlier.resize(N, true);
 
     if (bNeedVisualization)
         imgClahed.copyTo(mImage);
@@ -211,7 +222,13 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
     //! 提取特征点
     (*mpORBExtractor)(imgClahed, Mat(), mvKeyPoints, mDescriptors);
     N = mvKeyPoints.size();
-    assert(N != 0);
+    if (N == 0) {
+        cerr << "[Frame][Error] #" << id << " No features in this frame!" << endl;
+        this->setNull();
+        return;
+    }
+    mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
+    mvbOutlier.resize(N, true);
 
     if (bNeedVisualization)
         imgClahed.copyTo(mImage);
@@ -248,9 +265,9 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
 Frame::Frame(const Frame& f)
     : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
       mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-      mnScaleLevels(f.mnScaleLevels), mfScaleFactor(f.mfScaleFactor),
-      mvScaleFactors(f.mvScaleFactors), mvLevelSigma2(f.mvLevelSigma2),
-      mvInvLevelSigma2(f.mvInvLevelSigma2), Trb(f.Trb)
+      mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
+      mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
+      mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Trb(f.Trb)
 {
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
@@ -279,6 +296,8 @@ Frame& Frame::operator=(const Frame& f)
 
     N = f.N;
     mvKeyPoints = f.mvKeyPoints;
+    mvpMapPoints = f.mvpMapPoints;
+    mvbOutlier = f.mvbOutlier;
     f.mDescriptors.copyTo(mDescriptors);
     for (int i = 0; i != GRID_COLS; ++i)
         for (int j = 0; j < GRID_ROWS; ++j)

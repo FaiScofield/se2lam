@@ -192,7 +192,7 @@ void TrackKlt::createFrameFirstKlt(const Mat& img, const Se2& odo)
     } else {
         cout << "[Track][Warni] Failed to create first frame for too less keyPoints: "
              << mvForwPts.size() << endl;
-        Frame::nextId = 1;
+        Frame::nextId = 0;
 
         mState = cvu::FIRST_FRAME;
     }

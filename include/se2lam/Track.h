@@ -21,6 +21,7 @@ class KeyFrame;
 class Map;
 class LocalMapper;
 class GlobalMapper;
+class MapPublish;
 
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
@@ -36,6 +37,7 @@ public:
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void setGlobalMapper(GlobalMapper* pGlobalMapper) { mpGlobalMapper = pGlobalMapper; }
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
+    void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
 
@@ -60,14 +62,16 @@ public:
     double trackTimeTatal = 0.;
 
 private:
-    void createFirstFrame(const cv::Mat& img, const double& imgTime, const Se2& odo);
-    void trackReferenceKF(const cv::Mat& img, const double& imgTime, const Se2& odo);
-    void resetLocalTrack();
-    bool detectIfLost();
+    void processFirstFrame();
+    bool trackLastFrame();
+    bool trackReferenceKF();
+    bool trackLocalMap();
 
-    void updateFramePose();
-    int removeOutliers();
-    int doTriangulate();
+    void updateFramePoseFromLast();
+    void updateFramePoseFromRef();
+    void removeOutliers();
+    void doTriangulate();
+    void resetLocalTrack();
     bool needNewKF();
 
     void drawMatchesForPub(bool warp);
@@ -75,16 +79,16 @@ private:
     bool checkFinish();
     void setFinish();
 
-    // relocalization
-    bool relocalization(const cv::Mat& img, const double& imgTime, const Se2& odo);
+    // Relocalization
+    bool detectIfLost();
+    bool detectIfLost(int cros, double projError);
+    bool relocalization();
     bool detectLoopClose();
     bool verifyLoopClose(std::map<int, int>& _mapMatchAll, std::map<int, int>& _mapMatchRaw);
     void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
-    void removeKPMatch(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
-                       std::map<int, int>& mapiMatch);
     void doLocalBA();
-    void resetTracking();
+    void resartTracking();
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
@@ -98,33 +102,35 @@ private:
     Sensors* mpSensors;
     ORBextractor* mpORBextractor;  // 这里有new
     ORBmatcher* mpORBmatcher;
+    MapPublish* mpMapPublisher;
 
     // local map
-    Frame mCurrentFrame;
+    Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpCurrentKF, mpLoopKF;
     std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
-    std::vector<int> mvMatchIdx, mvMatchIdxGood;   // Matches12, 参考帧到当前帧的KP匹配索引
+    std::vector<int> mvMatchIdx, mvGoodMatchIdx;   // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl, mnGoodDepth, mnBadDepth;  // count number of mLocalMPs with good parallax
-    int mnInliers, mnInliersGood, mnTrackedOld;
+    int mnInliers, mnGoodInliers, mnTrackedOld;
     int mnLostFrames;
+
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames, nMinMatches;
     float mMaxAngle, mMaxDistance;
+    float mCurrRatioGoodDepth, mCurrRatioGoodParl;
+    float mLastRatioGoodDepth, mLastRatioGoodParl;
+
+    cv::Mat mK, mD;
+    cv::Mat mAffineMatrix;
 
     // preintegration on SE2
     PreSE2 preSE2;
     Se2 mLastOdom;
 
-    cv::Mat mK, mD;
-    cv::Mat mAffineMatrix;
-    cv::Mat mImgOutMatch;
-
     bool mbFinishRequested;
     bool mbFinished;
-
     std::mutex mMutexForPub;
     std::mutex mMutexFinish;
 };

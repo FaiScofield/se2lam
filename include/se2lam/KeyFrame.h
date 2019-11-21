@@ -63,7 +63,7 @@ public:
     };
 
     void setMap(Map* pMap) { mpMap = pMap; }
-    bool isNull() { return mbNull; }
+    //bool isNull() { return mbNull; }
     void setNull();
 
     //! 共视关系的维护函数
@@ -139,7 +139,7 @@ public:
 protected:
     Map* mpMap;
 
-    bool mbNull;
+    //bool mbNull;
 
     std::map<PtrMapPoint, size_t> mObservations;  // size_t为MP在此KF中对应的特征点的索引
     std::map<size_t, PtrMapPoint> mDualObservations;

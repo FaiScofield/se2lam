@@ -44,8 +44,13 @@ public:
     void publishMapPoints();
     void publishKeyFrames();
     void publishCameraCurr(const cv::Mat& Twc);
-
     void publishOdomInformation();
+
+#ifdef USEKLT
+    void update(TrackKlt* pTrack);
+#else
+    void update(Track* pTrack);
+#endif
     cv::Mat drawMatchesInOneImg();
 
     bool isFinished();

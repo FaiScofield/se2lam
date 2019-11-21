@@ -6,6 +6,7 @@
 
 #include "Sensors.h"
 #include <iostream>
+#include <opencv2/imgproc.hpp>
 
 namespace se2lam
 {
@@ -31,9 +32,12 @@ void Sensors::updateImg(const cv::Mat& img_, double time_)
         cndvSensorUpdate.wait(lock);
     }
 
-    img_.copyTo(mImg);
-    timeImg = time_;
+    if (img_.channels() == 3)
+        cv::cvtColor(img_, mImg, CV_BGR2GRAY);
+    else
+        img_.copyTo(mImg);
 
+    timeImg = time_;
     imgUpdated = true;
 }
 
