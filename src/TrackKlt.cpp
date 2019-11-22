@@ -291,7 +291,7 @@ void TrackKlt::trackKlt(const Mat& img, const Se2& odo, double imuTheta)
 
         // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
         // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
-        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
+        mpLocalMapper->processNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
 
         mpReferenceKF = pKF;
         resetLocalTrack();
@@ -410,7 +410,7 @@ void TrackKlt::trackRefKlt(const Mat& img, const Se2& odo, double imuTheta)
 
         // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
         // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
-        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
+        mpLocalMapper->processNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
 
         mpReferenceKF = pKF;
         resetLocalTrack();
@@ -471,7 +471,7 @@ void TrackKlt::updateFramePose()
 void TrackKlt::resetLocalTrack()
 {
     // 更新当前Local MP为参考帧观测到的MP
-    mLocalMPs = mpReferenceKF->mvViewMPs;
+    mLocalMPs = mpReferenceKF->mvpMapPoints;
     mnGoodPrl = 0;
 
     for (int i = 0; i < 3; ++i)
@@ -499,32 +499,6 @@ void TrackKlt::resetKltData()
     mLastFrame = mCurrentFrame;
 }
 
-//! 可视化用，数据拷贝
-size_t TrackKlt::copyForPub(Mat& img1, Mat& img2, vector<Point2f>& kp1, vector<Point2f>& kp2,
-                            vector<int>& vMatches12)
-{
-    locker lock(mMutexForPub);
-
-    if (!mbNeedVisualization)
-        return 0;
-    if (mvMatchIdxToRefKF.empty())
-        return 0;
-
-    mpReferenceKF->copyImgTo(img1);
-    mCurrentFrame.copyImgTo(img2);
-
-    KeyPoint::convert(mpReferenceKF->mvKeyPoints, kp1);
-    KeyPoint::convert(mCurrentFrame.mvKeyPoints, kp2);
-    vMatches12 = mvMatchIdxToRefKF;
-
-    return mvMatchIdxToRefKF.size();
-}
-
-Mat TrackKlt::getImageMatches()
-{
-    locker lock(mMutexForPub);
-    return mImgOutMatch.clone();
-}
 
 /**
  * @brief 计算KF之间的残差和信息矩阵, 后端优化用
@@ -688,7 +662,7 @@ int TrackKlt::doTriangulate()
 
         // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则可见地图点更新为此MP
         if (mpReferenceKF->hasObservation(i)) {
-            mLocalMPs[i] = mpReferenceKF->mvViewMPs[i];
+            mLocalMPs[i] = mpReferenceKF->mvpMapPoints[i];
             //  mLocalMPs[i] = mpReferenceKF->getViewMPPoseInCamareFrame(i);
             nTrackedOld++;
             continue;

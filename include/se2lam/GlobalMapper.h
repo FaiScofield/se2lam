@@ -97,8 +97,8 @@ public:
     void requestFinish();
     bool isFinished();
 
-    void drawMatch(const std::map<int, int>& mapiMatch);
-    void drawMatch(const std::vector<int>& viMatch);
+//    void drawMatch(const std::map<int, int>& mapiMatch);
+//    void drawMatch(const std::vector<int>& viMatch);
 
     // DEBUG Functions ... Print SE3Quat
     void printSE3(const g2o::SE3Quat se3);

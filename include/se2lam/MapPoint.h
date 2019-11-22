@@ -20,6 +20,7 @@ namespace se2lam
 {
 
 class Map;
+class Frame;
 class KeyFrame;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
@@ -53,7 +54,7 @@ public:
     cv::Mat getDescriptor();
     PtrKeyFrame getMainKF();
     int getOctave(const PtrKeyFrame& pKF);
-    int getIndexInKF(const PtrKeyFrame& pKF);
+    int getKPIndexInKF(PtrKeyFrame pKF);
     int getMainOctave();
 
     //! 自身属性
@@ -73,7 +74,7 @@ public:
 private:
     //! 内部使用的成员函数, 不需要加锁, 因为调用它的函数已经加了锁
     void setNullSelf();
-    void updateMeasureInKFs();  // setPos()后调用
+//    void updateMeasureInKFs();  // setPos()后调用
     void updateParallax(const PtrKeyFrame& pKF);  // addObservation()后调用, 更新视差
     void updateMainKFandDescriptor();  // addObservation()后调用, 更新相关参数
     bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2); // 更新视差里调用

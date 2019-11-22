@@ -52,9 +52,12 @@ public:
     // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
     // Used in Relocalisation and Loop Detection
     int SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, std::map<int, int>& mapIdxMatches12, bool bIfMPOnly);
+    int SearchByBoW(Frame* F1, Frame* F2, std::map<int, int>& mapIdxMatches12, bool bIfMPOnly);
 
-    int SearchByProjection(Frame& CurrentFrame, KeyFrame& LastFrame, const float th = 7);
+    // int SearchByProjection(Frame& CurrentFrame, KeyFrame& LastFrame, const float th = 7);
     int SearchByProjection(Frame& frameCurr, Frame& frameLast, int winSize);
+    int SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>& localMPs,
+                          const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP);
 
     //    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
     void ComputeThreeMaxima(std::vector<int>* histo, const int L, int& ind1, int& ind2, int& ind3);
@@ -67,21 +70,19 @@ public:
     float mfNNratio;
     bool mbCheckOrientation;
 
+    // deprecated
     int MatchByWindow(const Frame& frame1, const Frame& frame2, std::vector<cv::Point2f>& vbPrevMatched,
                       const int winSize, std::vector<int>& vnMatches12, const int levelOffset = 1,
                       const int minLevel = 0, const int maxLevel = 8);
     int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                           std::vector<int>& vnMatches12, const int winSize);
+
+    // 暂时没用
     int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
                           std::map<int, int>& matches12, const int winSize);
 
-    int MatchByProjection(PtrKeyFrame& pNewKF, const std::vector<PtrMapPoint>& localMPs,
-                          const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP);
 
-
-
-
-    float RadiusByViewingCos(const float& viewCos);
+    float RadiusByViewingCos(const float viewCos);
 };
 
 }  // namespace se2lam

@@ -29,8 +29,7 @@ Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 }
 
 Map::~Map()
-{
-}
+{}
 
 void Map::insertKF(const PtrKeyFrame& pKF)
 {
@@ -334,7 +333,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
         // kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中,
         // 否则经过同一个地方不会考虑到之前添加的KF
         WorkTimer timer;
-        addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius);
+        addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius); // lock global
 
         // 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
         timer.start();
@@ -357,11 +356,10 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     //! 2. 获得LocalMPs, 不要求要有良好视差
     //! FIXME 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
     timer.start();
-//    bool checkPrl = mCurrentKF->id < 5 ? false : true;
     bool checkPrl = false;
     for (auto it = setLocalKFs.begin(), iend = setLocalKFs.end(); it != iend; ++it) {
         PtrKeyFrame pKF = (*it);
-        set<PtrMapPoint> pMPs = pKF->getAllObsMPs(checkPrl);
+        set<PtrMapPoint> pMPs = pKF->getObservations(checkPrl);
         setLocalMPs.insert(pMPs.begin(), pMPs.end());
     }
     double t2 = timer.count();
@@ -384,9 +382,9 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size(), setLocalMPs.size(),
            setRefKFs.size(), t1 + t2 + t3);
 
-    mvLocalGraphKFs.swap(vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end()));
-    mvRefKFs.swap(vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end()));
-    mvLocalGraphMPs.swap(vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end()));
+    mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
+    mvRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
+    mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
 }
 
 /**
@@ -430,7 +428,7 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
 Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, set<PtrMapPoint>& spMPs)
 {
     spMPs.clear();
-    set<PtrMapPoint> setMPs = pKF1->getAllObsMPs(false);
+    set<PtrMapPoint> setMPs = pKF1->getObservations(false);
 
     int nSameMP = 0;
     for (auto i = setMPs.begin(), iend = setMPs.end(); i != iend; ++i) {
@@ -456,7 +454,7 @@ float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& spK
                           set<PtrMapPoint>& spMPsRet, int k)
 {
     spMPsRet.clear();
-    set<PtrMapPoint> spMPsAll = pKFNow->getAllObsMPs(false);
+    set<PtrMapPoint> spMPsAll = pKFNow->getObservations(false);
     if (spMPsAll.size() == 0) {
         return -1.0f;
     }
@@ -484,7 +482,7 @@ float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& spK
 
 int Map::getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2)
 {
-    set<PtrMapPoint> spMPs1 = pKF1->getAllObsMPs(false);
+    set<PtrMapPoint> spMPs1 = pKF1->getObservations(false);
     if (spMPs1.size() == 0)
         return 0;
 
@@ -539,7 +537,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         // 添加位姿节点
         addVertexSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, fixed);
         // 添加平面运动约束边
-        addPlaneMotionSE3Expmap(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, Config::Tbc);
+        addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, Config::Tbc);
     }
 
     // Add odometry based constraints. 添加里程计约束边
@@ -610,7 +608,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
                 continue;
             }
 
-            const int ftrIdx = pMP->getIndexInKF(pKF);
+            const int ftrIdx = pMP->getKPIndexInKF(pKF);
             const int octave = pMP->getOctave(pKF);
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
@@ -737,7 +735,7 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer, vector<vector<EdgeProje
                 continue;
             }
 
-            int ftrIdx = pMP->getIndexInKF(pKF);
+            int ftrIdx = pMP->getKPIndexInKF(pKF);
             int octave = pMP->getOctave(pKF);
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
@@ -902,7 +900,7 @@ void Map::updateCovisibility(const PtrKeyFrame& pNewKF)
 bool Map::checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP)
 {
     int ftrIdx0 = pKF->getFeatureIndex(pMP);
-    int ftrIdx1 = pMP->getIndexInKF(pKF);
+    int ftrIdx1 = pMP->getKPIndexInKF(pKF);
     if (ftrIdx0 != ftrIdx1 || ftrIdx0 == -1 || ftrIdx1 == -1) {
         fprintf(stderr, "!! checkAssociationErr: pKF->pMP / pMP->pKF: %d / %d\n", ftrIdx0, ftrIdx1);
         return true;
@@ -1079,12 +1077,12 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
             PtrKeyFrame pKF = (*j);
             if (checkAssociationErr(pKF, pMP)) {
                 fprintf(stderr, "[ Map ][Warni] localBA() 索引错误! For KF#%ld-%d and MP#%ld-%d\n",
-                        pKF->mIdKF, pKF->getFeatureIndex(pMP), pMP->mId, pMP->getIndexInKF(pKF));
+                        pKF->mIdKF, pKF->getFeatureIndex(pMP), pMP->mId, pMP->getKPIndexInKF(pKF));
                 continue;
             }
 
             const int octave = pMP->getOctave(pKF);
-            const int ftrIdx = pMP->getIndexInKF(pKF);
+            const int ftrIdx = pMP->getKPIndexInKF(pKF);
             const float Sigma2 = pKF->mvLevelSigma2[octave];
             Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
 
@@ -1102,7 +1100,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
             // compute covariance/information
             Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * Sigma2;
-            Vector3d lc = toVector3d(pKF->mvViewMPs[ftrIdx]);
+            Vector3d lc = toVector3d(pKF->mvpMapPoints[ftrIdx]);
 
             double zc = lc(2);
             double zc_inv = 1. / zc;
@@ -1147,7 +1145,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
 void Map::addLocalGraphThroughKdtree(set<PtrKeyFrame>& setLocalKFs, int maxN, float searchRadius)
 {
-    vector<PtrKeyFrame> vKFsAll = getAllKFs();
+    vector<PtrKeyFrame> vKFsAll = getAllKFs();  // lock global
     vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());
@@ -1158,14 +1156,14 @@ void Map::addLocalGraphThroughKdtree(set<PtrKeyFrame>& setLocalKFs, int maxN, fl
     cv::flann::KDTreeIndexParams kdtreeParams;
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
-    Mat pose = cvu::inv(getCurrentKF()->getPose());
+    Mat pose = cvu::inv(mCurrentKF->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
                                 pose.at<float>(2, 3) * 0.001f};
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
-        if (indices[i] > 0 /* && dists[i] < searchRadius*/ && vKFsAll[indices[i]])  // 距离在0.3m以内
+        if (indices[i] > 0  && dists[i] < searchRadius)  // 距离在0.3m以内
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }

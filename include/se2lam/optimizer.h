@@ -116,7 +116,7 @@ g2o::Matrix6d invJJl(const g2o::Vector6d& v6d);
 
 void initOptimizer(SlamOptimizer& opt, bool verbose = false);
 
-EdgeSE3ExpmapPrior* addPlaneMotionSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
+EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
                                             const cv::Mat& extPara);
 
 
@@ -171,7 +171,7 @@ bool verifyInfo(const g2o::Matrix6d& info);
 
 bool verifyInfo(const Eigen::Matrix3d& info);
 
-int poseOptimization(Frame* pFrame, double& error);
+void poseOptimization(Frame* pFrame, int& nCorrespondences, double& error);
 
 }  // namespace se2lam
 

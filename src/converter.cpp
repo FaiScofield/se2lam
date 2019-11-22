@@ -19,14 +19,6 @@ Eigen::Vector2d toVector2d(const cv::Point2f& cvVector)
     return v;
 }
 
-
-Eigen::Vector3d toVector3d(const cv::Point3f& cvVector)
-{
-    Eigen::Vector3d v;
-    v << cvVector.x, cvVector.y, cvVector.z;
-    return v;
-}
-
 g2o::Isometry3D toIsometry3D(const cv::Mat& T)
 {
     Eigen::Matrix<double, 3, 3> R;

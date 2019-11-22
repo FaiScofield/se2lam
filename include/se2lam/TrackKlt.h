@@ -47,11 +47,6 @@ public:
     static void calcSE3toXYZInfo(cv::Point3f xyz1, const cv::Mat& Tcw1, const cv::Mat& Tcw2,
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
-    // for visulization message publisher
-    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::Point2f>& kp1,
-                      std::vector<cv::Point2f>& kp2, std::vector<int>& vMatches12);
-    cv::Mat getImageMatches();
-
 
     bool isFinished();
     void requestFinish();

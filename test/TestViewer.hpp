@@ -521,7 +521,7 @@ void TestViewer::publishMapPoints()
     PtrKeyFrame pKFCur = mpMap->getCurrentKF();
     vector<PtrMapPoint> vpMPAll = mpMap->getAllMPs();
     vector<PtrMapPoint> vpMPAct = mpMap->getLocalMPs();
-    set<PtrMapPoint> spMPNow= mpMap->getCurrentKF()->getAllObsMPs();
+    set<PtrMapPoint> spMPNow= mpMap->getCurrentKF()->getObservations();
     vector<PtrMapPoint> vpMPNeg;
     fprintf(stdout, "[Viewe] #%ld(KF#%ld) MPsAll = %ld, MPsLocal = %ld, MPsObs = %ld\n",
             pKFCur->id, pKFCur->mIdKF, vpMPAll.size(), vpMPAct.size(), spMPNow.size());

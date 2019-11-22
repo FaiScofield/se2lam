@@ -62,11 +62,11 @@ ObjCSpaceBeforeProtocolList: true
 # 在call(后对函数调用换行的penalty
 PenaltyBreakBeforeFirstCallParameter: 2500
 # 在一个注释中引入换行的penalty
-PenaltyBreakComment: 300
+PenaltyBreakComment: 3000
 # 第一次在<<前换行的penalty
 PenaltyBreakFirstLessLess: 1200
 # 在一个字符串字面量中引入换行的penalty
-PenaltyBreakString: 5000
+PenaltyBreakString: 2000
 # 对于每个在行字符数限制之外的字符的penalty
 PenaltyExcessCharacter: 1
 # 将函数的返回类型放到它自己的行的penalty

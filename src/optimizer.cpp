@@ -249,7 +249,7 @@ void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bo
  * @param extPara   Config::bTc
  * @return
  */
-EdgeSE3ExpmapPrior* addPlaneMotionSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
+EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
                                             const cv::Mat& extPara)
 {
 
@@ -653,47 +653,71 @@ Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
     return res;
 }
 
-int poseOptimization(Frame* pFrame, double& error)
+/**
+ * @brief   根据MP的观测情况进行一次对Frame的位姿优化调整(最小化重投影误差), 迭代最多4次
+ *  优化后MP的内外点情况由成员变量 mvbOutlier 决定.
+ *  Vertex:
+ *      - g2o::VertexSE3Expmap, 即当前Frame的位姿
+ *  Edge:
+ *      - se2lam::EdgeSE3ExpmapPrior, 即平面运动约束, 一元边
+ *          + Vertex: 待优化的当前帧位姿Tcw
+ *          + Measurement: 另外三个维度的量置0后的Tcw
+ *          + Information: 由里程计的不确定度决定
+ *      - se2lam::EdgeSE3ProjectXYZOnlyPose, 即投影约束, 一元边
+ *          + Vertex: 待优化的当前帧位姿Tcw
+ *          + Measurement: MP在当前帧的像素坐标uv
+ *          + Information: invSigma2(与特征点所在的金字塔尺度有关)
+ * @param pFrame        待优化的Frame
+ * @param nMPInliers    优化结果得到的MP观测内点数
+ * @param error         优化结果得到的总重投影误差
+ */
+void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 {
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolver_6_3::LinearSolverType* linearSolver;
-    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
-    g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    nMPInliers = 0;
+    error = 10000.;
+
+    SlamOptimizer optimizer;
+    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
+    optimizer.setVerbose(Config::LocalVerbose);
 
-    int nCorrespondences = 0;
+    int camParaId = 0;
+    addCamPara(optimizer, Config::Kcam, camParaId);
 
-    // Set Frame vertex
+    // 当前帧位姿节点(待优化变量)
     g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
-    vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
+    vSE3->setEstimate(toSE3Quat(pFrame->getPose());
     vSE3->setId(0);
     vSE3->setFixed(false);
     optimizer.addVertex(vSE3);
 
-    // Set MapPoint vertices
-    const int N = pFrame->N;
+    // 设置平面运动约束(边)
+    addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(pFrame->getPose()), 0, Config::Tbc);
 
+    // 设置MP观测约束(边)
+    const int N = pFrame->N;
     vector<se2lam::EdgeSE3ProjectXYZOnlyPose*> vpEdges;
-    vector<size_t> vnIndexEdge;
+    vector<size_t> vnIndexEdge; // MP被加入到图中优化, 其对应的KP索引被记录在此
     vpEdges.reserve(N);
     vnIndexEdge.reserve(N);
 
-    const float delta = sqrt(5.991);
+    const float delta = Config::ThHuber;
+    vector<PtrMapPoint> vAllMPs = pFrame->getAllLandMarks();
     for (int i = 0; i < N; i++) {
-        const PtrMapPoint& pMP = pFrame->mvpMapPoints[i];
+        const PtrMapPoint& pMP = vAllMPs[i];
         if (pMP != nullptr) {
-            nCorrespondences++;
-            pFrame->mvbOutlier[i] = false;
+            nMPInliers++;
+            pFrame->mvbMPOutlier[i] = false;
 
-            Eigen::Matrix<double, 2, 1> obs;
             const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
-            obs << kpUn.pt.x, kpUn.pt.y;
+            Eigen::Vector2d uv = toVector2d(kpUn.pt);
 
             se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
 
             e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-            e->setMeasurement(obs);
+            e->setMeasurement(uv);
             const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
             e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
@@ -708,36 +732,35 @@ int poseOptimization(Frame* pFrame, double& error)
         }
     }
 
-    if (nCorrespondences < 3)
-        return 0;
+    if (nMPInliers < 3) {
+        nMPInliers = 0;
+        return;
+    }
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as
     // inliers again.
-    const float chi2Mono[4] = {5.991, 5.991, 5.991, 5.991};
-    const int its[4] = {10, 10, 10, 10};
-
     for (size_t it = 0; it < 4; it++) {
         vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
         optimizer.initializeOptimization(0);
-        optimizer.optimize(its[it]);
+        optimizer.optimize(10);
 
         for (size_t i = 0, iend = vpEdges.size(); i < iend; i++) {
             se2lam::EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
 
-            const size_t idx = vnIndexEdge[i];
+            const size_t idx = vnIndexEdge[i]; // MP对应的KP索引
 
-            if (pFrame->mvbOutlier[idx])
+            if (pFrame->mvbMPOutlier[idx]) //! TODO 对吗?? 和ORB的一样
                 e->computeError();
 
             const float chi2 = e->chi2();
 
-            if (chi2 > chi2Mono[it]) {
-                pFrame->mvbOutlier[idx] = true;
+            if (chi2 > 5.991) {
+                pFrame->mvbMPOutlier[idx] = true;
                 e->setLevel(1);
-                nCorrespondences--;
+                nMPInliers--;
             } else {
-                pFrame->mvbOutlier[idx] = false;
+                pFrame->mvbMPOutlier[idx] = false;
                 e->setLevel(0);
             }
 
@@ -754,8 +777,6 @@ int poseOptimization(Frame* pFrame, double& error)
     pFrame->setPose(toCvMat(vSE3_recov->estimate()));
 
     error = optimizer.chi2();
-
-    return nCorrespondences;
 }
 
 }  // namespace se2lam

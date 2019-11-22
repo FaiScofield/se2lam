@@ -26,10 +26,11 @@ public:
 
     void run();
 
-    void addNewKF(const PtrKeyFrame& pKF, const std::vector<cv::Point3f>& localMPs,
-                  const std::vector<int>& vMatched12, const std::vector<bool>& vbGoodPrl);
-    void findCorrespd(const std::vector<int>& vMatched12, const std::vector<cv::Point3f>& localMPs,
-                      const std::vector<bool>& vbGoodPrl);
+    void addNewKF(const PtrKeyFrame& pKF, const std::map<size_t, cv::Point3f>& vMPCandidates,
+                  const std::vector<int>& vMatched12);
+    bool checkNewKF();
+    void processNewKF();
+    void findCorresponds();
 
     void updateLocalGraphInMap();
     void pruneRedundantKFinMap();
@@ -63,6 +64,7 @@ protected:
     int mnSearchLevel;     // 局部KF的搜索层数
     float mfSearchRadius;  // 局部KF的FLANN近邻搜索半径
 
+    std::list<PtrKeyFrame> mlNewKFs; // 等待处理的关键帧列表
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
 
@@ -75,6 +77,6 @@ protected:
     std::mutex mMutexLocalGraph;
 };
 
-} // namespace se2lam
+}  // namespace se2lam
 
 #endif  // LOCALMAPPER_H

@@ -213,7 +213,7 @@ void Localizer::matchLocalMap()
     vector<PtrMapPoint> vpMPLocal = getLocalMPs();
     vector<int> vIdxMPMatched;
     ORBmatcher matcher;
-    int numMPMatched = matcher.MatchByProjection(mpKFCurr, vpMPLocal, 15, 2, vIdxMPMatched);
+    int numMPMatched = matcher.SearchByProjection(mpKFCurr, vpMPLocal, 15, 2, vIdxMPMatched);
 
     //! Renew KF observation
     for (int idxKPCurr = 0, idend = vIdxMPMatched.size(); idxKPCurr < idend; idxKPCurr++) {
@@ -243,12 +243,12 @@ void Localizer::doLocalBA()
 
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, false);
-    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::Tbc);
+    addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::Tbc);
     int maxKFid = mpKFCurr->mIdKF + 1;
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
+    set<PtrMapPoint> setMPs = mpKFCurr->getObservations();
 
     map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
 
@@ -316,11 +316,11 @@ cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
 
     // Add KFCurr
     addVertexSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, false); // mpKFCurr->mIdKF
-    addPlaneMotionSE3Expmap(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, Config::Tbc);
+    addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(mpKFCurr->getPose()), 0, Config::Tbc);
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
+    set<PtrMapPoint> setMPs = mpKFCurr->getObservations();
     map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
 
     // Add MP Vertex and Edges
@@ -763,7 +763,7 @@ void Localizer::updateLocalMap(int searchLevel)
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
-        set<PtrMapPoint> spMP = pKF->getAllObsMPs();    // MP要有良好视差
+        set<PtrMapPoint> spMP = pKF->getObservations();    // MP要有良好视差
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
 //    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;

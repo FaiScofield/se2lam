@@ -47,9 +47,9 @@ public:
     void publishOdomInformation();
 
 #ifdef USEKLT
-    void update(TrackKlt* pTrack);
+    void update(TrackKlt* pTrack, char* txt);
 #else
-    void update(Track* pTrack);
+    void update(Track* pTrack, char* txt);
 #endif
     cv::Mat drawMatchesInOneImg();
 
@@ -96,6 +96,14 @@ private:
     float mPointSize;
     float mCameraSize;
     float mScaleRatio;
+
+    // for visulization
+    bool mbUpdated;
+    cv::Mat mCurrentImage, mReferenceImage;
+    cv::Mat mAffineMatrix, mHomography;
+    std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
+    std::vector<int> mvMatchIdx, mvGoodMatchIdx;
+    std::string mImageText;
 
     bool mbFinishRequested;
     bool mbFinished;

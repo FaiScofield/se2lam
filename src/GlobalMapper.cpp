@@ -291,7 +291,7 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     int nGoodMPMatch = mapMatch.size();  // MP匹配数
 
     //! Show Match Info
-    set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
+    set<PtrMapPoint> spMPsCurrent = mpKFCurr->getObservations();
     int nMPsCurrent = spMPsCurrent.size();           // 当前KF的可观测MP数
     int nKPsCurrent = mpKFCurr->mvKeyPoints.size();  // 当前KF提取的KP数
 
@@ -523,7 +523,7 @@ void GlobalMapper::globalBA()
 
         int idx = pKF->getFeatureIndex(pMP);
 
-        Point3f& Pt3_MP_KF = pKF->mvViewMPs[idx];
+        Point3f& Pt3_MP_KF = pKF->mvpMapPoints[idx];
         Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
         Mat t3_MP_w = Rwc * t3_MP_KF + twc;
         Point3f Pt3_MP_w(t3_MP_w);
@@ -803,7 +803,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         MeasSE3XYZ Meas1;
         Meas1.idKF = 0;
         Meas1.idMP = count;
-        Meas1.z = toVector3d(_pKFFrom->mvViewMPs[idxMPin1]);
+        Meas1.z = toVector3d(_pKFFrom->mvpMapPoints[idxMPin1]);
         Meas1.info = _pKFFrom->mvViewMPsInfo[idxMPin1];
 
         int idxMPin2 = iter->second;
@@ -811,7 +811,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         MeasSE3XYZ Meas2;
         Meas2.idKF = 1;
         Meas2.idMP = count;
-        Meas2.z = toVector3d(_pKFTo->mvViewMPs[idxMPin2]);
+        Meas2.z = toVector3d(_pKFTo->mvpMapPoints[idxMPin2]);
         Meas2.info = _pKFTo->mvViewMPsInfo[idxMPin2];
 
 
@@ -895,7 +895,7 @@ void GlobalMapper::optKFPair(
 
             int idx = PtrKFi->getFeatureIndex(PtrMPj);
 
-            g2o::Vector3D meas = toVector3d(PtrKFi->mvViewMPs[idx]);
+            g2o::Vector3D meas = toVector3d(PtrKFi->mvpMapPoints[idx]);
             g2o::Matrix3D info = PtrKFi->mvViewMPsInfo[idx];
 
             addEdgeSE3XYZ(optimizer, meas, vertexIdKF, vertexIdMP, 0, info, 5.99);
@@ -971,11 +971,11 @@ void GlobalMapper::optKFPairMatch(
         g2o::Vector3D Pt3MP = toVector3d(pMPin1->getPos());
         addVertexXYZ(optimizer, Pt3MP, vertexId, true);
 
-        g2o::Vector3D meas1 = toVector3d(_pKF1->mvViewMPs[idMPin1]);
+        g2o::Vector3D meas1 = toVector3d(_pKF1->mvpMapPoints[idMPin1]);
         g2o::Matrix3D info1 = _pKF1->mvViewMPsInfo[idMPin1];
         addEdgeSE3XYZ(optimizer, meas1, 0, vertexId, 0, info1, 5.99);
 
-        g2o::Vector3D meas2 = toVector3d(_pKF2->mvViewMPs[idMPin2]);
+        g2o::Vector3D meas2 = toVector3d(_pKF2->mvpMapPoints[idMPin2]);
         g2o::Matrix3D info2 = _pKF2->mvViewMPsInfo[idMPin2];
         addEdgeSE3XYZ(optimizer, meas2, 1, vertexId, 0, info2, 5.99);
 
@@ -1071,7 +1071,7 @@ void GlobalMapper::createVecMeasSE3XYZ(
 
             int idxMPinKF = PtrKFi->getFeatureIndex(PtrMPj);
 
-            Meas_ij.z = toVector3d(PtrKFi->mvViewMPs[idxMPinKF]);
+            Meas_ij.z = toVector3d(PtrKFi->mvpMapPoints[idxMPinKF]);
             Meas_ij.info = PtrKFi->mvViewMPsInfo[idxMPinKF];
 
             vMeas.push_back(Meas_ij);
@@ -1091,112 +1091,112 @@ void GlobalMapper::computeBowVecAll()
     }
 }
 
-void GlobalMapper::drawMatch(const map<int, int>& mapMatch)
-{
-    if (!Config::NeedVisualization)
-        return;
+//void GlobalMapper::drawMatch(const map<int, int>& mapMatch)
+//{
+//    if (!Config::NeedVisualization)
+//        return;
 
-    //! Renew images
-    if (mpKFCurr == nullptr || mpKFCurr->isNull()) {
-        return;
-    }
+//    //! Renew images
+//    if (mpKFCurr == nullptr || mpKFCurr->isNull()) {
+//        return;
+//    }
 
-    mpKFCurr->copyImgTo(mImgCurr);
+//    mpKFCurr->copyImgTo(mImgCurr);
 
-    if (mpKFLoop == nullptr || mpKFLoop->isNull()) {
-        mImgLoop.setTo(cv::Scalar(0));
-        return;
-    } else {
-        mpKFLoop->copyImgTo(mImgLoop);
-    }
+//    if (mpKFLoop == nullptr || mpKFLoop->isNull()) {
+//        mImgLoop.setTo(cv::Scalar(0));
+//        return;
+//    } else {
+//        mpKFLoop->copyImgTo(mImgLoop);
+//    }
 
-    //! 把图像转为彩色
-    if (mImgCurr.channels() == 1) {
-        Mat imgTemp = mImgCurr.clone();
-        cvtColor(mImgCurr, imgTemp, CV_GRAY2BGR);
-        imgTemp.copyTo(mImgCurr);
-    }
-    if (mImgLoop.channels() == 1) {
-        Mat imgTemp = mImgLoop.clone();
-        cvtColor(mImgLoop, imgTemp, CV_GRAY2BGR);
-        imgTemp.copyTo(mImgLoop);
-    }
-    Size sizeImgCurr = mImgCurr.size();
-    Size sizeImgLoop = mImgLoop.size();
+//    //! 把图像转为彩色
+//    if (mImgCurr.channels() == 1) {
+//        Mat imgTemp = mImgCurr.clone();
+//        cvtColor(mImgCurr, imgTemp, CV_GRAY2BGR);
+//        imgTemp.copyTo(mImgCurr);
+//    }
+//    if (mImgLoop.channels() == 1) {
+//        Mat imgTemp = mImgLoop.clone();
+//        cvtColor(mImgLoop, imgTemp, CV_GRAY2BGR);
+//        imgTemp.copyTo(mImgLoop);
+//    }
+//    Size sizeImgCurr = mImgCurr.size();
+//    Size sizeImgLoop = mImgLoop.size();
 
-    Mat imgMatch(sizeImgCurr.height * 2, sizeImgCurr.width, mImgCurr.type());
-    mImgCurr.copyTo(imgMatch(cv::Rect(0, 0, sizeImgCurr.width, sizeImgCurr.height)));
-    mImgLoop.copyTo(
-        imgMatch(cv::Rect(0, sizeImgCurr.height, sizeImgLoop.width, sizeImgLoop.height)));
-    imgMatch.copyTo(mImgMatch);
+//    Mat imgMatch(sizeImgCurr.height * 2, sizeImgCurr.width, mImgCurr.type());
+//    mImgCurr.copyTo(imgMatch(cv::Rect(0, 0, sizeImgCurr.width, sizeImgCurr.height)));
+//    mImgLoop.copyTo(
+//        imgMatch(cv::Rect(0, sizeImgCurr.height, sizeImgLoop.width, sizeImgLoop.height)));
+//    imgMatch.copyTo(mImgMatch);
 
-    //! Draw Features
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
-        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
-        Point2f ptCurr = kpCurr.pt;
-        bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
-        Scalar colorCurr;
-        if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);  // 绿色为可观测到的地图点
-        } else {
-            colorCurr = Scalar(255, 0, 0);  // 蓝色为非地图点
-        }
-        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
-    }
+//    //! Draw Features
+//    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
+//        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
+//        Point2f ptCurr = kpCurr.pt;
+//        bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
+//        Scalar colorCurr;
+//        if (ifMPCurr) {
+//            colorCurr = Scalar(0, 255, 0);  // 绿色为可观测到的地图点
+//        } else {
+//            colorCurr = Scalar(255, 0, 0);  // 蓝色为非地图点
+//        }
+//        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
+//    }
 
-    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
-        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += 480;
+//    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
+//        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
+//        Point2f ptLoop = kpLoop.pt;
+//        Point2f ptLoopMatch = ptLoop;
+//        ptLoopMatch.y += 480;
 
-        bool ifMPLoop = bool(mpKFLoop->hasObservation(i));
-        Scalar colorLoop;
-        if (ifMPLoop) {
-            colorLoop = Scalar(0, 255, 0);
-        } else {
-            colorLoop = Scalar(255, 0, 0);
-        }
-        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
-    }
+//        bool ifMPLoop = bool(mpKFLoop->hasObservation(i));
+//        Scalar colorLoop;
+//        if (ifMPLoop) {
+//            colorLoop = Scalar(0, 255, 0);
+//        } else {
+//            colorLoop = Scalar(255, 0, 0);
+//        }
+//        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
+//    }
 
-    //! Draw Matches
-    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+//    //! Draw Matches
+//    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
 
-        int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
-        Point2f ptCurr = kpCurr.pt;
+//        int idxCurr = iter->first;
+//        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
+//        Point2f ptCurr = kpCurr.pt;
 
-        int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += 480;
+//        int idxLoop = iter->second;
+//        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
+//        Point2f ptLoop = kpLoop.pt;
+//        Point2f ptLoopMatch = ptLoop;
+//        ptLoopMatch.y += 480;
 
-        bool ifMPCurr = bool(mpKFCurr->hasObservation(idxCurr));
-        bool ifMPLoop = bool(mpKFLoop->hasObservation(idxLoop));
+//        bool ifMPCurr = bool(mpKFCurr->hasObservation(idxCurr));
+//        bool ifMPLoop = bool(mpKFLoop->hasObservation(idxLoop));
 
-        Scalar colorCurr, colorLoop;
-        if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);
-        } else {
-            colorCurr = Scalar(255, 0, 0);
-        }
-        if (ifMPLoop) {
-            colorLoop = Scalar(0, 255, 0);
-        } else {
-            colorLoop = Scalar(255, 0, 0);
-        }
+//        Scalar colorCurr, colorLoop;
+//        if (ifMPCurr) {
+//            colorCurr = Scalar(0, 255, 0);
+//        } else {
+//            colorCurr = Scalar(255, 0, 0);
+//        }
+//        if (ifMPLoop) {
+//            colorLoop = Scalar(0, 255, 0);
+//        } else {
+//            colorLoop = Scalar(255, 0, 0);
+//        }
 
-        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
-        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
-        if (ifMPCurr && ifMPLoop) {
-            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
-        } else {
-            line(mImgMatch, ptCurr, ptLoopMatch, colorCurr, 1);
-        }
-    }
-}
+//        circle(mImgMatch, ptCurr, 4, colorCurr, 1);
+//        circle(mImgMatch, ptLoopMatch, 4, colorLoop, 1);
+//        if (ifMPCurr && ifMPLoop) {
+//            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
+//        } else {
+//            line(mImgMatch, ptCurr, ptLoopMatch, colorCurr, 1);
+//        }
+//    }
+//}
 
 /**
  * @brief GlobalMapper::RemoveMatchOutlierRansac

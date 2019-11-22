@@ -30,17 +30,10 @@ Frame::Frame()
 Frame::~Frame()
 {}
 
-/**
- * @brief   klt的Frame构造
- * @param imgGray   已矫正过畸变的灰度图
- * @param odo       里程计信息
- * @param vKPs      特征点
- *
- * @author  Maple.Liu
- * @date    2019.10.23
- */
-Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBextractor* extractor)
-    : mpORBExtractor(extractor), mTimeStamp(-1.f), odom(odo), mvKeyPoints(vKPs)
+//! 光流法中的Frame构造
+Frame::Frame(const Mat& im, const double time, const Se2& odo, const vector<KeyPoint>& vKPs, ORBextractor* extractor)
+    : mpORBExtractor(extractor), mbBowVecExist(false), mTimeStamp(time), odom(odo),
+      mvKeyPoints(vKPs), mbNull(false)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputation) {
@@ -66,8 +59,8 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
         this->setNull();
         return;
     }
+    mvbMPOutlier.resize(N, true);
     mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
-    mvbOutlier.resize(N, true);
 
     if (bNeedVisualization)
         im.copyTo(mImage);
@@ -100,95 +93,10 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
     }
 }
 
-/**
- * @brief   构造函数, 对图像去畸变并应用直方图均衡, 提取特征点
- * @param imgGray   灰度图
- * @param odo       里程计信息
- * @param extractor ORB特征提取类的指针
- * @param K         相机内参
- * @param distCoef  相机畸变参数
- */
-Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& K, const Mat& distCoef)
-    : mpORBExtractor(extractor), mTimeStamp(-1.f), odom(odo)
-{
-    //! 首帧会根据k和d重新计算图像边界, 只计算一次
-    if (bIsInitialComputation) {
-        //! 计算去畸变后的图像边界
-        computeBoundUn(K, distCoef);
-
-        gridElementWidthInv = static_cast<float>(GRID_COLS) / (maxXUn - minXUn);
-        gridElementHeightInv = static_cast<float>(GRID_ROWS) / (maxYUn - minYUn);
-
-        bIsInitialComputation = false;
-        bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
-                minXUn, maxXUn, minYUn, maxYUn);
-    }
-
-    id = nextId++;
-
-    Mat imgGray, imgUn, imgClahed;
-
-    //! 输入图像去畸变
-    if (im.channels() != 1)
-        cvtColor(im, imgGray, CV_BGR2GRAY);
-    else
-        imgGray = im;
-    undistort(imgGray, imgUn, K, distCoef);
-
-    //!  限制对比度自适应直方图均衡
-    Ptr<CLAHE> clahe = createCLAHE(3.0, Size(8, 8));
-    clahe->apply(imgUn, imgClahed);
-
-    //! 提取特征点
-    (*mpORBExtractor)(imgClahed, Mat(), mvKeyPoints, mDescriptors);
-    N = mvKeyPoints.size();
-    if (N == 0) {
-        cerr << "[Frame][Error] #" << id << " No features in this frame!" << endl;
-        this->setNull();
-        return;
-    }
-    mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
-    mvbOutlier.resize(N, true);
-
-    if (bNeedVisualization)
-        imgClahed.copyTo(mImage);
-
-    //! 计算金字塔每层尺度和高斯噪声
-    mnScaleLevels = mpORBExtractor->getLevels();       // default 1
-    mfScaleFactor = mpORBExtractor->getScaleFactor();  // default 1.2
-    mvScaleFactors.resize(mnScaleLevels);
-    mvLevelSigma2.resize(mnScaleLevels);
-    mvInvLevelSigma2.resize(mnScaleLevels);
-    mvScaleFactors[0] = 1.0f;
-    mvLevelSigma2[0] = 1.0f;
-    for (int i = 1; i != mnScaleLevels; ++i) {
-        mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
-        mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
-        mvInvLevelSigma2[i] = 1.0 / mvLevelSigma2[i];
-    }
-
-    //! Assign Features to Grid Cells. 将特征点按照cell存放
-    int nReserve = N / (GRID_COLS * GRID_ROWS);
-    for (int i = 0; i != GRID_COLS; ++i) {
-        for (int j = 0; j < GRID_ROWS; ++j)
-            mGrid[i][j].reserve(nReserve);
-    }
-    for (size_t i = 0; i != N; ++i) {
-        KeyPoint& kp = mvKeyPoints[i];
-        int nGridPosX, nGridPosY;
-        if (posInGrid(kp, nGridPosX, nGridPosY))
-            mGrid[nGridPosX][nGridPosY].push_back(i);
-    }
-}
-
-/**
- * @brief   带时间戳信息的构造函数
- * @author  Vance.Wu
- */
+//! 特征点法的Frame构造
 Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* extractor,
              const Mat& K, const Mat& distCoef)
-    : mpORBExtractor(extractor), mTimeStamp(time), odom(odo)
+    : mpORBExtractor(extractor), mbBowVecExist(false), mTimeStamp(time), odom(odo), mbNull(false)
 {
     //! 首帧会根据k和d重新计算图像边界, 只计算一次
     if (bIsInitialComputation) {
@@ -227,8 +135,8 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
         this->setNull();
         return;
     }
+    mvbMPOutlier.resize(N, true);
     mvpMapPoints.resize(N, static_cast<PtrMapPoint>(nullptr));
-    mvbOutlier.resize(N, true);
 
     if (bNeedVisualization)
         imgClahed.copyTo(mImage);
@@ -254,7 +162,7 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
             mGrid[i][j].reserve(nReserve);
     }
     for (size_t i = 0; i != N; ++i) {
-        KeyPoint& kp = mvKeyPoints[i];
+        const KeyPoint& kp = mvKeyPoints[i];
         int nGridPosX, nGridPosY;
         if (posInGrid(kp, nGridPosX, nGridPosY))
             mGrid[nGridPosX][nGridPosY].push_back(i);
@@ -263,11 +171,11 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, ORBextractor* ext
 
 //! 复制构造函数, 初始化KF用
 Frame::Frame(const Frame& f)
-    : mpORBExtractor(f.mpORBExtractor), mTimeStamp(f.mTimeStamp), id(f.id), odom(f.odom), N(f.N),
-      mDescriptors(f.mDescriptors.clone()), mvKeyPoints(f.mvKeyPoints),
-      mvpMapPoints(f.mvpMapPoints), mvbOutlier(f.mvbOutlier), mnScaleLevels(f.mnScaleLevels),
-      mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors),
-      mvLevelSigma2(f.mvLevelSigma2), mvInvLevelSigma2(f.mvInvLevelSigma2), Trb(f.Trb)
+    : mpORBExtractor(f.mpORBExtractor), mbBowVecExist(f.mbBowVecExist), mTimeStamp(f.mTimeStamp),
+      id(f.id), odom(f.odom), N(f.N), mDescriptors(f.mDescriptors.clone()),
+      mvKeyPoints(f.mvKeyPoints), mvbMPOutlier(f.mvbMPOutlier), mnScaleLevels(f.mnScaleLevels),
+      mfScaleFactor(f.mfScaleFactor), mvScaleFactors(f.mvScaleFactors), mvLevelSigma2(f.mvLevelSigma2),
+      mvInvLevelSigma2(f.mvInvLevelSigma2), Trb(f.Trb), mvpMapPoints(f.mvpMapPoints)
 {
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);
@@ -287,6 +195,8 @@ Frame& Frame::operator=(const Frame& f)
 {
     mpORBExtractor = f.mpORBExtractor;
 
+    mbBowVecExist = f.mbBowVecExist;
+
     mTimeStamp = f.mTimeStamp;
     id = f.id;
     odom = f.odom;
@@ -297,7 +207,7 @@ Frame& Frame::operator=(const Frame& f)
     N = f.N;
     mvKeyPoints = f.mvKeyPoints;
     mvpMapPoints = f.mvpMapPoints;
-    mvbOutlier = f.mvbOutlier;
+    mvbMPOutlier = f.mvbMPOutlier;
     f.mDescriptors.copyTo(mDescriptors);
     for (int i = 0; i != GRID_COLS; ++i)
         for (int j = 0; j < GRID_ROWS; ++j)
@@ -309,11 +219,11 @@ Frame& Frame::operator=(const Frame& f)
     mvLevelSigma2 = f.mvLevelSigma2;
     mvInvLevelSigma2 = f.mvInvLevelSigma2;
 
+    Trb = f.Trb;
     if (!f.Tcr.empty())
         setTcr(f.Tcr);
     if (!f.Tcw.empty())
         setPose(f.Tcw);  // Twb在此更新
-    Trb = f.Trb;
 
     return *this;
 }
@@ -403,7 +313,7 @@ bool Frame::inImgBound(const cv::Point2f& pt)
 }
 
 // From ORB_SLAM
-bool Frame::posInGrid(KeyPoint& kp, int& posX, int& posY)
+bool Frame::posInGrid(const KeyPoint& kp, int& posX, int& posY)
 {
     posX = round((kp.pt.x - minXUn) * gridElementWidthInv);
     posY = round((kp.pt.y - minYUn) * gridElementHeightInv);
@@ -420,13 +330,13 @@ bool Frame::posInGrid(KeyPoint& kp, int& posX, int& posY)
  * @brief 找到在 以x,y为中心,边长为2r的方形内且在[minLevel, maxLevel]的特征点. 花销较大
  * @return 返回区域内特征点在KF里的索引
  */
-vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const float& r,
+vector<size_t> Frame::getFeaturesInArea(const float x, const float y, const float r,
                                         const int minLevel, const int maxLevel) const
 {
     assert(r > 0);
 
     vector<size_t> vIndices;
-    vIndices.reserve(N);
+    vIndices.reserve(0.1 * N);
 
     //! floor向下取整
     int nMinCellX = floor((x - minXUn - r) * gridElementWidthInv);
@@ -483,5 +393,132 @@ vector<size_t> Frame::getFeaturesInArea(const float& x, const float& y, const fl
     return vIndices;
 }
 
+void Frame::computeBoW(const ORBVocabulary* _pVoc)
+{
+    if (mBowVec.empty() || mFeatVec.empty()) {
+        vector<cv::Mat> vCurrentDesc = toDescriptorVector(mDescriptors);
+        // Feature vector associate features with nodes in the 4th level (from leaves up)
+        // We assume the vocabulary tree has 6 levels, change the 4 otherwise
+        _pVoc->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
+    }
+    mbBowVecExist = true;
+}
+
+
+Point3f Frame::getMPPoseInCamareFrame(size_t idx)
+{
+    locker lock(mMutexObs);
+    Point3f ret(-1.f, -1.f, -1.f);
+    if (mvpMapPoints[idx]) {
+        const Point3f Pw = mvpMapPoints[idx]->getPos();
+        ret = cvu::se3map(Tcw, Pw);
+    }
+    return ret;
+}
+
+PtrMapPoint Frame::getObservation(size_t idx)
+{
+    locker lock(mMutexObs);
+    return mvpMapPoints[idx];
+}
+
+vector<PtrMapPoint> Frame::getObservations(bool checkValid, bool checkParallax)
+{
+    locker lock(mMutexObs);
+    if (!checkValid) {
+        return mvpMapPoints;
+    } else {
+        vector<PtrMapPoint> vValidMPs;
+        vValidMPs.reserve(N >> 1);
+        for (size_t i = 0; i < N; ++i) {
+            const PtrMapPoint& pMP = mvpMapPoints[i];
+            if (!pMP || pMP->isNull())
+                continue;
+            if (checkParallax && !pMP->isGoodPrl())
+                continue;
+            vValidMPs.push_back(pMP);
+        }
+        return vValidMPs;
+    }
+}
+
+size_t Frame::countObservations()
+{
+    locker lock(mMutexObs);
+    size_t count = 0;
+    for (size_t i = 0; i < N; ++i) {
+        const PtrMapPoint& pMP = mvpMapPoints[i];
+        if (!pMP || pMP->isNull())
+            continue;
+        count++;
+    }
+    return count;
+}
+
+void Frame::setObservation(const PtrMapPoint& pMP, size_t idx)
+{
+    locker lock(mMutexObs);
+    if (idx >= 0 && idx < N)
+        mvpMapPoints[idx] = pMP;
+}
+
+void Frame::eraseObservation(size_t idx)
+{
+    locker lock(mMutexObs);
+    if (idx >= 0 && idx < N)
+        mvpMapPoints[idx] = nullptr;
+}
+
+bool Frame::hasObservation(size_t idx)
+{
+    locker lock(mMutexObs);
+    if (idx < 0 || idx >= N)
+        return false;
+
+    if (mvpMapPoints[idx])
+        return true;
+    else
+        return false;
+}
+
+bool Frame::hasObservation(const PtrMapPoint& pMP)
+{
+    locker lock(mMutexObs);
+    for (size_t i = 0; i < N; ++i) {
+        if (mvpMapPoints[i] == pMP)
+            return true;
+    }
+    return false;
+}
+
+void Frame::eraseObservation(const PtrMapPoint& pMP)
+{
+    locker lock(mMutexObs);
+    for (size_t i = 0; i < N; ++i) {
+        if (mvpMapPoints[i] == pMP) {
+            mvpMapPoints[i] == nullptr;
+            break;
+        }
+    }
+}
+
+void Frame::updateObservationsAfterOpt()
+{
+    locker lock(mMutexObs);
+    for (size_t i = 0; i < N; ++i) {
+        if (mvpMapPoints[i] && mvbMPOutlier[i])
+            mvpMapPoints[i] = nullptr;
+    }
+}
+
+void Frame::setNull()
+{
+    locker lock(mMutexObs);
+    mpORBExtractor = nullptr;
+    mDescriptors.release();
+    mvKeyPoints.clear();
+    mvpMapPoints.clear();
+    mbNull = true;
+}
 
 }  // namespace se2lam

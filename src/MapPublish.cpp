@@ -202,7 +202,8 @@ MapPublish::MapPublish(Map* pMap)
 }
 
 MapPublish::~MapPublish()
-{}
+{
+}
 
 
 void MapPublish::run()
@@ -218,36 +219,26 @@ void MapPublish::run()
     while (nh.ok()) {
         if (checkFinish())
             break;
-        if (mpMap->empty())
+
+        if (mpMap->empty()) {
+            rate.sleep();
             continue;
-        if (mpMap->getCurrentKF() == nullptr)
+        }
+
+        if (mpMap->getCurrentKF() == nullptr){
+            rate.sleep();
             continue;
+        }
 
-//        Mat imgCurr, imgLast, imgRef;
-//        Point2f kpsCurr, kpsLast, kpsRef;
-//        vector<int> matchIdxToRef;
+        if (!mbUpdated){
+            rate.sleep();
+            continue;
+        }
+        mbUpdated = false;
 
-//#ifdef USEKLT
-//        Mat imgShow = mpTracker->drawMatchesPointsToRefFrame("Match Ref KF");
-//#else
-//        Mat imgShow = mpTracker->getImageMatches();
-//#endif
-//        cv::Mat img = mpFramePub->drawFrame();
-//        if (img.empty())
-//            continue;
-
-        // 给参考帧标注KFid号
-//        PtrKeyFrame pKP = mpMap->getCurrentKF();
-//        putText(img, to_string(pKP->mIdKF), Point(15, 255), 1, 1, Scalar(0, 0, 255), 2);
-
-//        sensor_msgs::ImagePtr msg =
-//            cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-//        pub.publish(msg);
-
-        // draw image matches
         cv::Mat Tcw;
         if (!mbIsLocalize) {
-            Mat imgMatch = mpTracker->getImageMatches();
+            Mat imgMatch = drawMatchesInOneImg();
             sensor_msgs::ImagePtr msgMatch =
                 cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
             pubImgMatches.publish(msgMatch);
@@ -410,8 +401,7 @@ void MapPublish::publishKeyFrames()
         }
 
         // Feature Graph
-        for (auto iter = pKFi->mFtrMeasureFrom.begin(); iter != pKFi->mFtrMeasureFrom.end();
-             iter++) {
+        for (auto iter = pKFi->mFtrMeasureFrom.begin(); iter != pKFi->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
             Mat Twb = cvu::inv(pKF2->getPose()) /* * Config::Tcb*/;
             geometry_msgs::Point msgs_o2;
@@ -463,11 +453,11 @@ void MapPublish::publishKeyFrames()
 
             mVIGraph.points.push_back(msgsLast);
             mVIGraph.points.push_back(msgsCurr);
-//            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
-//            Twb: [%.4f, %.4f]\n",
-//                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
-//                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
-//                   Twb.x/1000., Twb.y/1000.);
+            //            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
+            //            Twb: [%.4f, %.4f]\n",
+            //                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
+            //                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
+            //                   Twb.x/1000., Twb.y/1000.);
 
             msgsLast = msgsCurr;
         }
@@ -497,10 +487,10 @@ void MapPublish::publishMapPoints()
     if (mbIsLocalize) {
         locker lock(mpLocalizer->mMutexLocalMap);
         vpMPAct = mpLocalizer->getLocalMPs();
-        spMPNow = mpLocalizer->mpKFCurr->getAllObsMPs();
+        spMPNow = mpLocalizer->mpKFCurr->getObservations();
     } else {
         vpMPAct = mpMap->getLocalMPs();
-        spMPNow = mpMap->getCurrentKF()->getAllObsMPs();
+        spMPNow = mpMap->getCurrentKF()->getObservations();
     }
 
     vector<PtrMapPoint> vpMPNeg = mpMap->getAllMPs();
@@ -650,14 +640,13 @@ void MapPublish::publishCameraCurr(const cv::Mat& Twc)
     publisher.publish(mKFNow);
 }
 
-//! 可视化原始odo的输入
 void MapPublish::publishOdomInformation()
 {
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    //Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
-    Se2 currOdom = mpMap->getCurrentKF()->odom;       // 只显示KF的odo
+    // Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
+    Se2 currOdom = mpMap->getCurrentKF()->odom;  // 只显示KF的odo
     if (!mbIsLocalize) {
         //! 这里要对齐到首帧的Odom, 位姿从原点开始
         static Mat Tb0w = cvu::inv(currOdom.toCvSE3());
@@ -724,6 +713,76 @@ bool MapPublish::isFinished()
 {
     locker lock(mMutexFinish);
     return mbFinished;
+}
+
+// TODO
+#ifdef USEKLT
+void MapPublish::update(TrackKlt* pTrack)
+{
+}
+#else
+void MapPublish::update(Track* pTrack, char* txt)
+{
+    if (pTrack->mCurrentFrame.id == pTrack->mpReferenceKF->id)
+        return;
+
+    pTrack->mCurrentFrame.mImage.copyTo(mCurrentImage);
+    pTrack->mpReferenceKF->mImage.copyTo(mReferenceImage);
+    pTrack->mAffineMatrix.copyTo(mAffineMatrix);
+
+    mvCurrentKPs = pTrack->mCurrentFrame.mvKeyPoints;
+    mvReferenceKPs = pTrack->mpReferenceKF->mvKeyPoints;
+    mvMatchIdx = pTrack->mvMatchIdx;
+    mvGoodMatchIdx = pTrack->mvGoodMatchIdx;
+    mImageText = string(txt);
+
+    mbUpdated = true;
+}
+#endif
+
+cv::Mat MapPublish::drawMatchesInOneImg()
+{
+    Mat imgCur, imgRef, imgWarp, imgOut, A21;
+
+    if (mCurrentImage.channels() == 1)
+        cvtColor(imgOut, imgCur, CV_GRAY2BGR);
+    if (mReferenceImage.channels() == 1)
+        cvtColor(imgOut, imgRef, CV_GRAY2BGR);
+
+    // 所有KP先上蓝色
+    drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+    // 去掉A12中的尺度变换, 只保留旋转, 并取逆得到A21
+    invertAffineTransform(mAffineMatrix, A21);
+    warpAffine(imgCur, imgWarp, A21, imgCur.size());
+    hconcat(imgRef, imgWarp, imgOut);
+
+    for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
+        if (mvMatchIdx[i] < 0) {
+            continue;
+        } else {
+            const Point2f& ptRef = mvReferenceKPs[i].pt;
+            const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
+
+            Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+            Mat pt1_warp = A21 * pt1;
+            Point2f ptCurWarp =
+                Point2f(pt1_warp.at<double>(0), pt1_warp.at<double>(1)) + Point2f(imgRef.cols, 0);
+
+            if (mvGoodMatchIdx[i] < 0) {
+                circle(imgOut, ptRef, 3, Scalar(0, 255, 0));
+                circle(imgOut, ptCurWarp, 3, Scalar(0, 255, 0));
+            } else {  // 深度好的匹配点才连线
+                circle(imgOut, ptRef, 3, Scalar(0, 255, 255), -1);
+                circle(imgOut, ptCurWarp, 3, Scalar(0, 255, 255), -1);
+                line(imgOut, ptRef, ptCurWarp, Scalar(255, 255, 20));
+            }
+        }
+    }
+    putText(imgOut, mImageText, Point(240, 15), 1, 1, Scalar(0, 0, 255), 2);
+
+    return imgOut.clone();
 }
 
 

@@ -48,7 +48,7 @@ public:
     // for visulization message publisher
     size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
                       std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
-    cv::Mat getImageMatches();
+
 
     bool isFinished();
     void requestFinish();
@@ -74,26 +74,26 @@ private:
     void resetLocalTrack();
     bool needNewKF();
 
-    void drawMatchesForPub(bool warp);
-
-    bool checkFinish();
-    void setFinish();
-
     // Relocalization
     bool detectIfLost();
     bool detectIfLost(int cros, double projError);
+
     bool relocalization();
     bool detectLoopClose();
-    bool verifyLoopClose(std::map<int, int>& _mapMatchAll, std::map<int, int>& _mapMatchRaw);
-    void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
+    bool verifyLoopClose();
+    void removeMatchOutlierRansac(const Frame* _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
-    void doLocalBA();
+    void doLocalBA(Frame& pKF);
     void resartTracking();
+
+    bool checkFinish();
+    void setFinish();
 
 private:
     static bool mbUseOdometry;  //! TODO 冗余变量
     bool mbPrint;
     bool mbNeedVisualization;
+    std::string mImageText;
 
     // set in OdoSLAM class
     Map* mpMap;
@@ -107,14 +107,12 @@ private:
     // local map
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
-    PtrKeyFrame mpCurrentKF, mpLoopKF;
-    std::vector<cv::Point3f> mLocalMPs;  // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
-    std::vector<int> mvMatchIdx, mvGoodMatchIdx;   // Matches12, 参考帧到当前帧的KP匹配索引
-    std::vector<bool> mvbGoodPrl;
-    int mnGoodPrl, mnGoodDepth, mnBadDepth;  // count number of mLocalMPs with good parallax
-    int mnInliers, mnGoodInliers, mnTrackedOld;
-    int mnLostFrames;
-
+    PtrKeyFrame mpLoopKF;
+    std::map<size_t, cv::Point3f> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
+    std::vector<int> mvMatchIdx, mvGoodMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
+    int mnNewAddedMPs, mnCandidateMPs, mnBadMatches;  // 新增/潜在的MP数及不好的匹配点数
+    int mnInliers, mnGoodInliers, mnTrackedOld;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
+    int mnLostFrames;                            // 连续追踪失败的帧数
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames, nMinMatches;
@@ -127,7 +125,6 @@ private:
 
     // preintegration on SE2
     PreSE2 preSE2;
-    Se2 mLastOdom;
 
     bool mbFinishRequested;
     bool mbFinished;

@@ -7,14 +7,11 @@
 
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
+
 #pragma once
 
-#include "Config.h"
 #include "Frame.h"
-#include "ORBVocabulary.h"
-#include "Thirdparty/DBoW2/DBoW2/BowVector.h"
-#include "Thirdparty/DBoW2/DBoW2/FeatureVector.h"
-#include "converter.h"
+#include <set>
 
 namespace se2lam
 {
@@ -37,17 +34,15 @@ class Map;
 class MapPoint;
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
-
 class KeyFrame : public Frame, public std::enable_shared_from_this<KeyFrame>
 {
 public:
-    KeyFrame();
+    KeyFrame();  // MapStorage类加载地图时需要
     KeyFrame(const Frame& frame);
     ~KeyFrame();
 
     struct IdLessThan {
-        bool operator()(const std::shared_ptr<KeyFrame>& lhs,
-                        const std::shared_ptr<KeyFrame>& rhs) const
+        bool operator()(const std::shared_ptr<KeyFrame>& lhs, const std::shared_ptr<KeyFrame>& rhs) const
         {
             return lhs->mIdKF < rhs->mIdKF;
         }
@@ -63,61 +58,39 @@ public:
     };
 
     void setMap(Map* pMap) { mpMap = pMap; }
-    //bool isNull() { return mbNull; }
+    // bool isNull() { return mbNull; }
     void setNull();
 
     //! 共视关系的维护函数
-    std::set<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
+    std::vector<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
     std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
-    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
+    std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
+    // void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
     void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
     void eraseCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
-    void sortCovisibleKFs();
     void updateCovisibleKFs();
     size_t countCovisibleKFs();
 
     //! MP观测的维护函数
-    std::set<PtrMapPoint> getAllObsMPs(bool checkParallax = true);
-    std::map<PtrMapPoint, size_t> getObservations();  // 返回所有的MP
-    std::vector<PtrMapPoint> getMapPointMatches();    // 返回KP对应的MP
-    PtrMapPoint getObservation(size_t idx);           // 返回索引id对应的MP
-    int getFeatureIndex(const PtrMapPoint& pMP);      // 返回MP对应的KP的索引
-    void addObservation(const PtrMapPoint& pMP, size_t idx);
-    void eraseObservation(const PtrMapPoint& pMP);
-    void eraseObservation(size_t idx);
+    int getFeatureIndex(const PtrMapPoint& pMP); // 返回MP对应的KP的索引
     bool hasObservation(const PtrMapPoint& pMP);
-    bool hasObservation(size_t idx);
-    void setObservation(const PtrMapPoint& pMP, size_t idx);
-    size_t countObservations();  // 计算MP的观测数
-
-    // NOTE 关键函数，在LocalMapper和MapPoint里会给KF添加观测
-    void setViewMP(const cv::Point3f& pt3f, size_t idx, const Eigen::Matrix3d& info);
-    cv::Point3f getViewMPPoseInCamareFrame(size_t idx);
+    void eraseObservation(const PtrMapPoint& pMP);
+    void setObsAndInfo(const PtrMapPoint& pMp, size_t idx, const Eigen::Matrix3d& info);
 
     //! 特征约束关系的维护函数
-    void addFtrMeasureFrom(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea,
-                           const cv::Mat& _info);
-    void addFtrMeasureTo(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea,
-                         const cv::Mat& _info);
+    void addFtrMeasureFrom(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea, const cv::Mat& _info);
+    void addFtrMeasureTo(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea, const cv::Mat& _info);
     void eraseFtrMeasureFrom(const std::shared_ptr<KeyFrame>& pKF);
     void eraseFtrMeasureTo(const std::shared_ptr<KeyFrame>& pKF);
-    void setOdoMeasureFrom(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea,
-                           const cv::Mat& _info);
-    void setOdoMeasureTo(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea,
-                         const cv::Mat& _info);
+    void setOdoMeasureFrom(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea, const cv::Mat& _info);
+    void setOdoMeasureTo(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea, const cv::Mat& _info);
 
-    //! 词向量相关
-    void computeBoW(const ORBVocabulary* _pVoc);
-    DBoW2::FeatureVector getFeatureVector() { return mFeatVec; }
-    DBoW2::BowVector getBowVector() { return mBowVec; }
 
 public:
     static unsigned long mNextIdKF;
 
     unsigned long mIdKF;
 
-    //! TODO 此变量的作用和变化还需要探究一下, 是否需要加锁访问? 是否可以改成PtrMapPoint?
-    std::vector<cv::Point3f> mvViewMPs;  // MP在当前KF相机坐标系下的坐标, 即Pc
     std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mvViewMPsInfo;
 
     // KeyFrame contraints: From this or To this
@@ -130,25 +103,16 @@ public:
     std::pair<std::shared_ptr<KeyFrame>, PreSE2> preOdomFromSelf;
     std::pair<std::shared_ptr<KeyFrame>, PreSE2> preOdomToSelf;
 
-    // ORB BoW by THB:
-    DBoW2::BowVector mBowVec;
-    DBoW2::FeatureVector mFeatVec;
-    bool mbBowVecExist;
-
     //! 以下信息需要加锁访问
 protected:
     Map* mpMap;
 
-    //bool mbNull;
+    // std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
+    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
+    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
+    std::vector<int> mvOrderedWeights;
 
-    std::map<PtrMapPoint, size_t> mObservations;  // size_t为MP在此KF中对应的特征点的索引
-    std::map<size_t, PtrMapPoint> mDualObservations;
-
-    std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
-//    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
-//    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
-
-    std::mutex mMutexObs;
+//    std::mutex mMutexObs;
     std::mutex mMutexCovis;
 };
 

@@ -11,6 +11,7 @@
 #include "ORBmatcher.h"
 #include "Track.h"
 #include "cvutil.h"
+#include "converter.h"
 
 namespace se2lam
 {
@@ -106,7 +107,7 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
     updateParallax(pKF);
 
     // 更新平均观测方向
-    Point3f newObs = pKF->mvViewMPs[idx];
+    Point3f newObs = pKF->getMPPoseInCamareFrame(idx);
     Point3f newNorm = newObs * (1.f / cv::norm(newObs));
     mNormalVector = (mNormalVector * oldObsSize + newNorm) / (oldObsSize + 1.f);
 }
@@ -115,7 +116,7 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexObs);
 
-    Point3f viewPos = pKF->mvViewMPs[mObservations[pKF]];
+    Point3f viewPos = pKF->getMPPoseInCamareFrame(mObservations[pKF]);
     Point3f normPos = viewPos * (1.f / cv::norm(viewPos));
 
     mObservations.erase(pKF);
@@ -178,7 +179,7 @@ int MapPoint::getOctave(const PtrKeyFrame& pKF)
         return -1;
 }
 
-int MapPoint::getIndexInKF(const PtrKeyFrame& pKF)
+int MapPoint::getKPIndexInKF(PtrKeyFrame pKF)
 {
     locker lock(mMutexObs);
     if (mObservations.count(pKF))
@@ -203,22 +204,23 @@ void MapPoint::setPos(const Point3f& pt3f)
 {
     locker lock(mMutexPos);
     mPos = pt3f;
-    updateMeasureInKFs();
+//    updateMeasureInKFs();
 }
 
 //! MP在优化更新坐标后要更新其他KF对其的观测值(Pc), setPos()后需要执行!
-void MapPoint::updateMeasureInKFs()
-{
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
-        PtrKeyFrame pKF = it->first;
-        assert(pKF != nullptr);
-        assert(!pKF->isNull());
+//void MapPoint::updateMeasureInKFs()
+//{
+//    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
+//        PtrKeyFrame pKF = it->first;
+//        assert(pKF != nullptr);
+//        assert(!pKF->isNull());
 
-        Mat Tcw = pKF->getPose();
-        Point3f posKF = cvu::se3map(Tcw, mPos);
-        pKF->mvViewMPs[it->second] = posKF;
-    }
-}
+//        Mat Tcw = pKF->getPose();
+//        Point3f posKF = cvu::se3map(Tcw, mPos);
+
+//        pKF->setObservation([it->second] = posKF;
+//    }
+//}
 
 
 /**
@@ -325,7 +327,7 @@ void MapPoint::updateMainKFandDescriptor()
     size_t idx = mObservations[mMainKF];
     mMainOctave = mMainKF->mvKeyPoints[idx].octave;
     mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];  // 第0层值为1
-    float dist = cv::norm(mMainKF->mvViewMPs[idx]);
+    float dist = cv::norm(mMainKF->getMPPoseInCamareFrame(idx));
     int nlevels = mMainKF->mnScaleLevels;  // 金字塔总层数
 
     //! 金字塔为1层时这里mMinDist和mMinDist会相等! 程序错误!
@@ -392,21 +394,21 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
         return false;
 
     // Do triangulation
-    Mat Tc1w = pKF1->getPose();
-    Mat Tc2w = pKF2->getPose();
-    Mat Proj1 = Config::Kcam * Tc1w.rowRange(0, 3);
-    Mat Proj2 = Config::Kcam * Tc2w.rowRange(0, 3);
-    Point2f pt1 = pKF1->mvKeyPoints[mObservations[pKF1]].pt;
-    Point2f pt2 = pKF2->mvKeyPoints[mObservations[pKF2]].pt;
-    Point3f posW = cvu::triangulate(pt1, pt2, Proj1, Proj2);
+    const Mat Tc1w = pKF1->getPose();
+    const Mat Tc2w = pKF2->getPose();
+    const Mat Proj1 = Config::Kcam * Tc1w.rowRange(0, 3);
+    const Mat Proj2 = Config::Kcam * Tc2w.rowRange(0, 3);
+    const Point2f pt1 = pKF1->mvKeyPoints[mObservations[pKF1]].pt;
+    const Point2f pt2 = pKF2->mvKeyPoints[mObservations[pKF2]].pt;
+    const Point3f posW = cvu::triangulate(pt1, pt2, Proj1, Proj2);
 
-    Point3f Pc1 = cvu::se3map(Tc1w, posW);
-    Point3f Pc2 = cvu::se3map(Tc2w, posW);
+    const Point3f Pc1 = cvu::se3map(Tc1w, posW);
+    const Point3f Pc2 = cvu::se3map(Tc2w, posW);
     if (!Config::acceptDepth(Pc1.z) || !Config::acceptDepth(Pc2.z))
         return false;
 
-    Point3f Ocam1 = Point3f(cvu::inv(Tc1w).rowRange(0, 3).col(3));
-    Point3f Ocam2 = Point3f(cvu::inv(Tc2w).rowRange(0, 3).col(3));
+    const Point3f Ocam1 = pKF1->getCameraCenter();
+    const Point3f Ocam2 = pKF2->getCameraCenter();
     if (!cvu::checkParallax(Ocam1, Ocam2, posW, 2))
         return false;
 
@@ -422,8 +424,8 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     // Update measurements in KFs. 更新约束和信息矩阵
     Eigen::Matrix3d xyzinfo1, xyzinfo2;
     Track::calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
-    pKF1->setViewMP(Pc1, mObservations[pKF1], xyzinfo1);
-    pKF2->setViewMP(Pc2, mObservations[pKF2], xyzinfo2);
+    pKF1->setObsAndInfo(shared_from_this(), mObservations[pKF1], xyzinfo1);
+    pKF2->setObsAndInfo(shared_from_this(), mObservations[pKF2], xyzinfo2);
 
     Mat Rc1w = Tc1w.rowRange(0, 3).colRange(0, 3);
     Mat xyzinfoW = Rc1w.t() * toCvMat(xyzinfo1) * Rc1w;
@@ -439,7 +441,7 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
         Point3f Pci = cvu::se3map(Tciw, posW);
         Mat Rciw = Tciw.rowRange(0, 3).colRange(0, 3);
         Mat xyzinfoi = Rciw * xyzinfoW * Rciw.t();
-        pKFi->setViewMP(Pci, mObservations[pKFi], toMatrix3d(xyzinfoi));
+        pKFi->setObsAndInfo(shared_from_this(), mObservations[pKFi], toMatrix3d(xyzinfoi));
     }
     return true;
 }

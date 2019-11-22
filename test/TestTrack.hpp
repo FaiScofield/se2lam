@@ -195,7 +195,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs; // matched index of LocalMPs
         ORBmatcher matcher;
-        matcher.MatchByProjection(mpCurrentKF, vLocalMPs, 20, 0, vMatchedIdxMPs);   // 15
+        matcher.SearchByProjection(mpCurrentKF, vLocalMPs, 20, 0, vMatchedIdxMPs);   // 15
         for (int i = 0, iend = mpCurrentKF->N; i != iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;
@@ -235,19 +235,19 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
                 continue;
             }
 
-            Point3f posW = cvu::se3map(cvu::inv(mpReferenceKF->getPose()), mpReferenceKF->mvViewMPs[i]);
+            Point3f posW = cvu::se3map(cvu::inv(mpReferenceKF->getPose()), mpReferenceKF->mvpMapPoints[i]);
 
             //! TODO to delete, for debug.
             //! 这个应该会出现. 内点数不多的时候没有三角化, 则虽有匹配, 但mvViewMPs没有更新, 故这里不能生成MP
             if (posW.z < 0.f) {
                 fprintf(stderr, "[LocalMap] KF#%ld的mvViewMPs[%ld].z < 0. \n", mpReferenceKF->mIdKF, i);
-                cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << mpReferenceKF->mvViewMPs[i] << endl;
+                cerr << "[LocalMap] 此点在成为MP之前的坐标Pc是: " << mpReferenceKF->mvpMapPoints[i] << endl;
                 cerr << "[LocalMap] 此点在成为MP之后的坐标Pw是: " << posW << endl;
                 continue;
             }
 
-            Point3f Pc2 = cvu::se3map(mpCurrentKF->getTcr(), mpReferenceKF->mvViewMPs[i]);
-            mpCurrentKF->mvViewMPs[mvMatchIdx[i]] = Pc2;
+            Point3f Pc2 = cvu::se3map(mpCurrentKF->getTcr(), mpReferenceKF->mvpMapPoints[i]);
+            mpCurrentKF->mvpMapPoints[mvMatchIdx[i]] = Pc2;
 
             PtrMapPoint pMP = std::make_shared<MapPoint>(posW, mvbGoodPrl[i]);
 
@@ -380,7 +380,7 @@ int TestTrack::doTriangulate()
 //            mLocalMPs[i] = mpReferenceKF->mViewMPs[i];
             Point3f Pw = mpReferenceKF->getObservation(i)->getPos();
             Point3f Pc = cvu::se3map(mpReferenceKF->getPose(), Pw);
-            mpReferenceKF->mvViewMPs[i] = Pc;
+            mpReferenceKF->mvpMapPoints[i] = Pc;
             nTrackedOld++;
             continue;
         }
@@ -393,7 +393,7 @@ int TestTrack::doTriangulate()
         // 3.如果深度计算符合预期，就将有深度的KP更新到ViewMPs里, 其中视差较好的会被标记
         if (Config::acceptDepth(Pc1.z)) {
             nGoodDepth++;
-            mpReferenceKF->mvViewMPs[i] = Pc1;
+            mpReferenceKF->mvpMapPoints[i] = Pc1;
 //            mLocalMPs[i] = Pc1;
             // 检查视差
             if (cvu::checkParallax(Ocam1, Ocam2, Pc1, 2)) {
