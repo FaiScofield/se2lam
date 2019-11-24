@@ -3,18 +3,33 @@ project(se2lam)
 
 add_subdirectory(Thirdparty/DBoW2)
 
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+message("===> CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
+# -march=native 参数不可用, 会使g2o出错.
+if(CMAKE_COMPILER_IS_GNUCXX )
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -ggdb") # -g
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations")
 
 # c++ 11 support for g2o, multi-thread and shared_ptr
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Wall")
 
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
+
 find_package(Eigen REQUIRED)
+set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
 find_package(OpenCV REQUIRED)
 find_package(CSparse REQUIRED)
 find_package(Cholmod REQUIRED)
-find_package(G2O REQUIRED)
 
+set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
+find_package(G2O REQUIRED)
+file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
+list(APPEND G2O_LIBS cxsparse cholmod)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -31,17 +46,6 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   message_generation
 )
-#add_message_files(
-#  FILES
-#  SyncOdoImg.msg
-#)
-
-#generate_messages(
-#  DEPENDENCIES
-#  std_msgs
-#  sensor_msgs
-#  geometry_msgs
-#)
 
 catkin_package(
 #  INCLUDE_DIRS include
@@ -82,17 +86,17 @@ list(APPEND LINK_LIBS
   ${OpenCV_LIBS}
 )
 
-list(APPEND G2O_LIBS
-  cxsparse
-  cholmod
-  g2o_cli
-  g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d
-  g2o_core g2o_interface g2o_solver_csparse g2o_solver_structure_only
-  g2o_types_sba g2o_types_slam3d g2o_csparse_extension
-  g2o_solver_dense g2o_stuff
-  g2o_types_sclam2d g2o_parser g2o_solver_pcg
-  g2o_types_data g2o_types_sim3
-)
+# list(APPEND G2O_LIBS
+#   cxsparse
+#   cholmod
+#   g2o_cli
+#   g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d
+#   g2o_core g2o_interface g2o_solver_csparse g2o_solver_structure_only
+#   g2o_types_sba g2o_types_slam3d g2o_csparse_extension
+#   g2o_solver_dense g2o_stuff
+#   g2o_types_sclam2d g2o_parser g2o_solver_pcg
+#   g2o_types_data g2o_types_sim3
+# )
 
 ## Build a lib
 FILE(GLOB_RECURSE IncFiles "include/se2lam/*.h")

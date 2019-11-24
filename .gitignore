@@ -10,3 +10,4 @@ Thirdparty/DBoW2/build/
 Thirdparty/DBoW2/lib/*
 *.bag
 **/*voc.bin
+_clang-format
