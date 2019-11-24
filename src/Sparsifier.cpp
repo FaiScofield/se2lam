@@ -4,7 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
-#include "sparsifier.h"
+#include "Sparsifier.h"
 
 using namespace std;
 

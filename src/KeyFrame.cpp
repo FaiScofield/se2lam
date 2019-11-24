@@ -183,13 +183,13 @@ Mat KeyFrame::getPose(){
 void KeyFrame::setPose(const Mat &_Tcw){
     locker lock(mMutexPose);
     _Tcw.copyTo(Tcw);
-    Twb.fromCvSE3(cvu::inv(Tcw) * Config::cTb);
+    Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
 }
 void KeyFrame::setPose(const Se2 &_Twb)
 {
     locker lock(mMutexPose);
     Twb = _Twb;
-    Tcw = Config::cTb * Twb.inv().toCvSE3();
+    Tcw = Config::Tcb * Twb.inv().toCvSE3();
 }
 
 void KeyFrame::addObservation(PtrMapPoint pMP, int idx){

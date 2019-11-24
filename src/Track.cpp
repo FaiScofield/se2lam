@@ -55,7 +55,7 @@ void Track::setSensors(Sensors* pSensors) {
 
 void Track::run(){
 
-    if(Config::LOCALIZATION_ONLY)
+    if(Config::LocalizationOnly)
         return;
 
     ros::Rate rate(Config::FPS*5);
@@ -108,7 +108,7 @@ void Track::mCreateFrame(const Mat &img, const Se2& odo){
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
     mFrame.Twb = Se2(0,0,0);
-    mFrame.Tcw = Config::cTb.clone();
+    mFrame.Tcw = Config::Tcb.clone();
 
     if(mFrame.keyPoints.size() > 100){
         printf("-- INFO TR: Create first frame with %d features.\n", mFrame.N);
@@ -162,7 +162,7 @@ void Track::mTrack(const Mat &img, const Se2& odo){
 void Track::updateFramePose(){
     mFrame.Trb = mFrame.odom - mpKF->odom;
     Se2 dOdo = mpKF->odom - mFrame.odom;
-    mFrame.Tcr = Config::cTb * dOdo.toCvSE3() * Config::bTc;
+    mFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
     mFrame.Twb = mpKF->Twb + (mFrame.odom - mpKF->odom);
 
@@ -180,9 +180,9 @@ void Track::updateFramePose(){
     Bk.block<2,2>(0,0) = Phi_ik;
     Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
     Matrix3d Sigma_vk = Matrix3d::Identity();
-    Sigma_vk(0,0) = (Config::ODO_X_NOISE * Config::ODO_X_NOISE);
-    Sigma_vk(1,1) = (Config::ODO_Y_NOISE * Config::ODO_Y_NOISE);
-    Sigma_vk(2,2) = (Config::ODO_T_NOISE * Config::ODO_T_NOISE);
+    Sigma_vk(0,0) = (Config::OdoNoiseX * Config::OdoNoiseX);
+    Sigma_vk(1,1) = (Config::OdoNoiseY * Config::OdoNoiseY);
+    Sigma_vk(2,2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 }
@@ -223,16 +223,16 @@ int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
 
 void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat& cTc, g2o::Matrix6d &Info_se3){
 
-    const Mat bTc = Config::bTc;
-    const Mat cTb = Config::cTb;
+    const Mat bTc = Config::Tbc;
+    const Mat cTb = Config::Tcb;
 
     const Mat bTb = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
 
     cTc = cTb * bTb * bTc;
 
-    float dx = dOdo.x * Config::ODO_X_UNCERTAIN + Config::ODO_X_NOISE;
-    float dy = dOdo.y * Config::ODO_Y_UNCERTAIN + Config::ODO_Y_NOISE;
-    float dtheta = dOdo.theta * Config::ODO_T_UNCERTAIN + Config::ODO_T_NOISE;
+    float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
+    float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
+    float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
 
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
     //    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4, 1.f/(dtheta*dtheta) };
@@ -268,8 +268,8 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eig
     Point3f xyz2 = cvu::se3map(Tcw2, xyz);
     float length1 = cv::norm(xyz1);
     float length2 = cv::norm(xyz2);
-    float dxy1 = 2.f * length1 / Config::fxCam;
-    float dxy2 = 2.f * length2 / Config::fxCam;
+    float dxy1 = 2.f * length1 / Config::fx;
+    float dxy2 = 2.f * length2 / Config::fx;
     float dz1 = dxy2 / sinParallax;
     float dz2 = dxy1 / sinParallax;
 
@@ -357,9 +357,9 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched){
         Se2 dOdo = mFrame.odom - mpKF->odom;
         bool c5 = dOdo.theta >= 0.0349f; // Larger than 2 degree
         //cv::Mat cTc = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
-        cv::Mat cTc = Config::cTb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::bTc;
+        cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0,2).col(3);
-        bool c6 = cv::norm(xy) >= ( 0.0523f * Config::UPPER_DEPTH * 0.1f ); // 3 degree = 0.0523 rad
+        bool c6 = cv::norm(xy) >= ( 0.0523f * Config::UpperDepth * 0.1f ); // 3 degree = 0.0523 rad
 
         bNeedKFByOdo = c5 || c6;
     }

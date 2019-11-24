@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 
     ros::Rate rate(se2lam::Config::FPS);
 
-    int n = se2lam::Config::ImgIndex;
+    int n = se2lam::Config::ImgCount;
     int i = 0;
 
     for(; i < n && system.ok(); i++) {

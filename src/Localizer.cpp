@@ -44,7 +44,7 @@ void Localizer::run() {
     ComputeBowVecAll();
 
     // traj log
-    ofstream fileOutTraj(se2lam::Config::WRITE_TRAJ_FILE_PATH + se2lam::Config::WRITE_TRAJ_FILE_NAME);
+    ofstream fileOutTraj(se2lam::Config::MapFileStorePath + se2lam::Config::WriteTrajFileName);
     // traj log
 
 
@@ -181,7 +181,7 @@ void Localizer::WriteTrajFile(ofstream & file) {
         return;
     }
 
-    Mat wTb = cvu::inv(se2lam::Config::bTc * mpKFCurrRefined->getPose());
+    Mat wTb = cvu::inv(se2lam::Config::Tbc * mpKFCurrRefined->getPose());
     Mat wRb = wTb.rowRange(0, 3).colRange(0, 3);
     g2o::Vector3D euler = g2o::internal::toEuler(se2lam::toMatrix3d(wRb));
 
@@ -198,7 +198,7 @@ void Localizer::ReadFrameInfo(const Mat &img, const Se2& odo) {
     mpKFRef = mpKFCurr;
 
     mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
-    mFrameCurr.Tcw = Config::cTb.clone();
+    mFrameCurr.Tcw = Config::Tcb.clone();
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
     mpKFCurr->ComputeBoW(mpORBVoc);
 
@@ -248,11 +248,11 @@ void Localizer::DoLocalBA() {
     addVertexSE3Expmap(optimizer,
                        toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, false);
     addPlaneMotionSE3Expmap(optimizer,
-                            toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::bTc);
+                            toSE3Quat(mpKFCurr->getPose()), mpKFCurr->mIdKF, Config::Tbc);
     maxKFid = mpKFCurr->mIdKF;
 
     // Add MPs in local map as fixed
-    const float delta = Config::TH_HUBER;
+    const float delta = Config::ThHuber;
     set<PtrMapPoint> setMPs = mpKFCurr->getAllObsMPs();
 
     map<PtrMapPoint, int> Observations = mpKFCurr->getObservations();
@@ -614,7 +614,7 @@ void Localizer::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFL
 void Localizer::UpdatePoseCurr() {
     Se2 dOdo = mpKFRef->odom - mpKFCurr->odom;
     //mpKFCurr->Tcr = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
-    mpKFCurr->Tcr = Config::cTb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::bTc;
+    mpKFCurr->Tcr = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
     mpKFCurr->Tcw = mpKFCurr->Tcr * mpKFRef->Tcw;
 }
 

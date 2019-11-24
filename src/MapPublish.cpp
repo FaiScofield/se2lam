@@ -42,7 +42,7 @@ MapPublish::MapPublish(Map* pMap){
     const char* COVISGRAPH_NAMESPACE = "CovisGraph";
 
     // Set Scale Ratio
-    mScaleRatio = Config::MAPPUB_SCALE_RATIO;
+    mScaleRatio = Config::MappubScaleRatio;
 
 
     //Configure KF not in local map
@@ -528,7 +528,7 @@ void MapPublish::PublishCameraCurr(const cv::Mat &Twc)
 
 void MapPublish::run(){
 
-    mbIsLocalize = Config::LOCALIZATION_ONLY;
+    mbIsLocalize = Config::LocalizationOnly;
 
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);

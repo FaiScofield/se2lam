@@ -8,7 +8,6 @@
 #include <ros/ros.h>
 #include "LocalMapper.h"
 #include "Map.h"
-#include "sparsifier.h"
 #include "cvutil.h"
 
 #include <g2o/core/optimizable_graph.h>
@@ -67,7 +66,7 @@ void GlobalMapper::run() {
 
     mbExit = false;
 
-    if(Config::LOCALIZATION_ONLY)
+    if(Config::LocalizationOnly)
         return;
 
     ros::Rate rate(Config::FPS * 10);
@@ -157,7 +156,7 @@ void GlobalMapper::run() {
         double t5 = timer.time;
 
         //! Return
-        if (Config::GLOBAL_PRINT) {
+        if (Config::GlobalPrint) {
             cerr << "## DEBUG GM: " << "loopTime = " << t1+t2+t3+t4+t5
                  << ", numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs()
                  << endl;
@@ -186,13 +185,13 @@ void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>> & _vKF
         if (CreateFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
-            if (Config::GLOBAL_PRINT) {
+            if (Config::GlobalPrint) {
                 cerr << "## DEBUG GM: add feature constraint from " << ptKFFrom->id
                      << " to " << ptKFTo->id << endl;
             }
         }
         else {
-            if (Config::GLOBAL_PRINT)
+            if (Config::GlobalPrint)
                 cerr << "## DEBUG GM: add feature constraint failed" << endl;
         }
     }
@@ -203,8 +202,8 @@ bool GlobalMapper::DetectLoopClose()
     // Loop closure detection with ORB-BOW method
 
     bool bDetected = false;
-    int minKFIdOffset = Config::GM_DCL_MIN_KFID_OFFSET;
-    double minScoreBest = Config::GM_DCL_MIN_SCORE_BEST;
+    int minKFIdOffset = Config::MinKFidOffset;
+    double minScoreBest = Config::MinScoreBest;
 
     PtrKeyFrame pKFCurr = mpMap->getCurrentKF();
     if (pKFCurr == NULL) {
@@ -261,9 +260,9 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _m
     map<int,int> mapMatch;
 
     bool bVerified = false;
-    int numMinMatchMP = Config::GM_VCL_NUM_MIN_MATCH_MP;
-    int numMinMatchKP = Config::GM_VCL_NUM_MIN_MATCH_KP;
-    double ratioMinMatchMP = Config::GM_VCL_RATIO_MIN_MATCH_MP;
+    int numMinMatchMP = Config::MinMPMatchNum;
+    int numMinMatchKP = Config::MinKPMatchNum;
+    double ratioMinMatchMP = Config::MinMPMatchRatio;
 
     if (mpKFCurr == NULL || mpKFLoop == NULL) {
         //        cerr << "## DEBUG GM: " << "No good match candidate found!!!" << endl;
@@ -304,14 +303,14 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _m
             bVerified = true;
         }
 
-        if (Config::GLOBAL_PRINT) {
+        if (Config::GlobalPrint) {
             cerr << "## DEBUG GM: " << "add feature constraint from "
                  << mpKFCurr->mIdKF << " to " << mpKFLoop->mIdKF <<  ", MPGood/KPGood/MPNow/KPNow="
                  << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
     }
     else {
-        if (Config::GLOBAL_PRINT) {
+        if (Config::GlobalPrint) {
             cerr << "## DEBUG GM: " << "no enough MPs matched, MPGood/KPGood/MPNow/KPNow="
                  << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
@@ -362,7 +361,7 @@ void GlobalMapper::GlobalBA() {
         bool bIfFix = (pKF->mIdKF == 0);
 
         //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
-        g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, Config::bTc, SE3OffsetParaId, bIfFix);
+        g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, Config::Tbc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
         //        pEdge->setLevel(1);
 
@@ -445,9 +444,9 @@ void GlobalMapper::GlobalBA() {
     }
 #endif
 
-    optimizer.setVerbose(Config::GLOBAL_VERBOSE);
+    optimizer.setVerbose(Config::GlobalVerbose);
     optimizer.initializeOptimization();
-    optimizer.optimize(Config::GLOBAL_ITER);
+    optimizer.optimize(Config::GlobalIterNum);
 
 #ifdef PRE_REJECT_FTR_OUTLIER
 
@@ -858,10 +857,10 @@ void GlobalMapper::OptKFPair(const vector<PtrKeyFrame> & _vPtrKFs, const vector<
         g2o::Isometry3D Iso3_w_kf = toIsometry3D(T3_kf_w.inv());
 
         if (i == 0) {
-            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::bTc, 0, true);
+            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, true);
         }
         else {
-            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::bTc, 0, false);
+            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, false);
         }
 
         vertexId ++;
@@ -934,12 +933,12 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
     // Set vertex KF1
     Mat T3_kf1_w = _pKF1->getPose();
     g2o::Isometry3D Iso3_w_kf1 = toIsometry3D(T3_kf1_w.inv());
-    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf1, 0, Config::bTc, 0, false);
+    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf1, 0, Config::Tbc, 0, false);
 
     // Set vertex KF2
     Mat T3_kf2_w = _pKF2->getPose();
     g2o::Isometry3D Iso3_w_kf2 = toIsometry3D(T3_kf2_w.inv());
-    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf2, 1, Config::bTc, 0, false);
+    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf2, 1, Config::Tbc, 0, false);
 
     int vertexId = 2;
 
@@ -997,7 +996,7 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
         }
     }
 
-    if (Config::GLOBAL_PRINT) {
+    if (Config::GlobalPrint) {
         cerr << "## DEBUG GM: " << "Find " << sIdMPin1Outlier.size()
              << " outliers by 3D MP to KF measurements." << endl;
     }

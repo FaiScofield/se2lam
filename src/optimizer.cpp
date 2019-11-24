@@ -284,12 +284,12 @@ addPlaneMotionSE3Expmap(SlamOptimizer &opt, const g2o::SE3Quat &pose, int vId, c
 
     //! Vector order: [rot, trans]
     g2o::Matrix6d Info_bw = g2o::Matrix6d::Zero();
-    Info_bw(0,0) = Config::PLANEMOTION_XROT_INFO;
-    Info_bw(1,1) = Config::PLANEMOTION_YROT_INFO;
+    Info_bw(0,0) = Config::PlaneMotionInfoXrot;
+    Info_bw(1,1) = Config::PlaneMotionInfoYrot;
     Info_bw(2,2) = 1e-4;
     Info_bw(3,3) = 1e-4;
     Info_bw(4,4) = 1e-4;
-    Info_bw(5,5) = Config::PLANEMOTION_Z_INFO;
+    Info_bw(5,5) = Config::PlaneMotionInfoZ;
     g2o::Matrix6d J_bb_cc = Tbc.adj();
     g2o::Matrix6d Info_cw = J_bb_cc.transpose() * Info_bw * J_bb_cc;
 #endif
@@ -443,12 +443,12 @@ addVertexSE3PlaneMotion(SlamOptimizer &opt, const g2o::Isometry3D &pose, int id,
 
     //! Vector order: [trans, rot]
     g2o::Matrix6d Info_wb = g2o::Matrix6d::Zero();
-    Info_wb(3,3) = Config::PLANEMOTION_XROT_INFO;
-    Info_wb(4,4) = Config::PLANEMOTION_YROT_INFO;
+    Info_wb(3,3) = Config::PlaneMotionInfoXrot;
+    Info_wb(4,4) = Config::PlaneMotionInfoYrot;
     Info_wb(5,5) = 1e-4;
     Info_wb(0,0) = 1e-4;
     Info_wb(1,1) = 1e-4;
-    Info_wb(2,2) = Config::PLANEMOTION_Z_INFO;
+    Info_wb(2,2) = Config::PlaneMotionInfoZ;
     g2o::Matrix6d J_bb_cc = AdjTR(Tbc);
     g2o::Matrix6d Info_pose = J_bb_cc.transpose() * Info_wb * J_bb_cc;
 

@@ -1,20 +1,25 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+ */
 
-#include <ros/ros.h>
-#include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
-#include <opencv2/opencv.hpp>
 #include <geometry_msgs/Vector3Stamped.h>
+#include <image_transport/image_transport.h>
+#include <opencv2/opencv.hpp>
+#include <ros/ros.h>
 
 using namespace cv;
 using namespace std;
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
+    if (argc < 3) {
+        cerr << "Usage: datapub <data_path> <number_images>" << endl;
+        exit(0);
+    }
+
     ros::init(argc, argv, "datapub");
     ros::start();
 
@@ -22,11 +27,11 @@ int main(int argc, char **argv)
     const char* OdoTopic = "/odo_raw";
 
     std::string path = argv[1];
-    int N = atoi(argv[2]); // Number of images
+    int N = atoi(argv[2]);  // Number of images
 
     string fullOdoName = path + "/odo_raw.txt";
     ifstream rec(fullOdoName);
-    float x,y,theta;
+    float x, y, theta;
     string line;
 
     ros::NodeHandle nh;
@@ -36,8 +41,7 @@ int main(int argc, char **argv)
 
 
     ros::Rate rate(30);
-    for(int i = 0; i < N && ros::ok(); i++)
-    {
+    for (int i = 0; i < N && ros::ok(); i++) {
         string fullImgName = path + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         getline(rec, line);
@@ -59,5 +63,4 @@ int main(int argc, char **argv)
 
     ros::shutdown();
     return 0;
-
 }

@@ -59,7 +59,7 @@ void OdoSLAM::setDataPath(const char *strDataPath){
 
 cv::Mat OdoSLAM::getCurrentVehiclePose()
 {
-    return cvu::inv( mpMap->getCurrentFramePose() ) * Config::cTb;
+    return cvu::inv( mpMap->getCurrentFramePose() ) * Config::Tcb;
 }
 
 cv::Mat OdoSLAM::getCurrentCameraPoseWC()
@@ -109,15 +109,15 @@ void OdoSLAM::start() {
     mpMapPub->setLocalizer(mpLocalizer);
 
 
-    if (Config::USE_PREV_MAP){
-        mpMapStorage->setFilePath(Config::READ_MAP_FILE_PATH, Config::READ_MAP_FILE_NAME);
+    if (Config::UsePrevMap){
+        mpMapStorage->setFilePath(Config::MapFileStorePath, Config::ReadMapFileName);
         mpMapStorage->loadMap();
     }
 
     mbFinishRequested = false;
     mbFinished = false;
 
-    if (se2lam::Config::LOCALIZATION_ONLY) {
+    if (se2lam::Config::LocalizationOnly) {
 
         thread threadLocalizer(&se2lam::Localizer::run, mpLocalizer);
 
@@ -190,19 +190,19 @@ void OdoSLAM::wait(OdoSLAM* system){
 }
 
 void OdoSLAM::saveMap() {
-    if (se2lam::Config::SAVE_NEW_MAP){
-        mpMapStorage->setFilePath(se2lam::Config::WRITE_MAP_FILE_PATH, se2lam::Config::WRITE_MAP_FILE_NAME);
+    if (se2lam::Config::SaveNewMap){
+        mpMapStorage->setFilePath(se2lam::Config::MapFileStorePath, se2lam::Config::WriteMapFileName);
         printf("&& DBG MS: Begin save map.\n");
         mpMapStorage->saveMap();
     }
 
     // Save keyframe trajectory
     cerr << "\n# Finished. Saving keyframe trajectory ..." << endl;
-    ofstream towrite(se2lam::Config::WRITE_MAP_FILE_PATH  + "/se2lam_kf_trajectory.txt");
+    ofstream towrite(se2lam::Config::MapFileStorePath  + "/se2lam_kf_trajectory.txt");
     vector<se2lam::PtrKeyFrame> vct = mpMap->getAllKF();
     for (size_t i = 0; i<vct.size(); i++){
         if (!vct[i]->isNull()){
-            Mat wTb = cvu::inv(se2lam::Config::bTc * vct[i]->getPose());
+            Mat wTb = cvu::inv(se2lam::Config::Tbc * vct[i]->getPose());
             Mat wRb = wTb.rowRange(0, 3).colRange(0, 3);
             g2o::Vector3D euler = g2o::internal::toEuler(se2lam::toMatrix3d(wRb));
             towrite << vct[i]->id << " " <<
@@ -221,7 +221,7 @@ void OdoSLAM::requestFinish() {
 
 bool OdoSLAM::checkFinish(){
     unique_lock<mutex> lock(mMutexFinish);
-    if(se2lam::Config::LOCALIZATION_ONLY){
+    if(se2lam::Config::LocalizationOnly){
         if(mpLocalizer->isFinished() || mpMapPub->isFinished()){
             mbFinishRequested = true;
             return true;
@@ -238,7 +238,7 @@ bool OdoSLAM::checkFinish(){
 }
 
 void OdoSLAM::sendRequestFinish(){
-    if (Config::LOCALIZATION_ONLY) {
+    if (Config::LocalizationOnly) {
         mpLocalizer->requestFinish();
         mpMapPub->RequestFinish();
     }
@@ -251,7 +251,7 @@ void OdoSLAM::sendRequestFinish(){
 }
 
 void OdoSLAM::checkAllExit() {
-    if (Config::LOCALIZATION_ONLY) {
+    if (Config::LocalizationOnly) {
         while (1) {
             if (mpLocalizer->isFinished() && mpMapPub->isFinished())
                 break;

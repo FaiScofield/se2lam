@@ -131,7 +131,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
             if(!pMP->acceptNewObserve(posNewKF, mNewKF->keyPoints[i])){
                 continue;
             }
-            if(posNewKF.z > Config::UPPER_DEPTH || posNewKF.z < Config::LOWER_DEPTH)
+            if(posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)
                 continue;
             Eigen::Matrix3d infoNew, infoOld;
             Track::calcSE3toXYZInfo(posNewKF, mNewKF->Tcw, pMP->mMainKF->Tcw, infoNew, infoOld);
@@ -241,7 +241,7 @@ void LocalMapper::localBA(){
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(Config::LOCAL_VERBOSE);
+    optimizer.setVerbose(Config::LocalVerbose);
 #ifndef TIME_TO_LOG_LOCAL_BA
     optimizer.setForceStopFlag(&mbAbortBA);
 #endif
@@ -257,7 +257,7 @@ void LocalMapper::localBA(){
     //assert(optimizer.verifyInformationMatrices(true));
 
     optimizer.initializeOptimization(0);
-    optimizer.optimize(Config::LOCAL_ITER);
+    optimizer.optimize(Config::LocalIterNum);
 
 #ifdef TIME_TO_LOG_LOCAL_BA
     timer.stop();
@@ -303,10 +303,10 @@ void LocalMapper::localBA(){
 
 void LocalMapper::run(){
 
-    if(Config::LOCALIZATION_ONLY)
+    if(Config::LocalizationOnly)
         return;
 
-    mbPrintDebugInfo = Config::LOCAL_PRINT;
+    mbPrintDebugInfo = Config::LocalPrint;
 
 
 #ifdef TIME_TO_LOG_LOCAL_BA
