@@ -45,7 +45,7 @@ Frame::Frame(const Mat& im, const double time, const Se2& odo, const vector<KeyP
 
         bIsInitialComputation = false;
         bNeedVisualization = Config::NeedVisualization;
-        fprintf(stderr, "\n[Frame][Info ] 去畸变的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
+        fprintf(stderr, "\n[Frame][Info ] 去畸变后的图像边界为: X: [%.1f, %.1f], Y: [%.1f, %.1f]\n",
                 minXUn, maxXUn, minYUn, maxYUn);
     }
 
@@ -462,14 +462,7 @@ void Frame::setObservation(const PtrMapPoint& pMP, size_t idx)
         mvpMapPoints[idx] = pMP;
 }
 
-void Frame::eraseObservation(size_t idx)
-{
-    locker lock(mMutexObs);
-    if (idx >= 0 && idx < N)
-        mvpMapPoints[idx] = nullptr;
-}
-
-bool Frame::hasObservation(size_t idx)
+bool Frame::hasObservationByIndex(size_t idx)
 {
     locker lock(mMutexObs);
     if (idx < 0 || idx >= N)
@@ -481,7 +474,14 @@ bool Frame::hasObservation(size_t idx)
         return false;
 }
 
-bool Frame::hasObservation(const PtrMapPoint& pMP)
+void Frame::eraseObservationByIndex(size_t idx)
+{
+    locker lock(mMutexObs);
+    if (idx >= 0 && idx < N)
+        mvpMapPoints[idx] = nullptr;
+}
+
+bool Frame::hasObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     for (size_t i = 0; i < N; ++i) {
@@ -491,7 +491,7 @@ bool Frame::hasObservation(const PtrMapPoint& pMP)
     return false;
 }
 
-void Frame::eraseObservation(const PtrMapPoint& pMP)
+void Frame::eraseObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     for (size_t i = 0; i < N; ++i) {
@@ -514,11 +514,13 @@ void Frame::updateObservationsAfterOpt()
 void Frame::setNull()
 {
     locker lock(mMutexObs);
-    mpORBExtractor = nullptr;
     mDescriptors.release();
     mvKeyPoints.clear();
     mvpMapPoints.clear();
+    mpORBExtractor = nullptr;
     mbNull = true;
+    if (bNeedVisualization)
+        mImage.release();
 }
 
 }  // namespace se2lam

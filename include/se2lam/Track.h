@@ -41,15 +41,6 @@ public:
 
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
 
-    static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
-    static void calcSE3toXYZInfo(const cv::Point3f& Pc1, const cv::Mat& Tc1w, const cv::Mat& Tc2w,
-                                 Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
-
-    // for visulization message publisher
-    size_t copyForPub(cv::Mat& img1, cv::Mat& img2, std::vector<cv::KeyPoint>& kp1,
-                      std::vector<cv::KeyPoint>& kp2, std::vector<int>& vMatches12);
-
-
     bool isFinished();
     void requestFinish();
 
@@ -108,7 +99,7 @@ private:
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpLoopKF;
-    std::map<size_t, cv::Point3f> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
+    std::map<size_t, MPCandidate> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
     std::vector<int> mvMatchIdx, mvGoodMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
     int mnNewAddedMPs, mnCandidateMPs, mnBadMatches;  // 新增/潜在的MP数及不好的匹配点数
     int mnInliers, mnGoodInliers, mnTrackedOld;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数

@@ -26,18 +26,17 @@ public:
 
     void run();
 
-    void addNewKF(const PtrKeyFrame& pKF, const std::map<size_t, cv::Point3f>& vMPCandidates,
-                  const std::vector<int>& vMatched12);
+    void addNewKF(const PtrKeyFrame& pKF, const std::map<size_t, MPCandidate>& MPCandidates);
     bool checkNewKF();
     void processNewKF();
-    void findCorresponds();
+    void findCorresponds(const std::map<size_t, MPCandidate>& MPCandidates);
 
     void updateLocalGraphInMap();
     void pruneRedundantKFinMap();
     void removeOutlierChi2();
     void localBA();
 
-    bool acceptNewKF();
+    bool checkIfAcceptNewKF();
     void setAbortBA() { mbAbortBA = true; }
     void setAcceptNewKF(bool value);
     void setGlobalBABegin(bool value);
@@ -62,14 +61,14 @@ protected:
 
     int mnMaxLocalFrames;  // 局部KF的最大数量, 0表示无上限
     int mnSearchLevel;     // 局部KF的搜索层数
-    float mfSearchRadius;  // 局部KF的FLANN近邻搜索半径
+    float mfSearchRadius;  // 局部KF的FLANN近邻搜索半v径
 
+    std::map<size_t, MPCandidate> mMPCandidates;  // 等待处理的MP候选点
     std::list<PtrKeyFrame> mlNewKFs; // 等待处理的关键帧列表
     PtrKeyFrame mpNewKF;
     std::mutex mMutexNewKFs;
 
     bool mbAcceptNewKF;
-    bool mbUpdated;
     std::mutex mMutexAccept;
 
     bool mbAbortBA;

@@ -63,8 +63,8 @@ public:
 
     // IO
     void updatePoseCurr();
-    void drawImgMatch(const std::map<int, int>& mapMatch);
-    void drawImgCurr();
+//    void drawImgMatch(const std::map<int, int>& mapMatch);
+//    void drawImgCurr();
 
     void updateCovisKFCurr();
     int findCommonMPs(const PtrKeyFrame pKF1, const PtrKeyFrame pKF2, std::set<PtrMapPoint>& spMPs);

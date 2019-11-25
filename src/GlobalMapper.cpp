@@ -291,7 +291,7 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     int nGoodMPMatch = mapMatch.size();  // MP匹配数
 
     //! Show Match Info
-    set<PtrMapPoint> spMPsCurrent = mpKFCurr->getObservations();
+    vector<PtrMapPoint> spMPsCurrent = mpKFCurr->getObservations();
     int nMPsCurrent = spMPsCurrent.size();           // 当前KF的可观测MP数
     int nKPsCurrent = mpKFCurr->mvKeyPoints.size();  // 当前KF提取的KP数
 
@@ -517,7 +517,7 @@ void GlobalMapper::globalBA()
         Mat Rwc = Twc.rowRange(0, 3).colRange(0, 3);
         Mat twc = Twc.rowRange(0, 3).colRange(3, 4);
 
-        if (!pKF->hasObservation(pMP)) {
+        if (!pKF->hasObservationByPointer(pMP)) {
             continue;
         }
 
@@ -889,7 +889,7 @@ void GlobalMapper::optKFPair(
             int vertexIdMP = j + numKFs;
             PtrMapPoint PtrMPj = _vPtrMPs[j];
 
-            if (!PtrKFi->hasObservation(PtrMPj)) {
+            if (!PtrKFi->hasObservationByPointer(PtrMPj)) {
                 continue;
             }
 
@@ -1065,7 +1065,7 @@ void GlobalMapper::createVecMeasSE3XYZ(
             Meas_ij.idKF = i;
             Meas_ij.idMP = j;
 
-            if (!PtrKFi->hasObservation(PtrMPj)) {
+            if (!PtrKFi->hasObservationByPointer(PtrMPj)) {
                 continue;
             }
 
@@ -1258,8 +1258,8 @@ void GlobalMapper::removeKPMatch(const PtrKeyFrame& _pKFCurr, const PtrKeyFrame&
         int idxCurr = iter->first;
         int idxLoop = iter->second;
 
-        bool ifMPCurr = _pKFCurr->hasObservation(idxCurr);
-        bool ifMPLoop = _pKFLoop->hasObservation(idxLoop);
+        bool ifMPCurr = _pKFCurr->hasObservationByIndex(idxCurr);
+        bool ifMPLoop = _pKFLoop->hasObservationByIndex(idxLoop);
 
         if (ifMPCurr && ifMPLoop) {
             continue;

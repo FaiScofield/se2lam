@@ -63,8 +63,8 @@ void MapPoint::setNullSelf()
     PtrMapPoint pThis = shared_from_this();
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
         PtrKeyFrame pKF = it->first;
-        if (pKF->hasObservation(pThis))
-            pKF->eraseObservation(pThis);
+        if (pKF->hasObservationByPointer(pThis))
+            pKF->eraseObservationByPointer(pThis);
     }
     mObservations.clear();
     mMainDescriptor.release();
@@ -74,22 +74,17 @@ void MapPoint::setNullSelf()
 }
 
 // 可以保证返回的KF都是有效的
-set<PtrKeyFrame> MapPoint::getObservations()
+vector<PtrKeyFrame> MapPoint::getObservations()
 {
     locker lock(mMutexObs);
 
-    set<PtrKeyFrame> pKFs;
+    vector<PtrKeyFrame> pKFs;
+    pKFs.reserve(mObservations.size());
     for (auto iter = mObservations.begin(), iend = mObservations.end(); iter != iend; ++iter) {
         PtrKeyFrame pKF = iter->first;
-        if (!pKF)
+        if (!pKF || pKF->isNull())
             continue;
-        assert(!pKF->isNull());
-        /* if (pKF->isNull()) {
-            fprintf(stderr, "[MapPoint] MP#%ld 观测中存在null KF. 这不应该发生!\n", mId);
-            iter = mObservations.erase(iter);
-            continue;
-        } */
-        pKFs.insert(pKF);
+        pKFs.push_back(pKF);
     }
     return pKFs;
 }
@@ -286,9 +281,7 @@ void MapPoint::updateMainKFandDescriptor()
     }
 
     if (vDes.empty()) {
-        fprintf(stderr, "[MapPoint] Set this MP#%ld to null because no desciptors in "
-                        "updateMainKFandDescriptor()\n",
-                mId);
+        fprintf(stderr, "[MapPoint] MP#%ld 被设为null因为它没有描述子!\n", mId);
         setNullSelf();
         return;
     }
@@ -333,8 +326,8 @@ void MapPoint::updateMainKFandDescriptor()
     //! 金字塔为1层时这里mMinDist和mMinDist会相等! 程序错误!
     if (mLevelScaleFactor - 1.0 < 1e-6)
         mLevelScaleFactor = Config::ScaleFactor;  // 1.2
-                                                  //    mMaxDist = dist * mLevelScaleFactor;
-    //    mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
+    // mMaxDist = dist * mLevelScaleFactor;
+    // mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
     mMaxDist = dist * mMainKF->mvScaleFactors[nlevels - 1] / mLevelScaleFactor;
     mMinDist = dist / mLevelScaleFactor;
 }
@@ -349,11 +342,11 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
 {
     if (mbGoodParallax || mObservations.size() <= 2)
         return;
-    if (mvPosTmp.size() > 5) {
-        mbGoodParallax = true;
-        mvPosTmp.clear();
-        return;
-    }
+//    if (mvPosTmp.size() > 5) {
+//        mbGoodParallax = true;
+//        mvPosTmp.clear();
+//        return;
+//    }
 
     // Get the oldest KF in the last 6 KFs. 由从此KF往前最多10帧KF和此KF做三角化更新MP坐标
     for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
@@ -362,25 +355,25 @@ void MapPoint::updateParallax(const PtrKeyFrame& pKF)
         if (pKF->mIdKF - pKFj->mIdKF > 10)  // 6
             continue;
         if (updateParallaxCheck(pKFj, pKF))  // 和往前10帧内的KF都进行一次三角化, 直至更新成为止
-            continue;
+            break; // 一次更新完成就退出
     }
 
-    size_t n = mvPosTmp.size();
-    if (n > 0) {
-        cerr << "MP#" << mId << " 的临时视差: ";
-        Point3f poseTatal(0.f, 0.f, 0.f);
-        for (size_t i = 0; i < n; ++i) {
-            poseTatal += mvPosTmp[i];
-            cout << mvPosTmp[i] << ", ";
-        }
-        cout << endl;
+//    size_t n = mvPosTmp.size();
+//    if (n > 0) {
+//        cerr << "MP#" << mId << " 的临时视差: ";
+//        Point3f poseTatal(0.f, 0.f, 0.f);
+//        for (size_t i = 0; i < n; ++i) {
+//            poseTatal += mvPosTmp[i];
+//            cout << mvPosTmp[i] << ", ";
+//        }
+//        cout << endl;
 
-        locker lock(mMutexPos);
-        mPos = poseTatal * (1.f / n);
-        mbGoodParallax = true;
-        updateMeasureInKFs();
-        fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
-    }
+//        locker lock(mMutexPos);
+//        mPos = poseTatal * (1.f / n);
+//        mbGoodParallax = true;
+////        updateMeasureInKFs();
+//        fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
+//    }
 
     // 如果和前面10帧的三角化后视差仍然没有更新到好则抛弃此MP
     if (!mbGoodParallax && mObservations.size() > 11)
@@ -415,15 +408,15 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     // 视差良好, 则更新此点的三维坐标
     {
         locker lock(mMutexPos);
-        // mPos = posW;
-        // mbGoodParallax = true;
-        // fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
-        mvPosTmp.push_back(posW);
+         mPos = posW;
+         mbGoodParallax = true;
+         fprintf(stderr, "[MapPoint] MP#%ld 的视差被更新为good.\n", mId);
+         // mvPosTmp.push_back(posW);
     }
 
     // Update measurements in KFs. 更新约束和信息矩阵
     Eigen::Matrix3d xyzinfo1, xyzinfo2;
-    Track::calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
+    calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
     pKF1->setObsAndInfo(shared_from_this(), mObservations[pKF1], xyzinfo1);
     pKF2->setObsAndInfo(shared_from_this(), mObservations[pKF2], xyzinfo2);
 

@@ -482,7 +482,7 @@ void MapPublish::publishMapPoints()
     mMPsNow.points.clear();
     mMPsNoGoodPrl.points.clear();
 
-    set<PtrMapPoint> spMPNow;
+    vector<PtrMapPoint> spMPNow;
     vector<PtrMapPoint> vpMPAct;
     if (mbIsLocalize) {
         locker lock(mpLocalizer->mMutexLocalMap);

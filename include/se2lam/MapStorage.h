@@ -26,10 +26,14 @@ namespace se2lam {
 
 class MapStorage
 {
-
 public:
-
     MapStorage();
+
+    struct CovisibleRelationship
+    {
+        unsigned long thisKFid, thatKFid;
+        int covisbleCount;
+    };
 
     void setMap(Map* pMap) { mpMap = pMap; }
 

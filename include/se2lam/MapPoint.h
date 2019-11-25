@@ -43,7 +43,7 @@ public:
     void setNull();
 
     //! 观测属性
-    std::set<PtrKeyFrame> getObservations();
+    std::vector<PtrKeyFrame> getObservations();
     void addObservation(const PtrKeyFrame& pKF, size_t idx); // Do pKF.setViewMP() before use this
     void eraseObservation(const PtrKeyFrame& pKF);
     bool hasObservation(const PtrKeyFrame& pKF);

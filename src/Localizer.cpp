@@ -4,6 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
+#include "converter.h"
 #include "Localizer.h"
 #include "ORBmatcher.h"
 #include "cvutil.h"
@@ -152,7 +153,7 @@ void Localizer::run()
 
             updateLocalMap(1);
 
-            drawImgCurr();
+//            drawImgCurr();
 
             detectIfLost();
         }
@@ -213,7 +214,7 @@ void Localizer::matchLocalMap()
     vector<PtrMapPoint> vpMPLocal = getLocalMPs();
     vector<int> vIdxMPMatched;
     ORBmatcher matcher;
-    int numMPMatched = matcher.SearchByProjection(mpKFCurr, vpMPLocal, 15, 2, vIdxMPMatched);
+    int numMPMatched = matcher.SearchByProjection(&(*mpKFCurr), vpMPLocal, 15, 2, vIdxMPMatched);
 
     //! Renew KF observation
     for (int idxKPCurr = 0, idend = vIdxMPMatched.size(); idxKPCurr < idend; idxKPCurr++) {
@@ -223,7 +224,7 @@ void Localizer::matchLocalMap()
             continue;
 
         PtrMapPoint pMP = vpMPLocal[idxMPLocal];
-        mpKFCurr->addObservation(pMP, idxKPCurr);
+        mpKFCurr->setObservation(pMP, idxKPCurr);
     }
 }
 
@@ -248,9 +249,9 @@ void Localizer::doLocalBA()
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    set<PtrMapPoint> setMPs = mpKFCurr->getObservations();
+    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations();
 
-    map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
+    vector<PtrMapPoint> Observations = mpKFCurr->getObservations();
 
     // Add Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -262,7 +263,7 @@ void Localizer::doLocalBA()
         bool fixed = true;
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), maxKFid + pMP->mId, marginal, fixed);
 
-        int ftrIdx = Observations[pMP];
+        int ftrIdx = /*Observations[pMP]*/0;
         int octave = pMP->getOctave(mpKFCurr); //! TODO 可能返回负数
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
         Eigen::Vector2d uv = toVector2d(mpKFCurr->mvKeyPoints[ftrIdx].pt);
@@ -320,8 +321,8 @@ cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    set<PtrMapPoint> setMPs = mpKFCurr->getObservations();
-    map<PtrMapPoint, size_t> Observations = mpKFCurr->getObservations();
+    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations();
+    vector<PtrMapPoint> Observations = mpKFCurr->getObservations();
 
     // Add MP Vertex and Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -333,7 +334,7 @@ cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
         bool fixed = true;
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), 1 + pMP->mId, marginal, fixed);
 
-        int ftrIdx = Observations[pMP]; // 对应的KP索引
+        int ftrIdx = 0/*Observations[pMP]*/; // 对应的KP索引
         int octave = pMP->getOctave(mpKFCurr);
         const float invSigma2 = mpKFCurr->mvInvLevelSigma2[octave];
         Eigen::Vector2d uv = toVector2d(mpKFCurr->mvKeyPoints[ftrIdx].pt);
@@ -538,137 +539,137 @@ vector<PtrMapPoint> Localizer::getLocalMPs()
     return vector<PtrMapPoint>(mspMPLocal.begin(), mspMPLocal.end());
 }
 
-void Localizer::drawImgCurr()
-{
-    locker lockImg(mMutexImg);
+//void Localizer::drawImgCurr()
+//{
+//    locker lockImg(mMutexImg);
 
-    if (mpKFCurr == nullptr)
-        return;
+//    if (mpKFCurr == nullptr)
+//        return;
 
-    mpKFCurr->copyImgTo(mImgCurr);
-    if (mImgCurr.channels() == 1)
-        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
+//    mpKFCurr->copyImgTo(mImgCurr);
+//    if (mImgCurr.channels() == 1)
+//        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
 
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
-        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
-        Point2f ptCurr = kpCurr.pt;
+//    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
+//        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
+//        Point2f ptCurr = kpCurr.pt;
 
-        bool ifMPCurr = mpKFCurr->hasObservation(i);
-        Scalar colorCurr;
-        if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);
-        } else {
-            colorCurr = Scalar(255, 0, 0);
-        }
+//        bool ifMPCurr = mpKFCurr->hasObservationByIndex(i);
+//        Scalar colorCurr;
+//        if (ifMPCurr) {
+//            colorCurr = Scalar(0, 255, 0);
+//        } else {
+//            colorCurr = Scalar(255, 0, 0);
+//        }
 
-        circle(mImgCurr, ptCurr, 3, colorCurr, 1);
-    }
-}
+//        circle(mImgCurr, ptCurr, 3, colorCurr, 1);
+//    }
+//}
 
-void Localizer::drawImgMatch(const map<int, int>& mapMatch)
-{
-    locker lockImg(mMutexImg);
+//void Localizer::drawImgMatch(const map<int, int>& mapMatch)
+//{
+//    locker lockImg(mMutexImg);
 
-    //! Renew images
-    if (mpKFCurr == nullptr || mpKFLoop == nullptr) {
-        return;
-    }
-    cv::Mat curr = mImgCurr.clone();
-    cv::Mat loop = mImgLoop.clone();
-    if (mpKFLoop != nullptr) {
-        mpKFLoop->copyImgTo(mImgLoop);
-    } else {
-        mImgCurr.copyTo(mImgLoop);
-        mImgLoop.setTo(cv::Scalar(0));
-    }
+//    //! Renew images
+//    if (mpKFCurr == nullptr || mpKFLoop == nullptr) {
+//        return;
+//    }
+//    cv::Mat curr = mImgCurr.clone();
+//    cv::Mat loop = mImgLoop.clone();
+//    if (mpKFLoop != nullptr) {
+//        mpKFLoop->copyImgTo(mImgLoop);
+//    } else {
+//        mImgCurr.copyTo(mImgLoop);
+//        mImgLoop.setTo(cv::Scalar(0));
+//    }
 
-    if (mImgCurr.channels() == 1)
-        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
-    if (mImgLoop.channels() == 1)
-        cvtColor(mImgLoop, mImgLoop, CV_GRAY2BGR);
-    if (mImgMatch.channels() == 1)
-        cvtColor(mImgMatch, mImgMatch, CV_GRAY2BGR);
-    vconcat(mImgCurr, mImgLoop, mImgMatch);  // 垂直拼接
+//    if (mImgCurr.channels() == 1)
+//        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
+//    if (mImgLoop.channels() == 1)
+//        cvtColor(mImgLoop, mImgLoop, CV_GRAY2BGR);
+//    if (mImgMatch.channels() == 1)
+//        cvtColor(mImgMatch, mImgMatch, CV_GRAY2BGR);
+//    vconcat(mImgCurr, mImgLoop, mImgMatch);  // 垂直拼接
 
-    //! Draw Features
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
-        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
-        Point2f ptCurr = kpCurr.pt;
-        bool ifMPCurr = mpKFCurr->hasObservation(i);
-        Scalar colorCurr;
-        if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);
-        } else {
-            colorCurr = Scalar(255, 0, 0);
-        }
-        circle(mImgMatch, ptCurr, 3, colorCurr, 1);
-    }
-    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
-        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += mImgCurr.rows;
+//    //! Draw Features
+//    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; ++i) {
+//        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
+//        Point2f ptCurr = kpCurr.pt;
+//        bool ifMPCurr = mpKFCurr->hasObservationByIndex(i);
+//        Scalar colorCurr;
+//        if (ifMPCurr) {
+//            colorCurr = Scalar(0, 255, 0);
+//        } else {
+//            colorCurr = Scalar(255, 0, 0);
+//        }
+//        circle(mImgMatch, ptCurr, 3, colorCurr, 1);
+//    }
+//    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; ++i) {
+//        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
+//        Point2f ptLoop = kpLoop.pt;
+//        Point2f ptLoopMatch = ptLoop;
+//        ptLoopMatch.y += mImgCurr.rows;
 
-        bool ifMPLoop = mpKFLoop->hasObservation(i);
-        Scalar colorLoop;
-        if (ifMPLoop) {
-            colorLoop = Scalar(0, 255, 0);
-        } else {
-            colorLoop = Scalar(255, 0, 0);
-        }
-        circle(mImgMatch, ptLoopMatch, 3, colorLoop, 1);
-    }
+//        bool ifMPLoop = mpKFLoop->hasObservationByIndex(i);
+//        Scalar colorLoop;
+//        if (ifMPLoop) {
+//            colorLoop = Scalar(0, 255, 0);
+//        } else {
+//            colorLoop = Scalar(255, 0, 0);
+//        }
+//        circle(mImgMatch, ptLoopMatch, 3, colorLoop, 1);
+//    }
 
-    //! Draw Matches
-    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
-        int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
-        Point2f ptCurr = kpCurr.pt;
+//    //! Draw Matches
+//    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+//        int idxCurr = iter->first;
+//        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
+//        Point2f ptCurr = kpCurr.pt;
 
-        int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += mImgCurr.rows;
+//        int idxLoop = iter->second;
+//        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
+//        Point2f ptLoop = kpLoop.pt;
+//        Point2f ptLoopMatch = ptLoop;
+//        ptLoopMatch.y += mImgCurr.rows;
 
-        bool ifMPCurr = mpKFCurr->hasObservation(idxCurr);
-        bool ifMPLoop = mpKFLoop->hasObservation(idxLoop);
+//        bool ifMPCurr = mpKFCurr->hasObservationByIndex(idxCurr);
+//        bool ifMPLoop = mpKFLoop->hasObservationByIndex(idxLoop);
 
-        Scalar colorCurr, colorLoop;
-        if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);
-        } else {
-            colorCurr = Scalar(255, 0, 0);
-        }
-        if (ifMPLoop) {
-            colorLoop = Scalar(0, 255, 0);
-        } else {
-            colorLoop = Scalar(255, 0, 0);
-        }
+//        Scalar colorCurr, colorLoop;
+//        if (ifMPCurr) {
+//            colorCurr = Scalar(0, 255, 0);
+//        } else {
+//            colorCurr = Scalar(255, 0, 0);
+//        }
+//        if (ifMPLoop) {
+//            colorLoop = Scalar(0, 255, 0);
+//        } else {
+//            colorLoop = Scalar(255, 0, 0);
+//        }
 
-        circle(mImgMatch, ptCurr, 3, colorCurr, 1);
-        circle(mImgMatch, ptLoopMatch, 3, colorLoop, 1);
-        if (ifMPCurr && ifMPLoop) {
-            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
-        } else {
-            line(mImgMatch, ptCurr, ptLoopMatch, colorLoop, 1);
-        }
-    }
+//        circle(mImgMatch, ptCurr, 3, colorCurr, 1);
+//        circle(mImgMatch, ptLoopMatch, 3, colorLoop, 1);
+//        if (ifMPCurr && ifMPLoop) {
+//            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
+//        } else {
+//            line(mImgMatch, ptCurr, ptLoopMatch, colorLoop, 1);
+//        }
+//    }
 
-    //! text frame id
-    string idCurr = to_string(mpKFCurr->mIdKF), idLoop = to_string(mpKFLoop->mIdKF);
-    string score = to_string(mvScores[0]*100), nMatches = to_string(mapMatch.size());
-    putText(mImgMatch, idCurr, Point(20, 15), 1, 1.1, Scalar(0, 255, 0), 2);
-    putText(mImgMatch, idLoop, Point(20, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
-    putText(mImgMatch, nMatches, Point(mImgMatch.cols - 60, 15), 1, 1.1, Scalar(0, 255, 0), 2);
-    putText(mImgMatch, score, Point(mImgMatch.cols - 60, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
+//    //! text frame id
+//    string idCurr = to_string(mpKFCurr->mIdKF), idLoop = to_string(mpKFLoop->mIdKF);
+//    string score = to_string(mvScores[0]*100), nMatches = to_string(mapMatch.size());
+//    putText(mImgMatch, idCurr, Point(20, 15), 1, 1.1, Scalar(0, 255, 0), 2);
+//    putText(mImgMatch, idLoop, Point(20, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
+//    putText(mImgMatch, nMatches, Point(mImgMatch.cols - 60, 15), 1, 1.1, Scalar(0, 255, 0), 2);
+//    putText(mImgMatch, score, Point(mImgMatch.cols - 60, mImgMatch.rows - 15), 1, 1.1, Scalar(0, 255, 0), 2);
 
-    if (Config::SaveMatchImage) {
-        string fileName = Config::MatchImageStorePath + "../loop/" + to_string(mpKFCurr->mIdKF) + ".bmp";
-        imwrite(fileName, mImgMatch);
-        fprintf(stderr, "[Localizer] #%ld Save image to %s\n", mpKFCurr->mIdKF, fileName.c_str());
-    }
-}
+//    if (Config::SaveMatchImage) {
+//        string fileName = Config::MatchImageStorePath + "../loop/" + to_string(mpKFCurr->mIdKF) + ".bmp";
+//        imwrite(fileName, mImgMatch);
+//        fprintf(stderr, "[Localizer] #%ld Save image to %s\n", mpKFCurr->mIdKF, fileName.c_str());
+//    }
+//}
 
 void Localizer::removeMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
                                          map<int, int>& mapMatch)
@@ -763,7 +764,7 @@ void Localizer::updateLocalMap(int searchLevel)
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
-        set<PtrMapPoint> spMP = pKF->getObservations();    // MP要有良好视差
+        vector<PtrMapPoint> spMP = pKF->getObservations();    // MP要有良好视差
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
 //    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;
@@ -778,7 +779,7 @@ void Localizer::matchLoopClose(map<int, int> mapMatchGood)
     for (auto iter = mapMatchGood.begin(); iter != mapMatchGood.end(); iter++) {
         int idxCurr = iter->first;
         int idxLoop = iter->second;
-        bool isMPLoop = mpKFLoop->hasObservation(idxLoop);
+        bool isMPLoop = mpKFLoop->hasObservationByIndex(idxLoop);
 
         if (isMPLoop) {
             PtrMapPoint pMP = mpKFLoop->getObservation(idxLoop);
@@ -911,10 +912,10 @@ bool Localizer::relocalization()
             ofs.close();
 
             // draw after sorted
-            drawImgCurr();
-            drawImgMatch(mapMatchGood);
+//            drawImgCurr();
+//            drawImgMatch(mapMatchGood);
         } else {
-            drawImgCurr();
+//            drawImgCurr();
             resetLocalMap();
         }
     }
@@ -987,7 +988,7 @@ bool Localizer::trackLocalMap()
 
     updateLocalMap(1);
 
-    drawImgCurr();
+//    drawImgCurr();
 
     detectIfLost();
 

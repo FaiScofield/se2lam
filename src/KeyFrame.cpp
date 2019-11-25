@@ -34,6 +34,7 @@ KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mpMap(nullptr), mbNull(fa
 KeyFrame::KeyFrame(const Frame& frame) : Frame(frame), mIdKF(mNextIdKF++), mpMap(nullptr)
 {
     const size_t& n = frame.N;
+    mvbViewMPsInfoExist = vector<bool>(n, false);
     mvViewMPsInfo = vector<Matrix3d, aligned_allocator<Matrix3d>>(n, Matrix3d::Identity() * -1);
 
     PtrKeyFrame nullKF = static_cast<PtrKeyFrame>(nullptr);
@@ -52,6 +53,8 @@ KeyFrame::~KeyFrame()
 //! 加入成员变量map的指针后通过调用map删除其相关容器中的指针, 现已可以正常析构. 20191015
 void KeyFrame::setNull()
 {
+    size_t nObs = countObservations();
+
     locker lckObs(mMutexObs);
     locker lckCov(mMutexCovis);
 
@@ -61,8 +64,9 @@ void KeyFrame::setNull()
     mbNull = true;
     mpORBExtractor = nullptr;
 
-    mvKeyPoints.clear();
     mvViewMPsInfo.clear();
+    mvbViewMPsInfoExist.clear();
+    mvKeyPoints.clear();
     mDescriptors.release();
     if (bNeedVisualization)
         mImage.release();
@@ -105,8 +109,7 @@ void KeyFrame::setNull()
     }
 
     // Handle observations in MapPoints, 取消MP对此KF的关联
-    fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测前(%ld)引用计数 = %ld\n", mIdKF,
-            countObservations(), pThis.use_count());
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测前(%ld)引用计数 = %ld\n", mIdKF, nObs, pThis.use_count());
     for (size_t i = 0; i < N; ++i) {
         const PtrMapPoint& pMP = mvpMapPoints[i];
         if (pMP)
@@ -123,6 +126,7 @@ void KeyFrame::setNull()
     }
     mCovisibleKFsWeight.clear();
     mvpCovisibleKFsSorted.clear();
+    mvOrderedWeights.clear();
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     if (mpMap != nullptr) {
@@ -134,22 +138,22 @@ void KeyFrame::setNull()
             pThis.use_count());
 }
 
-vector<PtrKeyFrame> KeyFrame::getAllCovisibleKFs()
+vector<shared_ptr<KeyFrame>> KeyFrame::getAllCovisibleKFs()
 {
     locker lock(mMutexCovis);
     return mvpCovisibleKFsSorted;
 }
 
-vector<PtrKeyFrame> KeyFrame::getBestCovisibleKFs(size_t n)
+vector<shared_ptr<KeyFrame>> KeyFrame::getBestCovisibleKFs(size_t n)
 {
     locker lock(mMutexCovis);
-    if (n > 0)
+    if (n > 0 && n <= mvpCovisibleKFsSorted.size())
         return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
     else
         return mvpCovisibleKFsSorted;
 }
 
-vector<PtrKeyFrame> KeyFrame::getCovisibleKFsByWeight(int w)
+vector<shared_ptr<KeyFrame>> KeyFrame::getCovisibleKFsByWeight(int w)
 {
     locker lock(mMutexCovis);
     vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(), mvOrderedWeights.end(), w,
@@ -162,13 +166,45 @@ vector<PtrKeyFrame> KeyFrame::getCovisibleKFsByWeight(int w)
     }
 }
 
-void KeyFrame::addCovisibleKF(const PtrKeyFrame& pKF, int weight)
+map<shared_ptr<KeyFrame>, int> KeyFrame::getAllCovisibleKFsAndWeights()
+{
+    locker lock(mMutexCovis);
+    return mCovisibleKFsWeight;
+}
+
+void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
 {
     {
         locker lock(mMutexCovis);
         mCovisibleKFsWeight.emplace(pKF, weight);
     }
-    updateCovisibleKFs();
+    sortCovisibleKFs();
+}
+
+void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
+{
+    vector<PtrMapPoint> vpMPs;
+    {
+        locker lockMPs(mMutexObs);
+        if (mCovisibleKFsWeight.count(pKF))
+            return;
+        vpMPs = mvpMapPoints;
+    }
+
+    int weight;
+    for (auto vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
+        PtrMapPoint pMP = (*vit);
+        if (!pMP || pMP->isNull())
+            continue;
+
+        if (pMP->hasObservation(pKF))
+            weight++;
+    }
+
+    if (weight == 0)
+        return;
+
+    addCovisibleKF(pKF, weight);
 }
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
@@ -177,10 +213,10 @@ void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
         locker lock(mMutexCovis);
         mCovisibleKFsWeight.erase(pKF);
     }
-    updateCovisibleKFs();
+    sortCovisibleKFs();
 }
 
-void KeyFrame::updateCovisibleKFs()
+void KeyFrame::sortCovisibleKFs()
 {
     locker lock(mMutexCovis);
 
@@ -197,6 +233,84 @@ void KeyFrame::updateCovisibleKFs()
         mvpCovisibleKFsSorted[i] = vpCovisbleKFsWeight[i].first;
         mvOrderedWeights[i] = vpCovisbleKFsWeight[i].second;
     }
+}
+
+void KeyFrame::updateCovisibleGraph()
+{
+    WorkTimer timer;
+
+    map<PtrKeyFrame, int> KFcounter;
+    vector<PtrMapPoint> vpMPs;
+    {
+        locker lockMPs(mMutexObs);
+        vpMPs = mvpMapPoints;
+    }
+
+    // 1.通过3D点间接统计可以观测到这些3D点的所有关键帧之间的共视程度
+    // 即统计每一个关键帧都有多少关键帧与它存在共视关系，统计结果放在KFcounter
+    for (auto vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
+        PtrMapPoint pMP = (*vit);
+        if (!pMP || pMP->isNull())
+            continue;
+
+        // 对于每一个MapPoint点，observations记录了可以观测到该MapPoint的所有关键帧
+        vector<PtrKeyFrame> thisObsKFs = pMP->getObservations();
+        for (auto mit = thisObsKFs.begin(), mend = thisObsKFs.end(); mit != mend; mit++) {
+            if (mit->mIdKF == mIdKF)  // 除去自身，自己与自己不算共视
+                continue;
+            KFcounter[mit]++;  // TODO. 待确认插入新的key时value值为1
+        }
+    }
+
+    // This should not happen
+    if (KFcounter.empty())
+        return;
+
+    // 2.次数超过阈值则添加共视关系, 防止次数整体过少, 将把次数最多的KF添加为共视关系
+    int nmax = 0;
+    int th = 10;    // 共同观测MP点数阈值
+    PtrKeyFrame pKFmax = nullptr;
+
+    // vPairs记录与其它关键帧共视帧数大于th的关键帧
+    vector<pair<int, PtrKeyFrame>> vPairs;
+    vPairs.reserve(KFcounter.size());
+    for (auto mit = KFcounter.begin(), mend = KFcounter.end(); mit != mend; mit++) {
+        if (mit->second > nmax) {
+            nmax = mit->second;
+            pKFmax = mit->first;
+        }
+        if (mit->second >= th) {
+            // 对应权重需要大于阈值，对这些关键帧建立连接
+            vPairs.push_back(make_pair(mit->second, mit->first));
+            (mit->first)->addCovisibleKF(shared_from_this(), mit->second);
+        }
+    }
+
+    // 如果没有超过阈值的权重，则对权重最大的关键帧建立连接, 这是对之前th这个阈值可能过高的一个补丁
+    if (vPairs.empty()) {
+        vPairs.emplace_back(nmax, pKFmax);
+        pKFmax->addCovisibleKF(this, nmax);
+    }
+
+    // vPairs里存的都是相互共视程度比较高的关键帧和共视权重，由大到小
+    sort(vPairs.begin(), vPairs.end(), std::greater<int>);
+    size_t n = vPairs.size();
+    vector<PtrKeyFrame> vKFs(n);
+    vector<int> vWs(n);
+    for (size_t i = 0; i < vPairs.size(); i++) {
+        vKFs[i] = vPairs[i].second;
+        vWs[i] = vPairs[i].first;
+    }
+
+    {
+        unique_lock<mutex> lockCon(mMutexCovis);
+        mCovisibleKFsWeight = KFcounter;
+        mvpCovisibleKFsSorted = vKFs;
+        mvOrderedWeights = vWs;
+    }
+    printf("[KeyFrame] KF#%ld 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(符合阈值%ld), 共耗时%.2fms\n",
+           mIdKF, vpMPs.size(), KFcounter.size(), vKFs.size(), timer.count());
+
 }
 
 size_t KeyFrame::countCovisibleKFs()
@@ -216,32 +330,44 @@ int KeyFrame::getFeatureIndex(const PtrMapPoint& pMP)
         return -1;
 }
 
-bool KeyFrame::hasObservation(const PtrMapPoint& pMP)
+bool KeyFrame::hasObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     const int idx = pMP->getKPIndexInKF(shared_from_this());
     if (idx < 0 || idx >= N)
         return false;
 
-    if (mvpMapPoints[idx] == pMP)
+    if (mvpMapPoints[idx] == pMP) {
         return true;
-    else {
+    } else {
         cerr << "[KeyFrame][Warni] MP#" << pMP->mId << " 错误! idx = " << idx << endl;
         return false;
     }
 }
 
-void KeyFrame::eraseObservation(const PtrMapPoint& pMP)
+void KeyFrame::setObsAndInfo(const PtrMapPoint& pMP, size_t idx, const Matrix3d& info)
+{
+    locker lock(mMutexObs);
+    if (idx >= 0 && idx < N) {
+        mvpMapPoints[idx] = pMP;
+        mvViewMPsInfo[idx] = info;
+        mvbViewMPsInfoExist[idx] = true;
+    }
+}
+
+void KeyFrame::eraseObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     const int idx = pMP->getKPIndexInKF(shared_from_this());
     if (idx < 0 || idx >= N)
         return;
 
-    if (mvpMapPoints[idx] == pMP)
+    if (mvpMapPoints[idx] == pMP) {
         mvpMapPoints[idx] = nullptr;
-    else
+        mvbViewMPsInfoExist[idx] = false;
+    } else {
         cerr << "[KeyFrame][Warni] MP#" << pMP->mId << " 错误! idx = " << idx << endl;
+    }
 }
 
 

@@ -117,6 +117,7 @@ void Track::run()
             }
 
             if (bOK) {
+                // TODO 更新一下MPCandidates里面Tc2w
                 mnLostFrames = 0;
                 mState = cvu::OK;
             } else {
@@ -294,9 +295,8 @@ bool Track::trackLocalMap()
     for (int i = 0, iend = mCurrentFrame.N; i < iend; ++i) {
         if (vMatchedIdxMPs[i] < 0)
             continue;
-
         PtrMapPoint& pMP = vpLocalMPs[vMatchedIdxMPs[i]];  // 新匹配上的MP
-        mCurrentFrame.setObservation(pMP, i);                   // TODO 要不要管 mvbOutlier?
+        mCurrentFrame.setObservation(pMP, i);              // TODO 要不要管 mvbOutlier?
     }
 
     doLocalBA(mCurrentFrame);
@@ -407,16 +407,18 @@ void Track::removeOutliers()
 void Track::doTriangulate()
 {
     // 以下成员变量在这个函数中会被修改
+    mvGoodMatchIdx = mvMatchIdx;
     mnTrackedOld = 0;
     mnNewAddedMPs = 0;
-    mnCandidateMPs = 0;
     mnBadMatches = 0;
     mnGoodInliers = mnInliers;
-    mvGoodMatchIdx = mvMatchIdx;
-
+    mnCandidateMPs = mMPCandidates.size();
+    int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
+    int nObsRef = mpReferenceKF->countObservations();
 
     // 相机1和2的投影矩阵
     const Mat Tc1w = mpReferenceKF->getPose();
+    const Mat Tc2w = mCurrentFrame.getPose();
     const Mat Tcr = mCurrentFrame.getTcr();
     const Mat Tc1c2 = cvu::inv(Tcr);
     const Point3f Ocam1 = Point3f(0.f, 0.f, 0.f);
@@ -424,78 +426,132 @@ void Track::doTriangulate()
     const cv::Mat Proj1 = Config::PrjMtrxEye;  // P1 = K * cv::Mat::eye(3, 4, CV_32FC1)
     const cv::Mat Proj2 = Config::Kcam * Tcr.rowRange(0, 3);  // P2 = K * Tc2c1(3*4)
 
-    // 1.遍历参考帧的KP
-    int nPrlUpdated = 0;
-    for (int i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
+    /* 遍历参考帧的KP, 对于有匹配点对的KP进行处理, 如果:
+     * 1. 参考帧KP已经有对应的MP观测:
+     *  - 1.1 对于视差好的MP, 直接给当前帧关联一下MP观测;
+     *  - 1.2 对于视差不好的MP, 再一次三角化更新其坐标值. 如果更新后:
+     *      - 1.2.1 深度符合(理应保持)且视差好, 更新MP的属性;
+     *      - 1.2.2 深度符合但视差没有被更新为好, 或深度被更新为不符合(出现概率不大), 则不处理.
+     * 2. 参考帧KP已经有对应的MP候选: (说明深度符合但视差还不太好)
+     *  - 三角化更新一下候选MP的坐标, 如果:
+     *      - 2.1 深度符合(理应保持)且视差好, 生成新的MP, 为KF和F添加MP观测, 为MP添加KF观测, 删除候选;
+     *      - 2.2 深度符合(理应保持)但视差没有被更新为好, 更新候选MP的坐标;
+     *      - 2.3 深度被更新为不符合(出现概率不大), 则不处理.
+     * 3. 参考帧KP一无所有:
+     *  - 三角化, 如果:
+     *      - 3.1 深度符合且视差好, 生成新的MP, 为KF和F添加MP观测, 为MP添加KF观测;
+     *      - 3.2 深度符合但视差不好, 将其添加候选MP;
+     *      - 3.3 深度不符合, 则丢弃此匹配点对.
+     *
+     * 几个变量的关系:
+     *  - mnTrackedOld  = 1.1 + 1.2.1
+     *  - mnNewAddedMPs = 2.1 + 3.1
+     *  - mnBadMatches  = 3.3
+     *  - mnGoodInliers = mnInliers - 3.3
+     *  - mnCandidateMPs = mnCandidateMPs - 2.1 + 3.2
+     *
+     * NOTE 对视差不好的MP或者MP候选, 说明它是参考帧和其他帧生成的, 并不是和自己生成的,
+     * 如果把视差不好的MP关联给当前帧, 会影响当前帧的投影精度.
+     * 能成为MP或MP候选的点说明其深度都是符合预期的.
+     * 最后MP候选将在LocalMap线程中生成视差不好的MP, 他们在添加KF观测后有机会更新视差.
+     */
+    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
         if (mvMatchIdx[i] < 0)
             continue;
 
-        // 2.如果参考帧KP已经有对应的MP观测(且视差要好)了, 则给当前帧关联一下MP观测
-        // NOTE 视差不好的(说明是参考帧和其他帧生成的)关联会影响当前帧的投影精度,
-        // 应该进行三角化更新一下
-        // 能成为MP深度都是符合预期的
-        PtrMapPoint pObservedMP = nullptr;
-        bool bObserved = mpReferenceKF->hasObservation(i);
+        PtrMapPoint pObservedMP = nullptr;                               // 对于的MP观测
+        const bool bObserved = mpReferenceKF->hasObservationByIndex(i);  // 是否有对应MP观测
         if (bObserved) {
+            assert(mpReferenceKF->mvbViewMPsInfoExist[i] == true);
             pObservedMP = mpReferenceKF->getObservation(i);
-            if (pObservedMP->isGoodPrl()) {
+            if (pObservedMP->isGoodPrl()) {  // 情况1.1
                 mCurrentFrame.setObservation(pObservedMP, mvMatchIdx[i]);
                 mnTrackedOld++;
+                n11++;
                 continue;
             }
         }
 
-        // 3.如果参考帧KP没有对应的MP,或者对应MP视差不好，则为此匹配对KP三角化计算深度(相对参考帧的坐标)
+        // 如果参考帧KP没有对应的MP,或者对应MP视差不好，则为此匹配对KP三角化计算深度(相对参考帧的坐标)
         // 由于两个投影矩阵是两KF之间的相对投影, 故三角化得到的坐标是相对参考帧的坐标, 即Pc1
         Point2f pt1 = mpReferenceKF->mvKeyPoints[i].pt;
         Point2f pt2 = mCurrentFrame.mvKeyPoints[mvMatchIdx[i]].pt;
         Point3f Pc1 = cvu::triangulate(pt1, pt2, Proj1, Proj2);
+        Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
 
-        // 3.如果深度计算符合预期，就作为MP候选
-        if (Config::acceptDepth(Pc1.z)) {  // Pc2用Tcr计算出来的是预测值, 故这里包
-            // 视差好的直接生成MP, 暂时不好的先放到候选队列里
-            if (cvu::checkParallax(Ocam1, Ocam2, Pc1, 2)) {
-                Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
+        // Pc2用Tcr计算出来的是预测值, 故这里用Pc1的深度判断即可
+        const bool bAccepDepth = Config::acceptDepth(Pc1.z);  // 深度是否符合
+        const bool bCandidated = mMPCandidates.count(i);      // 是否有对应的MP候选
+        assert(bObserved != bCandidated);
 
+        if (bAccepDepth) {  // 如果深度计算符合预期
+            const bool bGoodPrl = cvu::checkParallax(Ocam1, Ocam2, Pc1, 2);  // 视差是否良好
+            if (bGoodPrl) {                                                  // 如果视差好
                 Eigen::Matrix3d xyzinfo1, xyzinfo2;
-                calcSE3toXYZInfo(Pc1, Tc1w, mCurrentFrame.getPose(), xyzinfo1, xyzinfo2);
-
-                if (bObserved) {  // 如果刚才关联的MP视差被更新为好, 则要更新此MP的属性
+                calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
+                if (bObserved) {  // 情况1.2.1
                     pObservedMP->setGoodPrl(true);
                     pObservedMP->setPos(Pw);
                     mpReferenceKF->setObsAndInfo(pObservedMP, i, xyzinfo1);
                     mCurrentFrame.setObservation(pObservedMP, mvMatchIdx[i]);
                     mnTrackedOld++;
-                    nPrlUpdated++;
-                } else {  // 生成新的MP
+                    n121++;
+                } else {  // 情况2.1和3.1
                     PtrMapPoint pNewMP = make_shared<MapPoint>(Pw, true);
-                    mpReferenceKF->addObservation(pNewMP, i);
-                    pNewMP->addObservation(mpReferenceKF, i);  // MP只添加KF的观测
-
                     mpReferenceKF->setObsAndInfo(pNewMP, i, xyzinfo1);
                     mCurrentFrame.setObservation(pNewMP, mvMatchIdx[i]);
+                    pNewMP->addObservation(mpReferenceKF, i);  // MP只添加KF的观测
+                    mpMap->insertMP(pNewMP);
                     mnNewAddedMPs++;
+                    n21++;
+                    n31++;
+                    if (bCandidated) { // 对于情况2.1, 候选转正后还要删除候选名单
+                        mMPCandidates.erase(i);
+                        mnCandidateMPs--;
+                    }
                 }
-            } else {
-                mMPCandidates.emplace(i, Pc1);
-                mnCandidateMPs++;
+            } else {  // 如果视差不好
+                if (bCandidated) {  // 情况2.2
+                    mMPCandidates[i].Pc1 = Pc1;
+                    mMPCandidates[i].id2 = mCurrentFrame.id;
+                    mMPCandidates[i].kpIdx2 = mvMatchIdx[i];
+                    n22++;
+                } else {  // 情况3.2
+                    assert(!mpReferenceKF->hasObservationByIndex(i));
+                    MPCandidate MPcan(Pc1, mCurrentFrame.id, mvMatchIdx[i], Tc2w);
+                    mMPCandidates.emplace(i, MPcan);
+                    mnCandidateMPs++;
+                    n32++;
+                }
+                // 情况1.2.2不处理
             }
-        } else {  // 3.如果深度计算不符合预期，剔除此匹配对
-            mnBadMatches++;
-            mnGoodInliers--;
-            mvGoodMatchIdx[i] = -1;
+        } else {  // 如果深度计算不符合预期
+            if (!bObserved && !bCandidated) {  // 情况3.3
+                n33++;
+                mnBadMatches++;
+                mnGoodInliers--;
+                mvGoodMatchIdx[i] = -1;
+            }
+            // 情况1.2.3和2.3不处理
         }
     }
-    printf("[Track][Info ] #%ld-#%ld 三角化结果: MP视差更新数/关联数/新增数/候选数/因深度不符而剔除的匹配点对数 = %d/%d/%d/%d/%d\n",
-           mCurrentFrame.id, mpReferenceKF->id, nPrlUpdated, mnTrackedOld, mnNewAddedMPs, mnCandidateMPs, mnBadMatches);
+    printf("[Track][Info ] #%ld-#%ld 三角化结果: MP关联视差好点数(%d)/MP关联视差更新到好点数(%d)/MP总关联数(%d), "
+           "候选更新新增MP数(%d)/KP三角化新增MP数(%d)/MP新增总数(%d), "
+           "候选更新数(%d)/候选增加数(%d)/剔除匹配数(%d)/目前候选总数(%d)\n",
+           mCurrentFrame.id, mpReferenceKF->id, n11, n121, mnTrackedOld,
+           n21, n31, mnNewAddedMPs, n22, n32, mnBadMatches, mnCandidateMPs);
 
     // KF判定依据变量更新
     mCurrRatioGoodDepth = mnCandidateMPs / mnInliers;
     mCurrRatioGoodParl = mnNewAddedMPs / mnCandidateMPs;
 
-    assert(mnTrackedOld + mnNewAddedMPs + mnCandidateMPs == mnGoodInliers);
+    assert(n11 + n121 == mnTrackedOld);
+    assert(n21 + n31 == mnNewAddedMPs);
+    assert(n33 == mnBadMatches);
     assert(mnGoodInliers + mnBadMatches == mnInliers);
+    assert(mnCandidateMPs == mMPCandidates.size());
     assert(mnTrackedOld + mnNewAddedMPs == mCurrentFrame.countObservations());
+    assert(nObsRef + mnNewAddedMPs == mpReferenceKF->countObservations());
 }
 
 void Track::resetLocalTrack()
@@ -505,7 +561,7 @@ void Track::resetLocalTrack()
         if (needNewKF()) {
             PtrKeyFrame pNewKF = make_shared<KeyFrame>(mCurrentFrame);
             // 新的KF观测和共视关系在LocalMap里更新
-            mpLocalMapper->processNewKF(pNewKF, mMPCandidates, mvGoodMatchIdx);
+            mpLocalMapper->processNewKF(pNewKF, mMPCandidates);
 
             mpReferenceKF = pNewKF;
             mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
@@ -567,7 +623,7 @@ bool Track::needNewKF()
     bool bNeedNewKF = bNeedKFByVo || bNeedKFByOdo;
     if (!bNeedNewKF) {
         return false;
-    } else if (mpLocalMapper->acceptNewKF()) {
+    } else if (mpLocalMapper->checkIfAcceptNewKF()) {
         printf("[Track][Info ] #%ld-#%ld 成为了新的KF, 其KF条件满足情况: "
                "下限(%d)/上限(%d)/潜在(%d)/视差(%d)/追踪(%d)/旋转(%d)/平移(%d)\n",
                mCurrentFrame.id, mpReferenceKF->id, c0, c1, c2, c3, c4, c5, c6);
@@ -587,85 +643,6 @@ bool Track::needNewKF()
                mpReferenceKF->id);
         return false;
     }
-}
-
-/**
- * @brief 计算KF之间的残差和信息矩阵, 后端优化用
- * @param dOdo      [Input ]后一帧与前一帧之间的里程计差值
- * @param Tc1c2     [Output]残差
- * @param Info_se3  [Output]信息矩阵
- */
-void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
-{
-    const Mat Tbc = Config::Tbc;
-    const Mat Tcb = Config::Tcb;
-    const Mat Tb1b2 = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
-
-    Tc1c2 = Tcb * Tb1b2 * Tbc;
-
-    float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
-    float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
-    float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
-
-
-    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
-    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
-    for (int i = 0; i < 6; ++i)
-        Info_se3_bTb(i, i) = data[i];
-    Info_se3 = Info_se3_bTb;
-}
-
-/**
- * @brief 计算KF与MP之间的误差不确定度，计算约束(R^t)*∑*R
- * @param Pc1   [Input ]MP在KF1相机坐标系下的坐标
- * @param Tc1w  [Input ]KF1相机到世界坐标系的变换
- * @param Tc2w  [Input ]KF2相机到世界坐标系的变换
- * @param info1 [Output]MP在KF1中投影误差的信息矩阵
- * @param info2 [Output]MP在KF2中投影误差的信息矩阵
- */
-void Track::calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w,
-                             Eigen::Matrix3d& info1, Eigen::Matrix3d& info2)
-{
-    Point3f O1 = Point3f(cvu::inv(Tc1w).rowRange(0, 3).col(3));
-    Point3f O2 = Point3f(cvu::inv(Tc2w).rowRange(0, 3).col(3));
-    Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
-    Point3f vO1 = Pw - O1;
-    Point3f vO2 = Pw - O2;
-    float sinParallax = cv::norm(vO1.cross(vO2)) / (cv::norm(vO1) * cv::norm(vO2));
-
-    Point3f Pc2 = cvu::se3map(Tc2w, Pw);
-    float length1 = cv::norm(Pc1);
-    float length2 = cv::norm(Pc2);
-    float dxy1 = 2.f * length1 / Config::fx;
-    float dxy2 = 2.f * length2 / Config::fx;
-    float dz1 = dxy2 / sinParallax;
-    float dz2 = dxy1 / sinParallax;
-
-    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dxy1 * dxy1), 0, 0,
-                     0, 1.f / (dz1 * dz1));
-
-    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dxy2 * dxy2), 0, 0,
-                     0, 1.f / (dz2 * dz2));
-
-    Point3f z1 = Point3f(0, 0, length1);
-    Point3f z2 = Point3f(0, 0, length2);
-    Point3f k1 = Pc1.cross(z1);
-    float normk1 = cv::norm(k1);
-    float sin1 = normk1 / (cv::norm(z1) * cv::norm(Pc1));
-    k1 = k1 * (std::asin(sin1) / normk1);
-    Point3f k2 = Pc2.cross(z2);
-    float normk2 = cv::norm(k2);
-    float sin2 = normk2 / (cv::norm(z2) * cv::norm(Pc2));
-    k2 = k2 * (std::asin(sin2) / normk2);
-
-    Mat R1, R2;
-    Mat k1mat = (Mat_<float>(3, 1) << k1.x, k1.y, k1.z);
-    Mat k2mat = (Mat_<float>(3, 1) << k2.x, k2.y, k2.z);
-    cv::Rodrigues(k1mat, R1);
-    cv::Rodrigues(k2mat, R2);
-
-    info1 = toMatrix3d(R1.t() * info_xyz1 * R1);
-    info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
 }
 
 void Track::requestFinish()
@@ -878,7 +855,7 @@ bool Track::verifyLoopClose()
         int idxLoop = iter->second;
         mvGoodMatchIdx[idxLoop] = idxCurr;
 
-        bool isMPLoop = mpLoopKF->hasObservation(idxLoop);
+        bool isMPLoop = mpLoopKF->hasObservationByIndex(idxLoop);
         if (isMPLoop) {
             PtrMapPoint pMP = mpLoopKF->getObservation(idxLoop);
             mCurrentFrame.setObservation(pMP, idxCurr);

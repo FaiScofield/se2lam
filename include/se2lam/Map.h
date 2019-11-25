@@ -59,7 +59,7 @@ public:
 
     static cv::Point2f compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2,
                                       std::set<PtrMapPoint>& spMPs);
-    static float compareViewMPs(const PtrKeyFrame& pKF, const std::set<PtrKeyFrame>& spKFs,
+    static float compareViewMPs(const PtrKeyFrame& pKF, const std::vector<PtrKeyFrame>& vpKFs,
                                 std::set<PtrMapPoint>& spMPs, int k = 2);
     static int getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
@@ -121,17 +121,6 @@ protected:
     std::mutex mMutexLocalGraph;
     std::mutex mMutexCurrentKF;
     std::mutex mMutexCurrentFrame;
-
-    //! for new temporary map
-//    PtrKeyFrame mNewCurrentKF;
-//    cv::Mat mNewCurrentFramePose;
-//    std::set<PtrMapPoint, MapPoint::IdLessThan> mNewMPs;
-//    std::set<PtrKeyFrame, KeyFrame::IdLessThan> mNewKFs;
-//    std::vector<PtrMapPoint> mvNewLocalMPs;
-//    std::vector<PtrKeyFrame> mvNewLocalKFs;
-//    std::vector<PtrKeyFrame> mvNewRefKFs;
-//    std::mutex mMutexNewMap;
-
 };  // class Map
 
 }  // namespace se2lam

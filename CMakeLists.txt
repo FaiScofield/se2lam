@@ -65,6 +65,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 
 ## Standard packages
 find_package(Eigen REQUIRED)
+message("===> Eigen Include DIR: ${EIGEN_INCLUDE_DIRS}")
 
 ## Boost
 find_package(Boost REQUIRED COMPONENTS filesystem)

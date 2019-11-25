@@ -809,7 +809,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
  * @return              返回匹配成功的点对数
  */
 int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>& localMPs,
-                                  const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP)
+                                   const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP)
 {
     int nmatches = 0;
 
@@ -820,7 +820,7 @@ int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>
         const PtrMapPoint& pMP = localMPs[i];
         if (pMP->isNull() /*|| !pMP->isGoodPrl()*/)  // NOTE 视差暂时不好的不能投影! 20191022
             continue;
-        if (pFrame->hasObservation(pMP))
+        if (pFrame->hasObservationByPointer(pMP))
             continue;
 
         Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pFrame->getPose(), pMP->getPos()));
@@ -845,7 +845,7 @@ int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>
         // Get best and second matches with near keypoints
         for (auto it = vNearKPIndices.begin(), iend = vNearKPIndices.end(); it != iend; ++it) {
             int idx = *it;
-            if (pFrame->hasObservation(idx))
+            if (pFrame->hasObservationByIndex(idx))
                 continue;  // 名花有主
 
             const cv::Mat& d = pFrame->mDescriptors.row(idx);

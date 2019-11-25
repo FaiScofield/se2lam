@@ -106,7 +106,7 @@ private:
     // local map
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
-    std::vector<cv::Point3f> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
+    std::vector<PtrMapPoint> mLocalMPs;     // 参考帧的MP观测(Pc非Pw), 每帧处理会更新此变量
     std::vector<int> mvMatchIdxToRefKF;   // Matches12, 参考帧到当前帧的KP匹配索引
     std::vector<bool> mvbGoodPrl;
     int mnGoodPrl, mnGoodDepth;  // count number of mLocalMPs with good parallax

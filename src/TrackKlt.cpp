@@ -46,7 +46,7 @@ TrackKlt::TrackKlt()
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
     mpORBmatcher = new ORBmatcher(0.9, true);
 
-    mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1.f, -1.f, -1.f));
+    mLocalMPs = vector<PtrMapPoint>(Config::MaxFtrNumber, nullptr);
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(2 * Config::FPS);            // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
@@ -291,7 +291,7 @@ void TrackKlt::trackKlt(const Mat& img, const Se2& odo, double imuTheta)
 
         // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
         // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
-        mpLocalMapper->processNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
+        mpLocalMapper->processNewKF(/*pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl*/);
 
         mpReferenceKF = pKF;
         resetLocalTrack();
@@ -410,7 +410,7 @@ void TrackKlt::trackRefKlt(const Mat& img, const Se2& odo, double imuTheta)
 
         // 添加给LocalMapper，LocalMapper会根据mLocalMPs生成真正的MP
         // LocalMapper会在更新完共视关系和MPs后把当前KF交给Map
-        mpLocalMapper->processNewKF(pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl);
+        mpLocalMapper->processNewKF(/*pKF, mLocalMPs, mvMatchIdxToRefKF, mvbGoodPrl*/);
 
         mpReferenceKF = pKF;
         resetLocalTrack();
@@ -471,7 +471,7 @@ void TrackKlt::updateFramePose()
 void TrackKlt::resetLocalTrack()
 {
     // 更新当前Local MP为参考帧观测到的MP
-    mLocalMPs = mpReferenceKF->mvpMapPoints;
+    mLocalMPs = mpReferenceKF->getObservations();
     mnGoodPrl = 0;
 
     for (int i = 0; i < 3; ++i)
@@ -620,7 +620,7 @@ bool TrackKlt::needNewKF()
                mCurrentFrame.id, mpReferenceKF->id, c0, c1, c2, c3, c4, c5, c6);
 
     // 最后还要看LocalMapper准备好了没有，LocalMapper正在执行优化的时候是不接收新KF的
-    if (mpLocalMapper->acceptNewKF()) {
+    if (mpLocalMapper->checkIfAcceptNewKF()) {
         return bNeedNewKF;
     } else if (c0 && c2 && bNeedKFByOdo) {
         fprintf(stderr, "[Track][Info ] #%ld(KF#%ld) 强制添加KF, 关键帧条件的满足情况: %d/%d/%d/%d/%d/%d/%d\n",
@@ -661,8 +661,8 @@ int TrackKlt::doTriangulate()
             continue;
 
         // 2.如果参考帧的KP与当前帧的KP有匹配,且参考帧KP已经有对应的MP观测了，则可见地图点更新为此MP
-        if (mpReferenceKF->hasObservation(i)) {
-            mLocalMPs[i] = mpReferenceKF->mvpMapPoints[i];
+        if (mpReferenceKF->hasObservationByIndex(i)) {
+            mLocalMPs[i] = mpReferenceKF->getObservation(i);
             //  mLocalMPs[i] = mpReferenceKF->getViewMPPoseInCamareFrame(i);
             nTrackedOld++;
             continue;
@@ -677,7 +677,7 @@ int TrackKlt::doTriangulate()
         // 3.如果深度计算符合预期，就将有深度的KP更新到LocalMPs里, 其中视差较好的会被标记
         if (Config::acceptDepth(Pc1.z)) {
             mnGoodDepth++;
-            mLocalMPs[i] = Pc1;
+//            mLocalMPs[i] = Pc1;
             // 检查视差
             if (cvu::checkParallax(Ocam1, Ocam2, Pc1, 2)) {
                 mnGoodPrl++;

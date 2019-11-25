@@ -29,7 +29,7 @@
 namespace se2lam
 {
 
-//class Frame;
+// class Frame;
 
 typedef g2o::BlockSolverX SlamBlockSolver;
 typedef g2o::LinearSolverCholmod<SlamBlockSolver::PoseMatrixType> SlamLinearSolver;
@@ -116,8 +116,8 @@ g2o::Matrix6d invJJl(const g2o::Vector6d& v6d);
 
 void initOptimizer(SlamOptimizer& opt, bool verbose = false);
 
-EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
-                                            const cv::Mat& extPara);
+EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose,
+                                                    int vId, const cv::Mat& extPara);
 
 
 CamPara* addCamPara(SlamOptimizer& opt, const cv::Mat& K, int id);
@@ -166,6 +166,11 @@ Eigen::Vector3d estimateVertexXYZ(SlamOptimizer& opt, int id);
 g2o::SE3Quat estimateVertexSE3Expmap(SlamOptimizer& opt, int id);
 
 g2o::Vector3D estimateVertexSBAXYZ(SlamOptimizer& opt, int id);
+
+void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& Tc1c2, g2o::Matrix6d& Info_se3);
+
+void calcSE3toXYZInfo(const cv::Point3f& Pc1, const cv::Mat& Tc1w, const cv::Mat& Tc2w,
+                      Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
 bool verifyInfo(const g2o::Matrix6d& info);
 

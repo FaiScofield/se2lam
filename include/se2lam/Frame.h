@@ -21,6 +21,7 @@
 namespace se2lam
 {
 
+class MapStorage;
 class MapPoint;
 typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
@@ -28,6 +29,17 @@ struct PreSE2 {
 public:
     double meas[3];
     double cov[9];  // 3*3, RowMajor
+};
+
+struct MPCandidate {
+    cv::Point3f Pc1;  // Pw in world
+    unsigned long id2;
+    size_t kpIdx2;
+    cv::Mat Tc2w;
+
+    MPCandidate(const cv::Point3f& PcKF, unsigned long id, size_t idx, const cv::Mat& Tcw)
+        : Pc1(PcKF), id2(id), kpIdx2(idx), Tc2w(Tcw)
+    {}
 };
 
 //! 分块数目
@@ -76,12 +88,14 @@ public:
     std::vector<PtrMapPoint> getObservations(bool checkValid = false, bool checkParallax = false);
     size_t countObservations();
     void setObservation(const PtrMapPoint& pMP, size_t idx);
-    void eraseObservation(size_t idx);
-    bool hasObservation(size_t idx);
     void updateObservationsAfterOpt();
 
-    virtual bool hasObservation(const PtrMapPoint& pMP);
-    virtual void eraseObservation(const PtrMapPoint& pMP);
+    bool hasObservationByIndex(size_t idx);
+    void eraseObservationByIndex(size_t idx);
+    virtual bool hasObservationByPointer(const PtrMapPoint& pMP);
+    virtual void eraseObservationByPointer(const PtrMapPoint& pMP);
+
+    friend class MapStorage;
 
 public:
     //! static variable
@@ -110,7 +124,8 @@ public:
     cv::Mat mImage;  // bNeedVisualization = false, 图像无数据
     cv::Mat mDescriptors;
     std::vector<cv::KeyPoint> mvKeyPoints;  // N个KP
-    std::vector<bool> mvbMPOutlier;         // 优化的时候用
+
+    std::vector<bool> mvbMPOutlier;  // 优化的时候用
     std::vector<std::size_t> mGrid[GRID_COLS][GRID_ROWS];
 
     //! 图像金字塔相关

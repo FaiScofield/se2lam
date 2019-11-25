@@ -65,17 +65,19 @@ public:
     std::vector<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
     std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
     std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
-    // void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
+    std::map<std::shared_ptr<KeyFrame>, int> getAllCovisibleKFsAndWeights();
     void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
+    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
     void eraseCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
-    void updateCovisibleKFs();
+    void sortCovisibleKFs();
+    void updateCovisibleGraph();
     size_t countCovisibleKFs();
 
     //! MP观测的维护函数
     int getFeatureIndex(const PtrMapPoint& pMP); // 返回MP对应的KP的索引
-    bool hasObservation(const PtrMapPoint& pMP);
-    void eraseObservation(const PtrMapPoint& pMP);
-    void setObsAndInfo(const PtrMapPoint& pMp, size_t idx, const Eigen::Matrix3d& info);
+    void setObsAndInfo(const PtrMapPoint& pMP, size_t idx, const Eigen::Matrix3d& info);
+    bool hasObservationByPointer(const PtrMapPoint& pMP);
+    void eraseObservationByPointer(const PtrMapPoint& pMP);
 
     //! 特征约束关系的维护函数
     void addFtrMeasureFrom(const std::shared_ptr<KeyFrame>& pKF, const cv::Mat& _mea, const cv::Mat& _info);
@@ -91,6 +93,7 @@ public:
 
     unsigned long mIdKF;
 
+    std::vector<bool> mvbViewMPsInfoExist;
     std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> mvViewMPsInfo;
 
     // KeyFrame contraints: From this or To this
@@ -111,9 +114,10 @@ protected:
     std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
     std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
     std::vector<int> mvOrderedWeights;
+    std::mutex mMutexCovis;
 
 //    std::mutex mMutexObs;
-    std::mutex mMutexCovis;
+
 };
 
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;

@@ -5,9 +5,10 @@
 */
 
 #include "optimizer.h"
+#include "MapPoint.h"
 #include "converter.h"
 #include "cvutil.h"
-#include "MapPoint.h"
+#include <opencv2/calib3d/calib3d.hpp>
 
 namespace se2lam
 {
@@ -15,6 +16,86 @@ namespace se2lam
 using namespace g2o;
 using namespace std;
 using namespace Eigen;
+using namespace cv;
+
+/**
+ * @brief 计算KF之间的残差和信息矩阵, 后端优化用
+ * @param dOdo      [Input ]后一帧与前一帧之间的里程计差值
+ * @param Tc1c2     [Output]残差
+ * @param Info_se3  [Output]信息矩阵
+ */
+void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
+{
+    const Mat Tbc = Config::Tbc;
+    const Mat Tcb = Config::Tcb;
+    const Mat Tb1b2 = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
+
+    Tc1c2 = Tcb * Tb1b2 * Tbc;
+
+    float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
+    float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
+    float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
+
+
+    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
+    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
+    for (int i = 0; i < 6; ++i)
+        Info_se3_bTb(i, i) = data[i];
+    Info_se3 = Info_se3_bTb;
+}
+
+/**
+ * @brief 计算KF与MP之间的误差不确定度，计算约束(R^t)*∑*R
+ * @param Pc1   [Input ]MP在KF1相机坐标系下的坐标
+ * @param Tc1w  [Input ]KF1相机到世界坐标系的变换
+ * @param Tc2w  [Input ]KF2相机到世界坐标系的变换
+ * @param info1 [Output]MP在KF1中投影误差的信息矩阵
+ * @param info2 [Output]MP在KF2中投影误差的信息矩阵
+ */
+void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eigen::Matrix3d& info1,
+                      Eigen::Matrix3d& info2)
+{
+    Point3f O1 = Point3f(cvu::inv(Tc1w).rowRange(0, 3).col(3));
+    Point3f O2 = Point3f(cvu::inv(Tc2w).rowRange(0, 3).col(3));
+    Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
+    Point3f vO1 = Pw - O1;
+    Point3f vO2 = Pw - O2;
+    float sinParallax = cv::norm(vO1.cross(vO2)) / (cv::norm(vO1) * cv::norm(vO2));
+
+    Point3f Pc2 = cvu::se3map(Tc2w, Pw);
+    float length1 = cv::norm(Pc1);
+    float length2 = cv::norm(Pc2);
+    float dxy1 = 2.f * length1 / Config::fx;
+    float dxy2 = 2.f * length2 / Config::fx;
+    float dz1 = dxy2 / sinParallax;
+    float dz2 = dxy1 / sinParallax;
+
+    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dxy1 * dxy1), 0, 0,
+                     0, 1.f / (dz1 * dz1));
+
+    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dxy2 * dxy2), 0, 0,
+                     0, 1.f / (dz2 * dz2));
+
+    Point3f z1 = Point3f(0, 0, length1);
+    Point3f z2 = Point3f(0, 0, length2);
+    Point3f k1 = Pc1.cross(z1);
+    float normk1 = cv::norm(k1);
+    float sin1 = normk1 / (cv::norm(z1) * cv::norm(Pc1));
+    k1 = k1 * (std::asin(sin1) / normk1);
+    Point3f k2 = Pc2.cross(z2);
+    float normk2 = cv::norm(k2);
+    float sin2 = normk2 / (cv::norm(z2) * cv::norm(Pc2));
+    k2 = k2 * (std::asin(sin2) / normk2);
+
+    Mat R1, R2;
+    Mat k1mat = (Mat_<float>(3, 1) << k1.x, k1.y, k1.z);
+    Mat k2mat = (Mat_<float>(3, 1) << k2.x, k2.y, k2.z);
+    cv::Rodrigues(k1mat, R1);
+    cv::Rodrigues(k2mat, R2);
+
+    info1 = toMatrix3d(R1.t() * info_xyz1 * R1);
+    info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
+}
 
 
 EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
@@ -249,8 +330,8 @@ void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bo
  * @param extPara   Config::bTc
  * @return
  */
-EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose, int vId,
-                                            const cv::Mat& extPara)
+EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose,
+                                                    int vId, const cv::Mat& extPara)
 {
 
 //#define USE_EULER
@@ -688,7 +769,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 
     // 当前帧位姿节点(待优化变量)
     g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
-    vSE3->setEstimate(toSE3Quat(pFrame->getPose());
+    vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
     vSE3->setId(0);
     vSE3->setFixed(false);
     optimizer.addVertex(vSE3);
@@ -704,7 +785,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     vnIndexEdge.reserve(N);
 
     const float delta = Config::ThHuber;
-    vector<PtrMapPoint> vAllMPs = pFrame->getAllLandMarks();
+    vector<PtrMapPoint> vAllMPs = pFrame->getObservations();
     for (int i = 0; i < N; i++) {
         const PtrMapPoint& pMP = vAllMPs[i];
         if (pMP != nullptr) {
@@ -748,9 +829,9 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
         for (size_t i = 0, iend = vpEdges.size(); i < iend; i++) {
             se2lam::EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
 
-            const size_t idx = vnIndexEdge[i]; // MP对应的KP索引
+            const size_t idx = vnIndexEdge[i];  // MP对应的KP索引
 
-            if (pFrame->mvbMPOutlier[idx]) //! TODO 对吗?? 和ORB的一样
+            if (pFrame->mvbMPOutlier[idx])  //! TODO 对吗?? 和ORB的一样
                 e->computeError();
 
             const float chi2 = e->chi2();
