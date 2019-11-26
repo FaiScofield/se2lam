@@ -90,7 +90,7 @@ void MapStorage::sortKeyFrames()
     }
 
     // Change Id of KF to be vector index
-    for (unsigned long i = 0, iend = mvKFs.size(); i != iend; ++i) {
+    for (size_t i = 0, iend = mvKFs.size(); i != iend; ++i) {
         PtrKeyFrame& pKF = mvKFs[i];
         pKF->mIdKF = i;
     }
@@ -112,7 +112,7 @@ void MapStorage::sortMapPoints()
     }
 
     // Change Id of MP to be vector index
-    for (unsigned long i = 0, iend = mvMPs.size(); i != iend; ++i) {
+    for (size_t i = 0, iend = mvMPs.size(); i != iend; ++i) {
         PtrMapPoint& pMP = mvMPs[i];
         pMP->mId = i;
     }
@@ -134,14 +134,14 @@ void MapStorage::saveKeyFrames()
     file << "KeyFrames"
          << "[";
 
-    for (size_t i = 0, iend = mvKFs.size(); i != iend; ++i) {
+    for (int i = 0, iend = mvKFs.size(); i != iend; ++i) {
         const PtrKeyFrame& pKF = mvKFs[i];
 
         file << "{";
 
         file << "Id" << i;
 
-        file << "N" << pKF->N;
+        file << "N" << static_cast<int>(pKF->N);
 
         file << "Pose" << pKF->getPose();
 
@@ -164,7 +164,7 @@ void MapStorage::saveKeyFrames()
 
         file << "Descriptor" << pKF->mDescriptors;
 
-        vector<PtrMapPoint> vViewMPs = pKF->getObservations();
+        vector<PtrMapPoint> vViewMPs = pKF->getObservations(false, false);
         if (vViewMPs.size() != pKF->mvKeyPoints.size())
             cerr << "Wrong size of KP in saving" << endl;
 
@@ -174,7 +174,7 @@ void MapStorage::saveKeyFrames()
             if (vViewMPs[j] == nullptr)
                 file << -1;
             else
-                file << vViewMPs[j]->mId;
+                file << static_cast<int>(vViewMPs[j]->mId);
         }
         file << "]";
 
@@ -191,7 +191,7 @@ void MapStorage::saveKeyFrames()
         for (auto it = vCosKFsWeight.begin(), iend = vCosKFsWeight.end(); it != iend; ++it) {
             file << "{";
 
-            file << "CovisibleKFID" << it->first->mIdKF;
+            file << "CovisibleKFID" << static_cast<int>(it->first->mIdKF);
             file << "CovisibleMPCount" << it->second;
 
             file << "}";
@@ -213,7 +213,7 @@ void MapStorage::saveMapPoints()
     file << "MapPoints"
          << "[";
 
-    for (size_t i = 0, iend = mvMPs.size(); i != iend; ++i) {
+    for (int i = 0, iend = mvMPs.size(); i != iend; ++i) {
         const PtrMapPoint& pMP = mvMPs[i];
         file << "{";
 
@@ -319,11 +319,11 @@ void MapStorage::saveFtrGraph()
          << "[";
     for (size_t i = 0; i != sizeKF; ++i) {
         const PtrKeyFrame& pKFi = mvKFs[i];
-        unsigned long idi = pKFi->mIdKF;
+        int idi = pKFi->mIdKF;
 
         for (auto it = pKFi->mFtrMeasureFrom.begin(), itend = pKFi->mFtrMeasureFrom.end(); it != itend; ++it) {
             PtrKeyFrame pKFj = it->first;
-            unsigned long idj = pKFj->mIdKF;
+            int idj = pKFj->mIdKF;
             Mat measure = it->second.measure;
             Mat info = it->second.info;
 
@@ -357,8 +357,8 @@ void MapStorage::loadKeyFrames()
 
         FileNode nodeKF = *it;
 
-        nodeKF["Id"] >> pKF->mIdKF;
-        nodeKF["N"] >> pKF->N;
+        pKF->mIdKF = (int)nodeKF["Id"];
+        pKF->N = (int)nodeKF["N"];
         pKF->id = pKF->mIdKF;
 
         Mat pose;
@@ -396,7 +396,7 @@ void MapStorage::loadKeyFrames()
         if (nodeKP.size() != nodeViewMPsId.size())
             cerr << "Wrong ViewMPs size in loading " << endl;
 
-        vector<long> vViewMPsId;
+        vector<int> vViewMPsId;
         vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> vInfo;
         vViewMPsId.reserve(pKF->N);
         vInfo.reserve(pKF->N);
@@ -404,7 +404,7 @@ void MapStorage::loadKeyFrames()
         {
             FileNodeIterator itMPId = nodeViewMPsId.begin(), itMPend = nodeViewMPsId.end();
             for (; itMPId != itMPend; itMPId++) {
-                long id;
+                int id;
                 (*itMPId) >> id;
                 vViewMPsId.push_back(id);
             }

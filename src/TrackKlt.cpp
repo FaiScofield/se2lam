@@ -471,7 +471,7 @@ void TrackKlt::updateFramePose()
 void TrackKlt::resetLocalTrack()
 {
     // 更新当前Local MP为参考帧观测到的MP
-    mLocalMPs = mpReferenceKF->getObservations();
+    mLocalMPs = mpReferenceKF->getObservations(false, false);
     mnGoodPrl = 0;
 
     for (int i = 0; i < 3; ++i)

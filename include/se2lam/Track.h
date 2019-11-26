@@ -11,8 +11,8 @@
 #include "Frame.h"
 #include "ORBmatcher.h"
 #include "Sensors.h"
+#include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
 #include "cvutil.h"
-#include <g2o/types/sba/types_six_dof_expmap.h>
 
 namespace se2lam
 {
@@ -40,6 +40,8 @@ public:
     void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
+    cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
+    void copyForPub(char* txt);
 
     bool isFinished();
     void requestFinish();
@@ -64,6 +66,7 @@ private:
     void doTriangulate();
     void resetLocalTrack();
     bool needNewKF();
+    void addNewKF();
 
     // Relocalization
     bool detectIfLost();
@@ -75,8 +78,9 @@ private:
     void removeMatchOutlierRansac(const Frame* _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
     void doLocalBA(Frame& pKF);
-    void resartTracking();
+    void startNewTrack();
 
+    void checkReady();
     bool checkFinish();
     void setFinish();
 
@@ -84,6 +88,7 @@ private:
     static bool mbUseOdometry;  //! TODO 冗余变量
     bool mbPrint;
     bool mbNeedVisualization;
+    bool mbRelocalized; // 成功重定位标志
     std::string mImageText;
 
     // set in OdoSLAM class
@@ -91,16 +96,17 @@ private:
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;
     Sensors* mpSensors;
-    ORBextractor* mpORBextractor;  // 这里有new
-    ORBmatcher* mpORBmatcher;
     MapPublish* mpMapPublisher;
+
+    ORBextractor* mpORBextractor;  // 这里有new
+    ORBmatcher* mpORBmatcher;  // 这里有new
 
     // local map
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpLoopKF;
     std::map<size_t, MPCandidate> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
-    std::vector<int> mvMatchIdx, mvGoodMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引
+    std::vector<int> mvMatchIdx, mvGoodMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
     int mnNewAddedMPs, mnCandidateMPs, mnBadMatches;  // 新增/潜在的MP数及不好的匹配点数
     int mnInliers, mnGoodInliers, mnTrackedOld;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
     int mnLostFrames;                            // 连续追踪失败的帧数
@@ -111,7 +117,6 @@ private:
     float mCurrRatioGoodDepth, mCurrRatioGoodParl;
     float mLastRatioGoodDepth, mLastRatioGoodParl;
 
-    cv::Mat mK, mD;
     cv::Mat mAffineMatrix;
 
     // preintegration on SE2

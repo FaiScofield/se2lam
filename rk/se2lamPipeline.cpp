@@ -4,6 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
+#include "Frame.h"
 #include "Config.h"
 #include "OdoSLAM.h"
 #include <boost/filesystem.hpp>

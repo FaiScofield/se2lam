@@ -26,6 +26,7 @@ typedef unique_lock<mutex> locker;
 Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 {
     mCurrentFramePose = cv::Mat::eye(4, 4, CV_32FC1);
+    mbNewKFinserted = false;
 }
 
 Map::~Map()
@@ -36,8 +37,9 @@ void Map::insertKF(const PtrKeyFrame& pKF)
     locker lock(mMutexGlobalGraph);
     pKF->setMap(this);
     mspKFs.insert(pKF);
-    isEmpty = false;
     mCurrentKF = pKF;
+    isEmpty = false;
+    mbNewKFinserted = true;
 }
 
 void Map::insertMP(const PtrMapPoint& pMP)
@@ -243,6 +245,7 @@ bool Map::pruneRedundantKF()
     const double theshl = 10000;                 // 10m
     const double thesht = 45 * 3.1415926 / 180;  // 45 degree to rad
 
+    //! FIXME 1和3计算后, 3还要回来和1计算, 有重复计算, 待改进!
     for (int i = 0, iend = vLocalGraphKFs.size(); i != iend; ++i) {
         PtrKeyFrame& thisKF = vLocalGraphKFs[i];
 
@@ -321,7 +324,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     set<PtrMapPoint> setLocalMPs;
 
     //! 1.获得LocalKFs
-    if (countKFs() <= maxN) {
+    if (static_cast<int>(countKFs()) <= maxN) {
         locker lock(mMutexGlobalGraph);
         setLocalKFs.insert(mspKFs.begin(), mspKFs.end());
     } else {
@@ -329,53 +332,113 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 
         // kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中,
         // 否则经过同一个地方不会考虑到之前添加的KF
-        WorkTimer timer;
-        addLocalGraphThroughKdtree(setLocalKFs, maxN * 0.5, searchRadius); // lock global
+        addLocalGraphThroughKdtree(setLocalKFs, maxN, searchRadius);  // lock global
 
         // 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
-        timer.start();
-        int searchLevel = maxLevel;  // 2
-        int m = setLocalKFs.size();
-        while (searchLevel > 0) {
-            set<PtrKeyFrame> currentLocalKFs = setLocalKFs;
-            for (auto it = currentLocalKFs.begin(), iend = currentLocalKFs.end(); it != iend; ++it) {
-                PtrKeyFrame pKF = (*it);
-                vector<PtrKeyFrame> pKFs = pKF->getAllCovisibleKFs();
-                setLocalKFs.insert(pKFs.begin(), pKFs.end());
-            }
-            if (++m >= maxN)
-                break;
-            searchLevel--;
-        }
+//        int searchLevel = maxLevel;  // 2
+//        int m = setLocalKFs.size();
+//        while (searchLevel > 0) {
+//            set<PtrKeyFrame> currentLocalKFs = setLocalKFs;
+//            for (auto it = currentLocalKFs.begin(), iend = currentLocalKFs.end(); it != iend; ++it) {
+//                PtrKeyFrame pKF = (*it);
+//                if (pKF == nullptr || pKF->isNull())
+//                    continue;
+//                vector<PtrKeyFrame> pKFs = pKF->getAllCovisibleKFs();
+//                setLocalKFs.insert(pKFs.begin(), pKFs.end());
+//            }
+//            if (++m >= maxN)
+//                break;
+//            searchLevel--;
+//        }
     }
     double t1 = timer.count();
 
     //! 2. 获得LocalMPs, 不要求要有良好视差
     //! FIXME 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
     timer.start();
-    bool checkPrl = false;
     for (auto it = setLocalKFs.begin(), iend = setLocalKFs.end(); it != iend; ++it) {
         PtrKeyFrame pKF = (*it);
-        vector<PtrMapPoint> pMPs = pKF->getObservations(checkPrl);
+        if (!pKF || pKF->isNull())
+            continue;
+
+        vector<PtrMapPoint> pMPs = pKF->getObservations(true, false);
         setLocalMPs.insert(pMPs.begin(), pMPs.end());
     }
     double t2 = timer.count();
 
-    //! 3.获得RefKFs
+    //! 3.获得RefKFs, 在优化时会被固定.
     timer.start();
     for (auto it = setLocalMPs.begin(), iend = setLocalMPs.end(); it != iend; ++it) {
         PtrMapPoint pMP = (*it);
+        if (!pMP || pMP->isNull())
+            continue;
+
         vector<PtrKeyFrame> pKFs = pMP->getObservations();
-        // 和Local KFs有共同的Local MPs观测的其他KF，将设置为RefKFs, 在优化时会被固定.
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
-            if (setLocalKFs.find((*j)) != setLocalKFs.end() || setRefKFs.find((*j)) != setRefKFs.end())
+            if (setLocalKFs.find((*j)) != setLocalKFs.end())
                 continue;
             setRefKFs.insert((*j));
         }
     }
     double t3 = timer.count();
-    printf("[ Map ][Timer] #%ld(KF#%ld) 更新局部地图, 总共得到了%ld个LocalKFs, %ld个LocalMPs和 "
-           "%ld个RefKFs, 共耗时%.2fms\n",
+    printf("[Local][ Map ] #%ld(KF#%ld) L2.更新局部地图, 总共得到了%ld个LocalKFs, "
+           "%ld个LocalMPs和%ld个RefKFs, 共耗时%.2fms\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size(), setLocalMPs.size(),
+           setRefKFs.size(), t1 + t2 + t3);
+
+    mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
+    mvRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
+    mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
+}
+
+void Map::updateLocalGraph_new()
+{
+    WorkTimer timer;
+
+    locker lock(mMutexLocalGraph);
+
+    mvLocalGraphKFs.clear();
+    mvLocalGraphMPs.clear();
+    mvRefKFs.clear();
+
+    set<PtrKeyFrame> setLocalKFs;
+    set<PtrKeyFrame> setRefKFs;
+    set<PtrMapPoint> setLocalMPs;
+
+    //! 1.获得LocalKFs
+    vector<PtrKeyFrame> vpKFs = mCurrentKF->getBestCovisibleKFs(Config::MaxLocalFrameNum);
+    setLocalKFs.insert(vpKFs.begin(), vpKFs.end());
+    double t1 = timer.count();
+
+    //! 2. 获得LocalMPs, 要有良好视差
+    timer.start();
+    for (auto it = setLocalKFs.begin(), iend = setLocalKFs.end(); it != iend; ++it) {
+        PtrKeyFrame pKF = (*it);
+        if (!pKF || pKF->isNull())
+            continue;
+
+        vector<PtrMapPoint> vpMPs = pKF->getObservations(true, true);
+        setLocalMPs.insert(vpMPs.begin(), vpMPs.end());
+    }
+    double t2 = timer.count();
+
+    //! 3.获得RefKFs, 在优化时会被固定.
+    timer.start();
+    for (auto it = setLocalMPs.begin(), iend = setLocalMPs.end(); it != iend; ++it) {
+        PtrMapPoint pMP = (*it);
+        if (!pMP || pMP->isNull())
+            continue;
+
+        vector<PtrKeyFrame> vpKFs = pMP->getObservations();
+        for (auto j = vpKFs.begin(), jend = vpKFs.end(); j != jend; ++j) {
+            if (setLocalKFs.find((*j)) != setLocalKFs.end())
+                continue;
+            setRefKFs.insert((*j));
+        }
+    }
+    double t3 = timer.count();
+    printf("[Local][ Map ] #%ld(KF#%ld) L2.更新局部地图, 共得到 LocalKFs/LocalMPs/RefKFs : "
+           "%ld/%ld/%ld, 共耗时%.2fms\n",
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size(), setLocalMPs.size(),
            setRefKFs.size(), t1 + t2 + t3);
 
@@ -425,7 +488,7 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
 Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, set<PtrMapPoint>& spMPs)
 {
     spMPs.clear();
-    vector<PtrMapPoint> vMPs = pKF1->getObservations(true);
+    vector<PtrMapPoint> vMPs = pKF1->getObservations(true, false);
 
     int nSameMP = 0;
     for (auto i = vMPs.begin(), iend = vMPs.end(); i != iend; ++i) {
@@ -450,16 +513,21 @@ Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, se
 float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const vector<PtrKeyFrame>& vpKFsRef,
                           set<PtrMapPoint>& spMPsRet, int k)
 {
-    spMPsRet.clear();
-    vector<PtrMapPoint> spMPsAll = pKFNow->getObservations(false);
-    if (spMPsAll.size() == 0) {
+    if (vpKFsRef.empty())
+        return -1.0f;
+
+    vector<PtrMapPoint> spMPsAll = pKFNow->getObservations(true, false);
+    if (spMPsAll.empty()) {
         return -1.0f;
     }
 
+    spMPsRet.clear();
     for (auto iter = spMPsAll.begin(); iter != spMPsAll.end(); iter++) {
         PtrMapPoint pMP = *iter;
-        int count = 0;
+        if (!pMP || pMP->isNull())
+            continue;
 
+        int count = 0;
         for (auto iter2 = vpKFsRef.begin(); iter2 != vpKFsRef.end(); iter2++) {
             PtrKeyFrame pKFRef = *iter2;
             if (pKFRef->hasObservationByPointer(pMP)) {
@@ -475,21 +543,6 @@ float Map::compareViewMPs(const PtrKeyFrame& pKFNow, const vector<PtrKeyFrame>& 
 
     float ratio = spMPsRet.size() * 1.0f / spMPsAll.size();
     return ratio;
-}
-
-int Map::getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2)
-{
-    vector<PtrMapPoint> spMPs1 = pKF1->getObservations(false);
-    if (spMPs1.size() == 0)
-        return 0;
-
-    int count = 0;
-    for (auto iter = spMPs1.begin(); iter != spMPs1.end(); iter++) {
-        if (pKF2->hasObservationByPointer(*iter))
-            count++;
-    }
-
-    return count;
 }
 
 //! 在LocalMap::removeOutlierChi2()中调用
@@ -581,8 +634,9 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 
     // Add local graph MapPoints
     for (int i = 0; i < N; ++i) {
-        const PtrMapPoint& pMP = mvLocalGraphMPs[i];
-        assert(!pMP->isNull());
+        const PtrMapPoint& pMP = mvLocalGraphMPs[i];  // FIXME 第0个MP指针为null
+        if (!pMP || pMP->isNull())
+            continue;
 
         int vertexIdMP = maxKFid + i;  // MP的节点编号
         addVertexSBAXYZ(optimizer, toVector3d(pMP->getPos()), vertexIdMP);
@@ -1160,7 +1214,7 @@ void Map::addLocalGraphThroughKdtree(set<PtrKeyFrame>& setLocalKFs, int maxN, fl
     std::vector<float> dists;
     kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
-        if (indices[i] > 0  && dists[i] < searchRadius)  // 距离在0.3m以内
+        if (indices[i] > 0 && dists[i] < searchRadius)  // 距离在0.3m以内
             setLocalKFs.insert(vKFsAll[indices[i]]);
     }
 }

@@ -9,7 +9,7 @@ AccessModifierOffset: -4
 # 左对齐逃脱换行(使用反斜杠换行)的反斜杠
 AlignEscapedNewlinesLeft: true
 # 对齐连续的尾随的注释
-AlignTrailingComments: true
+AlignTrailingComments: false
 # 允许函数声明的所有参数在放在下一行
 AllowAllParametersOfDeclarationOnNextLine: false
 # 允许短的函数放在同一行: None, InlineOnly(定义在类中), Empty(空函数), Inline(定义在类中，空函数), All

@@ -34,12 +34,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations"
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
 include_directories(
-#    ${PROJECT_SOURCE_DIR}/Thirdparty
-#    ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161
-#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include
-#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include/line_descriptor
-#    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/src
-    ${PROJECT_SOURCE_DIR}/dependencies
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/Thirdparty
 )
 
 ## ROS packages setting
@@ -94,12 +90,6 @@ endif()
 
 ## G2O
 if(CROSS_COMPILE)
-    set(LineDesc_INCLUDE_DIR    ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/include)
-    set(LineDesc_LIBS           ${PROJECT_SOURCE_DIR}/dependencies/line_descriptor/lib/liblinedesc.so)
-    set(LSD161_INCLUDE_DIR      ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/include)
-    set(LSD161_LIBS             ${PROJECT_SOURCE_DIR}/dependencies/lsd_161/lib/liblsd_161.so)
-    set(DBOW2_INCLUDE_DIR       ${PROJECT_SOURCE_DIR}/dependencies/dbow2/include)
-    set(DBOW2_LIBS              ${PROJECT_SOURCE_DIR}/dependencies/dbow2/lib/libDBoW2se2lam.so)
     set(CSPARSE_INCLUDE_DIR     ${PROJECT_SOURCE_DIR}/dependencies/csparse/include)
     set(CSPARSE_LIBRARY         ${PROJECT_SOURCE_DIR}/dependencies/csparse/lib/libcxsparse.so)
     set(CHOLMOD_INCLUDE_DIR     ${PROJECT_SOURCE_DIR}/dependencies/cholmod/include)
@@ -123,33 +113,19 @@ else(CROSS_COMPILE)
         message("===> Cholmod Not Found!!!")
     endif()
 
-    set(LineDesc_INCLUDE_DIR    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/include)
-    set(LineDesc_LIBS           ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.so)
-    set(LSD161_INCLUDE_DIR      ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161)
-    set(LSD161_LIBS             ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161/lib/liblsd_161.so)
-    set(DBOW2_INCLUDE_DIR       ${PROJECT_SOURCE_DIR}/Thirdparty/dbow2/include)
-    set(DBOW2_LIBS              ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so)
-
     if(CUSTOM_G2O)
         set(G2O_ROOT /home/vance/opt/g2o-20160424/install)
         find_package(G2O REQUIRED)
         file(GLOB G2O_LIBS ${G2O_ROOT}/lib/*.so)
+        if (G2O_FOUND)
+            message("===> G2O Information: Root: ${G2O_ROOT}")
+            message("===> G2O Information: Include Dir: ${G2O_INCLUDE_DIR}" )
+            message("===> G2O Information: Libs Dir: ${G2O_LIBS}" )
+        else()
+            message("===> G2O Not Found!!!" )
+        endif()
     else()
-        find_package(G2O REQUIRED)
-        list(APPEND G2O_LIBS
-            g2o_cli g2o_solver_slam2d_linear g2o_types_icp g2o_types_slam2d g2o_core
-            g2o_interface g2o_solver_csparse g2o_solver_structure_only g2o_types_sba
-            g2o_types_slam3d g2o_csparse_extension g2o_solver_dense g2o_stuff
-            g2o_types_sclam2d g2o_parser g2o_solver_pcg g2o_types_data g2o_types_sim3
-        )
-    endif()
-
-    if (G2O_FOUND)
-        message("===> G2O Information: Root: ${G2O_ROOT}")
-        message("===> G2O Information: Include Dir: ${G2O_INCLUDE_DIR}" )
-        message("===> G2O Information: Libs Dir: ${G2O_LIBS}" )
-    else()
-        message("===> G2O Not Found!!!" )
+        file(GLOB G2O_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/*.so)
     endif()
 endif(CROSS_COMPILE)
 
@@ -166,9 +142,6 @@ include_directories(
     ${CSPARSE_INCLUDE_DIR}
     ${CHOLMOD_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
-    ${DBOW2_INCLUDE_DIR}
-    ${LSD161_INCLUDE_DIR}
-    ${LineDesc_INCLUDE_DIR}
 )
 
 list(APPEND LINK_LIBS
@@ -182,24 +155,23 @@ list(APPEND LINK_LIBS
 ################################################################################
 file(GLOB_RECURSE IncFiles "include/se2lam/*.h")
 aux_source_directory(src/. DIR_SRCS)
-add_library(se2lam
+add_library(se2lam SHARED
     ${DIR_SRCS}
     ${IncFiles}
 )
 
 target_link_libraries(se2lam
     ${LINK_LIBS}
-    ${DBOW2_LIBS}
-    ${LSD161_LIBS}
-    ${LineDesc_LIBS}
     ${CSPARSE_LIBRARY}
     ${CHOLMOD_LIBRARIES}
     ${G2O_LIBS}
+    ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2se2lam.so
+    ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.so
+    ${PROJECT_SOURCE_DIR}/Thirdparty/lsd_161/lib/liblsd_161.so
 )
 if(CROSS_COMPILE)
     target_link_libraries(se2lam -ltinyxml2)  # 交叉编译中ROS需要
 endif()
-
 
 # 子目录
 add_subdirectory(rk)

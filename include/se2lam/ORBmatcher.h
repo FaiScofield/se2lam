@@ -56,8 +56,10 @@ public:
 
     // int SearchByProjection(Frame& CurrentFrame, KeyFrame& LastFrame, const float th = 7);
     int SearchByProjection(Frame& frameCurr, Frame& frameLast, int winSize);
-    int SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>& localMPs,
-                          const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP);
+    int SearchByProjection(Frame& thisFrame, const std::vector<PtrMapPoint>& localMPs,
+                           std::vector<int>& vMatchesIdxMP, int winSize, int levelOffset);
+    int SearchByProjection(PtrKeyFrame pKF, const std::vector<PtrMapPoint>& localMPs,
+                           std::vector<int>& vMatchesIdxMP, int winSize, int levelOffset);
 
     //    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
     void ComputeThreeMaxima(std::vector<int>* histo, const int L, int& ind1, int& ind2, int& ind3);

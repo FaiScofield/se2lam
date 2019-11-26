@@ -9,10 +9,11 @@
 #define EDGE_SE2_XYZ_H
 
 #include <Eigen/Dense>
-#include <g2o/core/base_binary_edge.h>
-#include <g2o/core/base_vertex.h>
-#include <g2o/types/sba/types_six_dof_expmap.h>
-#include <g2o/types/slam2d/vertex_se2.h>
+#include "Thirdparty/g2o/g2o/core/base_binary_edge.h"
+#include "Thirdparty/g2o/g2o/core/base_vertex.h"
+#include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
+#include "Thirdparty/g2o/g2o/types/slam2d/vertex_se2.h"
+
 
 #define CUSTOMIZE_JACOBIAN_SE2XYZ
 
@@ -31,8 +32,7 @@ g2o::SE2 SE3ToSE2(const g2o::SE3Quat& _se3);
 //! 2元边
 //! 2维测量，测量类型为Vector2d，代表像素的重投影误差
 //! 两种顶点类型分别是VertexSE2、VertexSBAPointXYZ，即此2元边连接SE2李群位姿点和三维地图点
-class EdgeSE2XYZ
-    : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
+class EdgeSE2XYZ : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -110,6 +110,6 @@ public:
     virtual bool write(std::ostream& os) const { return true; }
 };
 
-} // namespace se2lam
+}  // namespace se2lam
 
-#endif // EDGE_SE2_XYZ_H
+#endif  // EDGE_SE2_XYZ_H

@@ -14,7 +14,7 @@
 #include "ORBmatcher.h"
 #include "Sensors.h"
 #include "cvutil.h"
-#include <g2o/types/sba/types_six_dof_expmap.h>
+#include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
 
 namespace se2lam
 {

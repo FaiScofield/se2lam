@@ -148,12 +148,12 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 
     vector<cv::KeyPoint> vKeysUn1 = pKF1->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec1 = pKF1->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints1 = pKF1->getAllLandMarks();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints1 = pKF1->getObservations();  // Localizer下无MP
     cv::Mat Descriptors1 = pKF1->mDescriptors;
 
     vector<cv::KeyPoint> vKeysUn2 = pKF2->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec2 = pKF2->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints2 = pKF2->getAllLandMarks();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints2 = pKF2->getObservations();  // Localizer下无MP
     cv::Mat Descriptors2 = pKF2->mDescriptors;
 
     vector<bool> vbMatched2(vpMapPoints2.size(), false);
@@ -177,10 +177,8 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
         if (f1it->first == f2it->first) {
             // 步骤2：遍历KF中属于该node的特征点
             for (size_t i1 = 0, iend1 = f1it->second.size(); i1 < iend1; i1++) {
-                size_t idx1 = f1it->second[i1];
-
-                PtrMapPoint pMP1 = vpMapPoints1[idx1];
-
+                const size_t idx1 = f1it->second[i1];
+                const PtrMapPoint& pMP1 = vpMapPoints1[idx1];
                 if (bIfMPOnly) {
                     if (!pMP1)
                         continue;
@@ -188,7 +186,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
                         continue;
                 }
 
-                cv::Mat d1 = Descriptors1.row(idx1);
+                const cv::Mat& d1 = Descriptors1.row(idx1);
 
                 int bestDist1 = INT_MAX;
                 int bestDist2 = INT_MAX;
@@ -196,10 +194,8 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
 
                 // 步骤3：遍历F中属于该node的特征点，找到了最佳匹配点
                 for (size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2; i2++) {
-                    size_t idx2 = f2it->second[i2];
-
-                    PtrMapPoint pMP2 = vpMapPoints2[idx2];
-
+                    const size_t idx2 = f2it->second[i2];
+                    const PtrMapPoint& pMP2 = vpMapPoints2[idx2];
                     if (bIfMPOnly) {
                         if (!pMP2)
                             continue;
@@ -210,8 +206,8 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, map<int, int>& m
                     if (vbMatched2[idx2])
                         continue;  // 表明这个点已经被匹配过了，不再匹配，加快速度
 
-                    cv::Mat d2 = Descriptors2.row(idx2);    // 取出该特征对应的描述子
-                    int dist = DescriptorDistance(d1, d2);  // 求描述子的距离
+                    const cv::Mat& d2 = Descriptors2.row(idx2);    // 取出该特征对应的描述子
+                    const int dist = DescriptorDistance(d1, d2);  // 求描述子的距离
 
                     if (dist < bestDist1) {
                         bestDist2 = bestDist1;
@@ -292,16 +288,16 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
     vector<int> rotHist[HISTO_LENGTH];
     for (int i = 0; i < HISTO_LENGTH; ++i)
         rotHist[i].reserve(300);
-    const float factor = 1.0f / HISTO_LENGTH;
+    const float factor = HISTO_LENGTH / 360.f;
 
     vector<cv::KeyPoint> vKeysUn1 = pF1->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec1 = pF1->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints1 = pF1->getAllLandMarks();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints1 = pF1->getObservations();  // Localizer下无MP
     cv::Mat Descriptors1 = pF1->mDescriptors;
 
     vector<cv::KeyPoint> vKeysUn2 = pF2->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec2 = pF2->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints2 = pF2->getAllLandMarks();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints2 = pF2->getObservations();  // Localizer下无MP
     cv::Mat Descriptors2 = pF2->mDescriptors;
 
     int nmatches = 0;
@@ -319,10 +315,8 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
         if (f1it->first == f2it->first) {
             // 步骤2：遍历KF中属于该node的特征点
             for (size_t i1 = 0, iend1 = f1it->second.size(); i1 < iend1; i1++) {
-                size_t idx1 = f1it->second[i1];
-
+                const size_t idx1 = f1it->second[i1];
                 const PtrMapPoint& pMP1 = vpMapPoints1[idx1];
-
                 if (bIfMPOnly) {
                     if (!pMP1)
                         continue;
@@ -338,10 +332,8 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
 
                 // 步骤3：遍历F中属于该node的特征点，找到了最佳匹配点
                 for (size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2; i2++) {
-                    size_t idx2 = f2it->second[i2];
-
+                    const size_t idx2 = f2it->second[i2];
                     const PtrMapPoint& pMP2 = vpMapPoints2[idx2];
-
                     if (bIfMPOnly) {
                         if (!pMP2)
                             continue;
@@ -353,7 +345,7 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
                         continue;  // 表明这个点已经被匹配过了，不再匹配，加快速度
 
                     const cv::Mat& d2 = Descriptors2.row(idx2);    // 取出该特征对应的描述子
-                    int dist = DescriptorDistance(d1, d2);  // 求描述子的距离
+                    const int dist = DescriptorDistance(d1, d2);  // 求描述子的距离
 
                     if (dist < bestDist1) {
                         bestDist2 = bestDist1;
@@ -808,31 +800,36 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
  * @param vMatchesIdxMP 匹配上的MP索引[output]
  * @return              返回匹配成功的点对数
  */
-int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>& localMPs,
-                                   const int winSize, const int levelOffset, std::vector<int>& vMatchesIdxMP)
+int ORBmatcher::SearchByProjection(PtrKeyFrame pKF, const std::vector<PtrMapPoint>& localMPs,
+                                   std::vector<int>& vMatchesIdxMP, int winSize, int levelOffset)
 {
+    if (localMPs.empty())
+        return 0;
+
     int nmatches = 0;
 
-    vMatchesIdxMP = vector<int>(pFrame->N, -1);
-    vector<int> vMatchesDistance(pFrame->N, INT_MAX);
+    vMatchesIdxMP = vector<int>(pKF->N, -1);
+    vector<int> vMatchesDistance(pKF->N, INT_MAX);
 
     for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
         const PtrMapPoint& pMP = localMPs[i];
-        if (pMP->isNull() /*|| !pMP->isGoodPrl()*/)  // NOTE 视差暂时不好的不能投影! 20191022
+        if (!pMP || pMP->isNull() || !pMP->isGoodPrl())  // NOTE 视差暂时不好的不能投影! 20191022
             continue;
-        if (pFrame->hasObservationByPointer(pMP))
+        if (pMP->hasObservation(pKF))
             continue;
+        //if (pKF->hasObservationByPointer(pMP))
+        //    continue;
 
-        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pFrame->getPose(), pMP->getPos()));
-        if (!pFrame->inImgBound(predictUV))
+        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(pKF->getPose(), pMP->getPos()));
+        if (!pKF->inImgBound(predictUV))
             continue;
         const int predictLevel = pMP->getMainOctave();  // 都在0层
-        const int radio = pFrame->mvScaleFactors[predictLevel] * winSize;
+        const int radio = pKF->mvScaleFactors[predictLevel] * winSize;
         const int minLevel = predictLevel > levelOffset ? predictLevel - levelOffset : 0;
 
         // 通过投影点(投影到当前帧,见isInFrustum())以及搜索窗口和预测的尺度进行搜索,找出附近的兴趣点
         vector<size_t> vNearKPIndices =
-            pFrame->getFeaturesInArea(predictUV.x, predictUV.y, radio, minLevel, predictLevel + levelOffset);
+            pKF->getFeaturesInArea(predictUV.x, predictUV.y, radio, minLevel, predictLevel + levelOffset);
         if (vNearKPIndices.empty())
             continue;
 
@@ -845,10 +842,10 @@ int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>
         // Get best and second matches with near keypoints
         for (auto it = vNearKPIndices.begin(), iend = vNearKPIndices.end(); it != iend; ++it) {
             int idx = *it;
-            if (pFrame->hasObservationByIndex(idx))
+            if (pKF->hasObservationByIndex(idx))
                 continue;  // 名花有主
 
-            const cv::Mat& d = pFrame->mDescriptors.row(idx);
+            const cv::Mat& d = pKF->mDescriptors.row(idx);
             const int dist = DescriptorDistance(pMP->getDescriptor(), d);
 
             if (vMatchesDistance[idx] <= dist)
@@ -858,10 +855,88 @@ int ORBmatcher::SearchByProjection(Frame* pFrame, const std::vector<PtrMapPoint>
                 bestDist2 = bestDist;
                 bestDist = dist;
                 bestLevel2 = bestLevel;
-                bestLevel = pFrame->mvKeyPoints[idx].octave;
+                bestLevel = pKF->mvKeyPoints[idx].octave;
                 bestIdx = idx;
             } else if (dist < bestDist2) {
-                bestLevel2 = pFrame->mvKeyPoints[idx].octave;
+                bestLevel2 = pKF->mvKeyPoints[idx].octave;
+                bestDist2 = dist;
+            }
+        }
+
+        // Apply ratio to second match (only if best and second are in the same scale level)
+        if (bestDist <= TH_HIGH) {
+            if (bestLevel == bestLevel2 && bestDist > mfNNratio * bestDist2)
+                continue;
+            if (vMatchesIdxMP[bestIdx] >= 0) {
+                vMatchesIdxMP[bestIdx] = -1;
+                nmatches--;
+            }
+            vMatchesIdxMP[bestIdx] = i;
+            vMatchesDistance[bestIdx] = bestDist;
+            nmatches++;
+        }
+    }
+
+    return nmatches;
+}
+
+int ORBmatcher::SearchByProjection(Frame& thisFrame, const std::vector<PtrMapPoint>& localMPs,
+                                   std::vector<int>& vMatchesIdxMP, int winSize, int levelOffset)
+{
+    if (localMPs.empty())
+        return 0;
+
+    int nmatches = 0;
+
+    vMatchesIdxMP = vector<int>(thisFrame.N, -1);
+    vector<int> vMatchesDistance(thisFrame.N, INT_MAX);
+
+    for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
+        const PtrMapPoint& pMP = localMPs[i];
+        if (pMP->isNull() /*|| !pMP->isGoodPrl()*/)  // NOTE 视差暂时不好的不能投影! 20191022
+            continue;
+        if (thisFrame.hasObservationByPointer(pMP))
+            continue;
+
+        Point2f predictUV = cvu::camprjc(Config::Kcam, cvu::se3map(thisFrame.getPose(), pMP->getPos()));
+        if (!thisFrame.inImgBound(predictUV))
+            continue;
+        const int predictLevel = pMP->getMainOctave();  // 都在0层
+        const int radio = thisFrame.mvScaleFactors[predictLevel] * winSize;
+        const int minLevel = predictLevel > levelOffset ? predictLevel - levelOffset : 0;
+
+        // 通过投影点(投影到当前帧,见isInFrustum())以及搜索窗口和预测的尺度进行搜索,找出附近的兴趣点
+        vector<size_t> vNearKPIndices =
+            thisFrame.getFeaturesInArea(predictUV.x, predictUV.y, radio, minLevel, predictLevel + levelOffset);
+        if (vNearKPIndices.empty())
+            continue;
+
+        int bestDist = INT_MAX;
+        int bestDist2 = INT_MAX;
+        int bestLevel = -1;
+        int bestLevel2 = -1;
+        int bestIdx = -1;
+
+        // Get best and second matches with near keypoints
+        for (auto it = vNearKPIndices.begin(), iend = vNearKPIndices.end(); it != iend; ++it) {
+            int idx = *it;
+            if (thisFrame.hasObservationByIndex(idx))
+                continue;  // 名花有主
+
+            const cv::Mat& d = thisFrame.mDescriptors.row(idx);
+            const int dist = DescriptorDistance(pMP->getDescriptor(), d);
+
+            if (vMatchesDistance[idx] <= dist)
+                continue;
+
+            if (dist < bestDist) {
+                bestDist2 = bestDist;
+                bestDist = dist;
+                bestLevel2 = bestLevel;
+                bestLevel = thisFrame.mvKeyPoints[idx].octave;
+                bestIdx = idx;
+            } else if (dist < bestDist2) {
+                bestLevel2 = thisFrame.mvKeyPoints[idx].octave;
                 bestDist2 = dist;
             }
         }
@@ -908,7 +983,7 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, Frame& LastFrame, int wi
     const float cy = Config::cy;
 
     for (size_t i = 0; i < LastFrame.N; i++) {
-        const PtrMapPoint& pMP = LastFrame.getObservation(i);
+        const PtrMapPoint pMP = LastFrame.getObservation(i);
         if (pMP == nullptr)
             continue;
         if (LastFrame.mvbMPOutlier[i])

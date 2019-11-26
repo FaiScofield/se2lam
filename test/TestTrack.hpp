@@ -195,7 +195,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF)
         vector<PtrMapPoint> vLocalMPs = mpMap->getLocalMPs();
         vector<int> vMatchedIdxMPs; // matched index of LocalMPs
         ORBmatcher matcher;
-        matcher.SearchByProjection(mpCurrentKF, vLocalMPs, 20, 0, vMatchedIdxMPs);   // 15
+        matcher.SearchByProjection(mpCurrentKF, vLocalMPs, vMatchedIdxMPs, 20, 0);   // 15
         for (int i = 0, iend = mpCurrentKF->N; i != iend; ++i) {
             if (vMatchedIdxMPs[i] < 0)
                 continue;

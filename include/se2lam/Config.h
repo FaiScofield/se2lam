@@ -134,7 +134,7 @@ public:
     // local graph
     static int MaxLocalFrameNum;  //! TODO
     static int LocalFrameSearchLevel;
-    static float LocalFrameSearchRadius;  //! TODO
+    static float LocalFrameSearchRadius;
 
     // global map loopclose
     static float MinScoreBest;     // 场景相似度得分阈值
@@ -153,8 +153,7 @@ public:
     static std::string WriteTrajFileName;
 
     // visulization
-    static bool
-        NeedVisualization;  //! TODO 是否需要可视化, 不可视化时内存占用小, 可在嵌入式平台上跑
+    static bool NeedVisualization;
     static int MappubScaleRatio;  // 地图可视化比例
 
     //! other

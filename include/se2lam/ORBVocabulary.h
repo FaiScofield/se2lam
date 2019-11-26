@@ -3,13 +3,6 @@
 *
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
-
-/**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
-
 /**
 * This file is part of ORB-SLAM.
 *
@@ -40,9 +33,8 @@
 namespace se2lam
 {
 
-typedef DBoW2::TemplatedVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>
-  ORBVocabulary;
+typedef DBoW2::TemplatedVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB> ORBVocabulary;
 
-} // namespace se2lam
+}  // namespace se2lam
 
-#endif // ORBVOCABULARY_H
+#endif  // ORBVOCABULARY_H

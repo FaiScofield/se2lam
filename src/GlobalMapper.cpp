@@ -125,7 +125,7 @@ void GlobalMapper::run()
         // TODO ...
 
         //! Draw Matches
-        drawMatch(mapMatchGood);
+//        drawMatch(mapMatchGood);
 
         timer.stop();
         double t4 = timer.time;
@@ -290,12 +290,8 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     _mapMatchMP = mapMatch;
     int nGoodMPMatch = mapMatch.size();  // MP匹配数
 
-    //! Show Match Info
-    vector<PtrMapPoint> spMPsCurrent = mpKFCurr->getObservations();
-    int nMPsCurrent = spMPsCurrent.size();           // 当前KF的可观测MP数
-    int nKPsCurrent = mpKFCurr->mvKeyPoints.size();  // 当前KF提取的KP数
-
     //! Create New Feature based Constraint. 匹配数达到阈值要求,构建特征图和约束
+    int nMPsCurrent = mpKFCurr->countObservations();  // 当前KF的有效MP观测数
     double ratioMPMatched = nGoodMPMatch * 1.0 / nMPsCurrent;
     if (nGoodMPMatch >= numMinMatchMP && nGoodKFMatch >= numMinMatchKP &&
         ratioMPMatched >= ratioMinMatchMP) {
@@ -309,13 +305,13 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
         }
 
         if (Config::GlobalPrint) {
-            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证通过! 和KF#%ld添加了特征约束, MPGood/KPGood/MPNow/KPNow=%d/%d/%d/%d\n",
-                    mpKFCurr->id, mpKFCurr->mIdKF, mpKFLoop->mIdKF, nGoodMPMatch, nGoodKFMatch, nMPsCurrent, nKPsCurrent);
+            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证通过! 和KF#%ld添加了特征约束, KP匹配数/MP匹配数/匹配率 = %d/%d/%.2f\n",
+                    mpKFCurr->id, mpKFCurr->mIdKF, mpKFLoop->mIdKF, nGoodKFMatch, nGoodMPMatch, ratioMPMatched);
         }
     } else {
         if (Config::GlobalPrint) {
-            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证失败! MP匹配点数不足, MPGood/KPGood/MPNow/KPNow=%d/%d/%d/%d\n",
-                    mpKFCurr->id, mpKFCurr->mIdKF, nGoodMPMatch, nGoodKFMatch, nMPsCurrent, nKPsCurrent);
+            fprintf(stderr, "[Globa] #%ld(KF#%ld) 回环验证失败! MP匹配点数不足, KP匹配数/MP匹配数/匹配率 = %d/%d/%.2f\n",
+                    mpKFCurr->id, mpKFCurr->mIdKF, nGoodKFMatch, nGoodMPMatch, ratioMPMatched);
         }
     }
 
@@ -523,7 +519,7 @@ void GlobalMapper::globalBA()
 
         int idx = pKF->getFeatureIndex(pMP);
 
-        Point3f& Pt3_MP_KF = pKF->mvpMapPoints[idx];
+        Point3f Pt3_MP_KF = pKF->getMPPoseInCamareFrame(idx);
         Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
         Mat t3_MP_w = Rwc * t3_MP_KF + twc;
         Point3f Pt3_MP_w(t3_MP_w);
@@ -803,7 +799,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         MeasSE3XYZ Meas1;
         Meas1.idKF = 0;
         Meas1.idMP = count;
-        Meas1.z = toVector3d(_pKFFrom->mvpMapPoints[idxMPin1]);
+        Meas1.z = toVector3d(_pKFFrom->getMPPoseInCamareFrame(idxMPin1));
         Meas1.info = _pKFFrom->mvViewMPsInfo[idxMPin1];
 
         int idxMPin2 = iter->second;
@@ -811,7 +807,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         MeasSE3XYZ Meas2;
         Meas2.idKF = 1;
         Meas2.idMP = count;
-        Meas2.z = toVector3d(_pKFTo->mvpMapPoints[idxMPin2]);
+        Meas2.z = toVector3d(_pKFTo->getMPPoseInCamareFrame(idxMPin2));
         Meas2.info = _pKFTo->mvViewMPsInfo[idxMPin2];
 
 
@@ -895,7 +891,7 @@ void GlobalMapper::optKFPair(
 
             int idx = PtrKFi->getFeatureIndex(PtrMPj);
 
-            g2o::Vector3D meas = toVector3d(PtrKFi->mvpMapPoints[idx]);
+            g2o::Vector3D meas = toVector3d(PtrKFi->getMPPoseInCamareFrame(idx));
             g2o::Matrix3D info = PtrKFi->mvViewMPsInfo[idx];
 
             addEdgeSE3XYZ(optimizer, meas, vertexIdKF, vertexIdMP, 0, info, 5.99);
@@ -971,11 +967,11 @@ void GlobalMapper::optKFPairMatch(
         g2o::Vector3D Pt3MP = toVector3d(pMPin1->getPos());
         addVertexXYZ(optimizer, Pt3MP, vertexId, true);
 
-        g2o::Vector3D meas1 = toVector3d(_pKF1->mvpMapPoints[idMPin1]);
+        g2o::Vector3D meas1 = toVector3d(_pKF1->getMPPoseInCamareFrame(idMPin1));
         g2o::Matrix3D info1 = _pKF1->mvViewMPsInfo[idMPin1];
         addEdgeSE3XYZ(optimizer, meas1, 0, vertexId, 0, info1, 5.99);
 
-        g2o::Vector3D meas2 = toVector3d(_pKF2->mvpMapPoints[idMPin2]);
+        g2o::Vector3D meas2 = toVector3d(_pKF2->getMPPoseInCamareFrame(idMPin2));
         g2o::Matrix3D info2 = _pKF2->mvViewMPsInfo[idMPin2];
         addEdgeSE3XYZ(optimizer, meas2, 1, vertexId, 0, info2, 5.99);
 
@@ -1071,7 +1067,7 @@ void GlobalMapper::createVecMeasSE3XYZ(
 
             int idxMPinKF = PtrKFi->getFeatureIndex(PtrMPj);
 
-            Meas_ij.z = toVector3d(PtrKFi->mvpMapPoints[idxMPinKF]);
+            Meas_ij.z = toVector3d(PtrKFi->getMPPoseInCamareFrame(idxMPinKF));
             Meas_ij.info = PtrKFi->mvViewMPsInfo[idxMPinKF];
 
             vMeas.push_back(Meas_ij);
@@ -1356,7 +1352,7 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::selectKFPairFeat(const PtrK
     int threshCovisGraphDist = 5;
 
     set<PtrKeyFrame> sKFSelected;
-    set<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
+    vector<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
     set<PtrKeyFrame> sKFLocal = getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
 
     for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {

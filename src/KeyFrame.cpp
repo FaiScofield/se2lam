@@ -22,7 +22,7 @@ typedef unique_lock<mutex> locker;
 
 unsigned long KeyFrame::mNextIdKF = 0;  //! F,KF和MP的编号都是从1开始
 
-KeyFrame::KeyFrame() : mIdKF(0), mbBowVecExist(false), mpMap(nullptr), mbNull(false)
+KeyFrame::KeyFrame() : mIdKF(0), mpMap(nullptr)
 {
     PtrKeyFrame pKF = static_cast<PtrKeyFrame>(nullptr);
     mOdoMeasureFrom = make_pair(pKF, SE3Constraint());
@@ -162,7 +162,7 @@ vector<shared_ptr<KeyFrame>> KeyFrame::getCovisibleKFsByWeight(int w)
         return vector<PtrKeyFrame>();
     else {
         int n = it - mvOrderedWeights.begin();
-        return vector<PtrKeyFrame>(mCovisibleKFsWeight.begin(), mCovisibleKFsWeight.begin() + n);
+        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
     }
 }
 
@@ -181,6 +181,7 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
     sortCovisibleKFs();
 }
 
+//! TODO  没啥必要
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
     vector<PtrMapPoint> vpMPs;
@@ -239,12 +240,8 @@ void KeyFrame::updateCovisibleGraph()
 {
     WorkTimer timer;
 
-    map<PtrKeyFrame, int> KFcounter;
-    vector<PtrMapPoint> vpMPs;
-    {
-        locker lockMPs(mMutexObs);
-        vpMPs = mvpMapPoints;
-    }
+    map<PtrKeyFrame, int> KFcounter;  // TODO  这个变量待考究
+    vector<PtrMapPoint> vpMPs = getObservations(true, false);  // lock
 
     // 1.通过3D点间接统计可以观测到这些3D点的所有关键帧之间的共视程度
     // 即统计每一个关键帧都有多少关键帧与它存在共视关系，统计结果放在KFcounter
@@ -253,12 +250,11 @@ void KeyFrame::updateCovisibleGraph()
         if (!pMP || pMP->isNull())
             continue;
 
-        // 对于每一个MapPoint点，observations记录了可以观测到该MapPoint的所有关键帧
         vector<PtrKeyFrame> thisObsKFs = pMP->getObservations();
         for (auto mit = thisObsKFs.begin(), mend = thisObsKFs.end(); mit != mend; mit++) {
-            if (mit->mIdKF == mIdKF)  // 除去自身，自己与自己不算共视
+            if ((*mit)->mIdKF == mIdKF)  // 除去自身，自己与自己不算共视
                 continue;
-            KFcounter[mit]++;  // TODO. 待确认插入新的key时value值为1
+            KFcounter[(*mit)]++;  // TODO. 待确认插入新的key时value值为1
         }
     }
 
@@ -268,7 +264,7 @@ void KeyFrame::updateCovisibleGraph()
 
     // 2.次数超过阈值则添加共视关系, 防止次数整体过少, 将把次数最多的KF添加为共视关系
     int nmax = 0;
-    int th = 10;    // 共同观测MP点数阈值
+    int th = 0.3 * vpMPs.size();  // 共同观测MP点数阈值30%
     PtrKeyFrame pKFmax = nullptr;
 
     // vPairs记录与其它关键帧共视帧数大于th的关键帧
@@ -289,28 +285,33 @@ void KeyFrame::updateCovisibleGraph()
     // 如果没有超过阈值的权重，则对权重最大的关键帧建立连接, 这是对之前th这个阈值可能过高的一个补丁
     if (vPairs.empty()) {
         vPairs.emplace_back(nmax, pKFmax);
-        pKFmax->addCovisibleKF(this, nmax);
+        pKFmax->addCovisibleKF(shared_from_this(), nmax);
     }
 
-    // vPairs里存的都是相互共视程度比较高的关键帧和共视权重，由大到小
-    sort(vPairs.begin(), vPairs.end(), std::greater<int>);
+    // vPairs里存的都是相互共视程度符合阈值(5)的关键帧和共视权重，由大到小
+    sort(vPairs.begin(), vPairs.end(), [](const pair<int, PtrKeyFrame>& lhs, const pair<int, PtrKeyFrame>& rhs) {
+        return lhs.first > rhs.first;
+    });
+
+
     size_t n = vPairs.size();
     vector<PtrKeyFrame> vKFs(n);
     vector<int> vWs(n);
+    map<PtrKeyFrame, int> mKFadnW;
     for (size_t i = 0; i < vPairs.size(); i++) {
         vKFs[i] = vPairs[i].second;
         vWs[i] = vPairs[i].first;
+        mKFadnW.emplace(vPairs[i].second, vPairs[i].first);
     }
 
     {
         unique_lock<mutex> lockCon(mMutexCovis);
-        mCovisibleKFsWeight = KFcounter;
+        mCovisibleKFsWeight = mKFadnW;
         mvpCovisibleKFsSorted = vKFs;
         mvOrderedWeights = vWs;
     }
-    printf("[KeyFrame] KF#%ld 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(符合阈值%ld), 共耗时%.2fms\n",
-           mIdKF, vpMPs.size(), KFcounter.size(), vKFs.size(), timer.count());
-
+    printf("[KeyFrame] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(符合共视阈值(10)的KF个数:%ld), 共耗时%.2fms\n",
+           id, mIdKF, vpMPs.size(), mKFadnW.size(), vKFs.size(), timer.count());
 }
 
 size_t KeyFrame::countCovisibleKFs()
@@ -324,7 +325,7 @@ int KeyFrame::getFeatureIndex(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     const int idx = pMP->getKPIndexInKF(shared_from_this());
-    if (idx >= 0 && idx < N)
+    if (idx >= 0 && idx < static_cast<int>(N))
         return mvpMapPoints[idx] == pMP ? idx : -1;
     else
         return -1;
@@ -334,7 +335,7 @@ bool KeyFrame::hasObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     const int idx = pMP->getKPIndexInKF(shared_from_this());
-    if (idx < 0 || idx >= N)
+    if (idx < 0 || idx >= static_cast<int>(N))
         return false;
 
     if (mvpMapPoints[idx] == pMP) {
@@ -359,7 +360,7 @@ void KeyFrame::eraseObservationByPointer(const PtrMapPoint& pMP)
 {
     locker lock(mMutexObs);
     const int idx = pMP->getKPIndexInKF(shared_from_this());
-    if (idx < 0 || idx >= N)
+    if (idx < 0 || idx >= static_cast<int>(N))
         return;
 
     if (mvpMapPoints[idx] == pMP) {

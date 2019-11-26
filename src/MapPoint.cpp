@@ -324,12 +324,14 @@ void MapPoint::updateMainKFandDescriptor()
     int nlevels = mMainKF->mnScaleLevels;  // 金字塔总层数
 
     //! 金字塔为1层时这里mMinDist和mMinDist会相等! 程序错误!
-    if (mLevelScaleFactor - 1.0 < 1e-6)
-        mLevelScaleFactor = Config::ScaleFactor;  // 1.2
-    // mMaxDist = dist * mLevelScaleFactor;
-    // mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
-    mMaxDist = dist * mMainKF->mvScaleFactors[nlevels - 1] / mLevelScaleFactor;
-    mMinDist = dist / mLevelScaleFactor;
+    //! 已修正 20191126
+    if (mLevelScaleFactor - 1.0 < 1e-6) {
+        mMaxDist = dist * Config::ScaleFactor;  // 1.2
+        mMinDist = dist;
+    } else {
+        mMaxDist = dist * mLevelScaleFactor;
+        mMinDist = mMaxDist / mMainKF->mvScaleFactors[nlevels - 1];
+    }
 }
 
 /**
@@ -420,22 +422,22 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     pKF1->setObsAndInfo(shared_from_this(), mObservations[pKF1], xyzinfo1);
     pKF2->setObsAndInfo(shared_from_this(), mObservations[pKF2], xyzinfo2);
 
-    Mat Rc1w = Tc1w.rowRange(0, 3).colRange(0, 3);
-    Mat xyzinfoW = Rc1w.t() * toCvMat(xyzinfo1) * Rc1w;
+//    Mat Rc1w = Tc1w.rowRange(0, 3).colRange(0, 3);
+//    Mat xyzinfoW = Rc1w.t() * toCvMat(xyzinfo1) * Rc1w;
 
     // Update measurements in other KFs. 位姿变后要更新其他KF对其的观测坐标值
-    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
-        PtrKeyFrame pKFi = it->first;
-        if (!pKFi)
-            continue;
-        if (pKFi->mIdKF == pKF2->mIdKF || pKFi->mIdKF == pKF1->mIdKF)
-            continue;
-        Mat Tciw = pKFi->getPose();
-        Point3f Pci = cvu::se3map(Tciw, posW);
-        Mat Rciw = Tciw.rowRange(0, 3).colRange(0, 3);
-        Mat xyzinfoi = Rciw * xyzinfoW * Rciw.t();
-        pKFi->setObsAndInfo(shared_from_this(), mObservations[pKFi], toMatrix3d(xyzinfoi));
-    }
+//    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
+//        PtrKeyFrame pKFi = it->first;
+//        if (!pKFi)
+//            continue;
+//        if (pKFi->mIdKF == pKF2->mIdKF || pKFi->mIdKF == pKF1->mIdKF)
+//            continue;
+//        Mat Tciw = pKFi->getPose();
+//        // Point3f Pci = cvu::se3map(Tciw, posW);
+//        Mat Rciw = Tciw.rowRange(0, 3).colRange(0, 3);
+//        Mat xyzinfoi = Rciw * xyzinfoW * Rciw.t();
+//        pKFi->setObsAndInfo(shared_from_this(), mObservations[pKFi], toMatrix3d(xyzinfoi));
+//    }
     return true;
 }
 

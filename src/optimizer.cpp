@@ -762,7 +762,8 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(Config::LocalVerbose);
+    optimizer.setVerbose(false);
+    optimizer.verifyInformationMatrices(true);
 
     int camParaId = 0;
     addCamPara(optimizer, Config::Kcam, camParaId);
@@ -785,32 +786,33 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     vnIndexEdge.reserve(N);
 
     const float delta = Config::ThHuber;
-    vector<PtrMapPoint> vAllMPs = pFrame->getObservations();
+    vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false, false);
     for (int i = 0; i < N; i++) {
         const PtrMapPoint& pMP = vAllMPs[i];
-        if (pMP != nullptr) {
-            nMPInliers++;
-            pFrame->mvbMPOutlier[i] = false;
+        if (!pMP || pMP->isNull())
+            continue;
 
-            const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
-            Eigen::Vector2d uv = toVector2d(kpUn.pt);
+        nMPInliers++;
+        pFrame->mvbMPOutlier[i] = false;
 
-            se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
+        const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
+        Eigen::Vector2d uv = toVector2d(kpUn.pt);
 
-            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-            e->setMeasurement(uv);
-            const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-            e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+        se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
 
-            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-            e->setRobustKernel(rk);
-            rk->setDelta(delta);
+        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+        e->setMeasurement(uv);
+        const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
-            e->Xw = toVector3d(pMP->getPos());
-            optimizer.addEdge(e);
-            vpEdges.push_back(e);
-            vnIndexEdge.push_back(i);
-        }
+        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+        e->setRobustKernel(rk);
+        rk->setDelta(delta);
+
+        e->Xw = toVector3d(pMP->getPos());
+        optimizer.addEdge(e);
+        vpEdges.push_back(e);
+        vnIndexEdge.push_back(i);
     }
 
     if (nMPInliers < 3) {

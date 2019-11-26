@@ -12,8 +12,8 @@
 #ifndef LINEDETECTION_H
 #define LINEDETECTION_H
 
-#include "dependencies/line_descriptor/include/line_descriptor.hpp"
-#include "dependencies/lsd_161/include/lsd.h"
+#include "Thirdparty/line_descriptor/include/line_descriptor.hpp"
+#include "Thirdparty/lsd_161/lsd.h"
 
 #include <Eigen/Eigen>
 #include <Eigen/StdList>
@@ -68,8 +68,7 @@ public:
     void computeFourMaxima(const std::vector<std::vector<int>>& rotHist, int lenth, int& ind1,
                            int& ind2, int& ind3, int& ind4);
 
-    void lineStatistics(double theta, int label, std::vector<std::vector<int>>& rotHist, int lenth,
-                        float factor);
+    void lineStatistics(double theta, int label, std::vector<std::vector<int>>& rotHist, int lenth, float factor);
 
     void getLineKandB(const cv::Point& starPoint, const cv::Point& endPoint, double& k, double& b);
 

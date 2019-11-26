@@ -65,7 +65,7 @@ float Config::PlaneMotionInfoZ = 1;
 
 int Config::MaxLocalFrameNum = 20;         //! TODO
 int Config::LocalFrameSearchLevel = 3;
-float Config::LocalFrameSearchRadius = 5.f;  //! TODO
+float Config::LocalFrameSearchRadius = 5.f;
 
 float Config::MinScoreBest = 0.005;
 float Config::MinMPMatchRatio = 0.05;

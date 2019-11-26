@@ -200,7 +200,7 @@ void Localizer::readFrameInfo(const Mat& img, float imgTime, const Se2& odo)
     mFrameRef = mFrameCurr;
     mpKFRef = mpKFCurr;
 
-    mFrameCurr = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    mFrameCurr = Frame(img, odo, mpORBextractor);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
     mFrameCurr.setPose(Twb);
 
@@ -214,17 +214,19 @@ void Localizer::matchLocalMap()
     vector<PtrMapPoint> vpMPLocal = getLocalMPs();
     vector<int> vIdxMPMatched;
     ORBmatcher matcher;
-    int numMPMatched = matcher.SearchByProjection(&(*mpKFCurr), vpMPLocal, 15, 2, vIdxMPMatched);
+    int numMPMatched = matcher.SearchByProjection(mpKFCurr, vpMPLocal, vIdxMPMatched, 15, 2);
 
-    //! Renew KF observation
-    for (int idxKPCurr = 0, idend = vIdxMPMatched.size(); idxKPCurr < idend; idxKPCurr++) {
-        int idxMPLocal = vIdxMPMatched[idxKPCurr];
+    if (numMPMatched > 0) {
+        //! Renew KF observation
+        for (int idxKPCurr = 0, idend = vIdxMPMatched.size(); idxKPCurr < idend; idxKPCurr++) {
+            int idxMPLocal = vIdxMPMatched[idxKPCurr];
 
-        if (idxMPLocal == -1)
-            continue;
+            if (idxMPLocal == -1)
+                continue;
 
-        PtrMapPoint pMP = vpMPLocal[idxMPLocal];
-        mpKFCurr->setObservation(pMP, idxKPCurr);
+            PtrMapPoint pMP = vpMPLocal[idxMPLocal];
+            mpKFCurr->setObservation(pMP, idxKPCurr);
+        }
     }
 }
 
@@ -249,9 +251,7 @@ void Localizer::doLocalBA()
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations();
-
-    vector<PtrMapPoint> Observations = mpKFCurr->getObservations();
+    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations(true, false);
 
     // Add Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -321,8 +321,7 @@ cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
 
     // Add MPs in local map as fixed
     const float delta = Config::ThHuber;
-    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations();
-    vector<PtrMapPoint> Observations = mpKFCurr->getObservations();
+    vector<PtrMapPoint> setMPs = mpKFCurr->getObservations(true, false);
 
     // Add MP Vertex and Edges
     for (auto iter = setMPs.begin(); iter != setMPs.end(); iter++) {
@@ -754,7 +753,7 @@ void Localizer::updateLocalMap(int searchLevel)
         std::set<PtrKeyFrame> currentLocalKFs = mspKFLocal;
         for (auto iter = currentLocalKFs.begin(); iter != currentLocalKFs.end(); iter++) {
             PtrKeyFrame pKF = *iter;
-            std::set<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
+            vector<PtrKeyFrame> spKF = pKF->getAllCovisibleKFs();
             mspKFLocal.insert(spKF.begin(), spKF.end());
         }
         searchLevel--;
@@ -764,7 +763,7 @@ void Localizer::updateLocalMap(int searchLevel)
 
     for (auto iter = mspKFLocal.begin(), iend = mspKFLocal.end(); iter != iend; iter++) {
         PtrKeyFrame pKF = *iter;
-        vector<PtrMapPoint> spMP = pKF->getObservations();    // MP要有良好视差
+        vector<PtrMapPoint> spMP = pKF->getObservations(true, true);    // MP要有良好视差
         mspMPLocal.insert(spMP.begin(), spMP.end());
     }
 //    std::cout << "get MPs size: " << mspMPLocal.size() << std::endl;
@@ -783,7 +782,7 @@ void Localizer::matchLoopClose(map<int, int> mapMatchGood)
 
         if (isMPLoop) {
             PtrMapPoint pMP = mpKFLoop->getObservation(idxLoop);
-            mpKFCurr->addObservation(pMP, idxCurr);
+            mpKFCurr->setObservation(pMP, idxCurr);
         }
     }
 }

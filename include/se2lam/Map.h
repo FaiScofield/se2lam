@@ -61,12 +61,12 @@ public:
                                       std::set<PtrMapPoint>& spMPs);
     static float compareViewMPs(const PtrKeyFrame& pKF, const std::vector<PtrKeyFrame>& vpKFs,
                                 std::set<PtrMapPoint>& spMPs, int k = 2);
-    static int getCovisibleWeight(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);
     static bool checkAssociationErr(const PtrKeyFrame& pKF, const PtrMapPoint& pMP);
 
     //! For LocalMapper
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
+    void updateLocalGraph_new();
     void updateCovisibility(const PtrKeyFrame& pNewKF);
     void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
                                     float searchRadius = 5.f);
@@ -100,6 +100,7 @@ public:
     std::vector<int> mIdxFtrBased;
     std::vector<int> mIdxOdoBased;
 
+    bool mbNewKFinserted; // for visualizaiton.
 protected:
     PtrKeyFrame mCurrentKF;
     cv::Mat mCurrentFramePose;  // Tcw

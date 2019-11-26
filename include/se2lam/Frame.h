@@ -37,6 +37,7 @@ struct MPCandidate {
     size_t kpIdx2;
     cv::Mat Tc2w;
 
+    MPCandidate(){}
     MPCandidate(const cv::Point3f& PcKF, unsigned long id, size_t idx, const cv::Mat& Tcw)
         : Pc1(PcKF), id2(id), kpIdx2(idx), Tc2w(Tcw)
     {}
@@ -50,17 +51,15 @@ class Frame
 {
 public:
     Frame();
-    Frame(const cv::Mat& im, const Se2& odo, ORBextractor* extractor, const cv::Mat& K, const cv::Mat& distCoef);
-    Frame(const cv::Mat& im, const double time, const Se2& odo, ORBextractor* extractor,
-          const cv::Mat& K, const cv::Mat& distCoef);
+    Frame(const cv::Mat& im, const Se2& odo, ORBextractor* extractor, double time = 0.);
     Frame(const cv::Mat& im, const Se2& odo, const std::vector<cv::KeyPoint>& vKPs,
-          ORBextractor* extractor);  // klt创建Frame, 10.23日添加
+          ORBextractor* extractor, double time = 0.);  // klt创建Frame, 10.23日添加
 
     Frame(const Frame& f);
     Frame& operator=(const Frame& f);
     ~Frame();
 
-    bool isNull() { return mbNull; }
+    bool isNull() const { return mbNull; }
     virtual void setNull();
 
     //! Pose Operations
@@ -74,9 +73,9 @@ public:
     cv::Mat getPose();
     cv::Point3f getCameraCenter();
 
-    bool inImgBound(const cv::Point2f& pt);
+    bool inImgBound(const cv::Point2f& pt) const;
     void computeBoundUn(const cv::Mat& K, const cv::Mat& D);
-    bool posInGrid(const cv::KeyPoint& kp, int& posX, int& posY);
+    bool posInGrid(const cv::KeyPoint& kp, int& posX, int& posY) const;
     std::vector<size_t> getFeaturesInArea(const float x, const float y, const float r,
                                           const int minLevel = -1, const int maxLevel = -1) const;
 
@@ -90,6 +89,7 @@ public:
     void setObservation(const PtrMapPoint& pMP, size_t idx);
     void updateObservationsAfterOpt();
 
+    void clearObservations();
     bool hasObservationByIndex(size_t idx);
     void eraseObservationByIndex(size_t idx);
     virtual bool hasObservationByPointer(const PtrMapPoint& pMP);

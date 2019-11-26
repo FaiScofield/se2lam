@@ -46,11 +46,6 @@ public:
     void publishCameraCurr(const cv::Mat& Twc);
     void publishOdomInformation();
 
-#ifdef USEKLT
-    void update(TrackKlt* pTrack, char* txt);
-#else
-    void update(Track* pTrack, char* txt);
-#endif
     cv::Mat drawMatchesInOneImg();
 
     bool isFinished();
@@ -67,6 +62,16 @@ public:
 #else
     Track* mpTracker;
 #endif
+
+    // for visulization
+    bool mbUpdated;
+    cv::Mat mCurrentFramePose;
+    cv::Mat mCurrentImage, mReferenceImage;
+    cv::Mat mAffineMatrix, mHomography;
+    std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
+    std::vector<int> mvMatchIdx, mvGoodMatchIdx;
+    std::string mImageText;
+    std::mutex mMutexPub;
 
 private:
     bool checkFinish();
@@ -96,14 +101,6 @@ private:
     float mPointSize;
     float mCameraSize;
     float mScaleRatio;
-
-    // for visulization
-    bool mbUpdated;
-    cv::Mat mCurrentImage, mReferenceImage;
-    cv::Mat mAffineMatrix, mHomography;
-    std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
-    std::vector<int> mvMatchIdx, mvGoodMatchIdx;
-    std::string mImageText;
 
     bool mbFinishRequested;
     bool mbFinished;

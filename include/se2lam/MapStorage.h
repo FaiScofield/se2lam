@@ -31,7 +31,7 @@ public:
 
     struct CovisibleRelationship
     {
-        unsigned long thisKFid, thatKFid;
+        int thisKFid, thatKFid;
         int covisbleCount;
     };
 

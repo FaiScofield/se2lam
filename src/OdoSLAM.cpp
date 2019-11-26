@@ -104,6 +104,7 @@ void OdoSLAM::start()
 
     mpTrack->setLocalMapper(mpLocalMapper);
     mpTrack->setGlobalMapper(mpGlobalMapper);
+    mpTrack->setMapPublisher(mpMapPub);
     mpTrack->setMap(mpMap);
     mpTrack->setSensors(mpSensors);
 

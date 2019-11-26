@@ -58,7 +58,6 @@ public:
     };
 
     void setMap(Map* pMap) { mpMap = pMap; }
-    // bool isNull() { return mbNull; }
     void setNull();
 
     //! 共视关系的维护函数
