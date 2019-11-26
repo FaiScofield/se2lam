@@ -11,3 +11,4 @@ Thirdparty/DBoW2/lib/*
 *.bag
 **/*voc.bin
 _clang-format
+*.rviz

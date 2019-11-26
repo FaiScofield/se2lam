@@ -1,20 +1,23 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+ */
 
 #include "Track.h"
-#include <ros/ros.h>
-#include "Map.h"
 #include "LocalMapper.h"
-#include "cvutil.h"
-#include "converter.h"
-#include "optimizer.h"
+#include "Map.h"
 #include "ORBmatcher.h"
+#include "MapPublish.h"
+#include "converter.h"
+#include "cvutil.h"
+#include "optimizer.h"
+#include <opencv2/calib3d/calib3d.hpp>
+#include <ros/ros.h>
 
 
-namespace se2lam {
+namespace se2lam
+{
 using namespace std;
 using namespace cv;
 using namespace Eigen;
@@ -25,107 +28,99 @@ bool Track::mbUseOdometry = true;
 
 Track::Track()
 {
-    mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1,-1,-1));
-    nMinFrames = 8;
-    nMaxFrames = Config::FPS;
+    mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
+    nMinFrames = cvCeil(0.25 * Config::FPS);  // 上溢
+    nMaxFrames = cvFloor(2 * Config::FPS);    // 下溢
     mnGoodPrl = 0;
-    //mbTriangulated = false;
 
-    mpORBextractor = new ORBextractor(Config::MaxFtrNumber,Config::ScaleFactor,Config::MaxLevel);
+    mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
+    mpORBmatcher = new ORBmatcher(0.9, true);
+
     mMatchIdx.clear();
     mvbGoodPrl.clear();
 
+    mbNeedVisualization = Config::NeedVisualization;
     mbFinished = false;
     mbFinishRequested = false;
 }
 
-Track::~Track(){}
-
-void Track::setMap(Map *pMap){
-    mpMap = pMap;
+Track::~Track()
+{
+    delete mpORBextractor;
+    delete mpORBmatcher;
 }
 
-void Track::setLocalMapper(LocalMapper *pLocalMapper){
-    mpLocalMapper = pLocalMapper;
-}
+void Track::run()
+{
+    checkReady();
 
-void Track::setSensors(Sensors* pSensors) {
-    mpSensors = pSensors;
-}
-
-void Track::run(){
-
-    if(Config::LocalizationOnly)
+    if (Config::LocalizationOnly)
         return;
 
-    ros::Rate rate(Config::FPS*5);
 
-    while(ros::ok()){
+    ros::Rate rate(Config::FPS * 5);
+    while (ros::ok()) {
+        if (checkFinish())
+            break;
+
+        if (!mpSensors->update()) {
+            rate.sleep();
+            continue;
+        }
+
+        WorkTimer timer;
 
         cv::Mat img;
         Se2 odo;
+        mpSensors->readData(odo, img);
+        double t1 = timer.count(), t2 = 0, t3 = 0;
 
-        WorkTimer timer;
         timer.start();
+        {
+            locker lock(mMutexForPub);
+            bool noFrame = !(Frame::nextId);
+            if (noFrame)
+                mCreateFrame(img, odo);
+            else
+                mTrack(img, odo);
 
-        bool sensorUpdated = mpSensors->update();
-        Point3f odo_3f;
-
-        if(sensorUpdated) {
-            mpSensors->readData(odo_3f, img);
-            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
-            {
-                locker lock(mMutexForPub);
-                bool noFrame = !(Frame::nextId);
-                if(noFrame)
-                    mCreateFrame(img, odo);
-                else
-                    mTrack(img, odo);
-            }
             mpMap->setCurrentFramePose(mFrame.Tcw);
-            lastOdom = odo;
         }
+        t2 = timer.count();
+        t3 = t1 + t2;
+        trackTimeTatal += t3;
+        cout << "[Track][Timer] #" << mFrame.id << " 前端的耗时: 读取数据/构建+追踪/总耗时为: " << t1 << "/"
+             << t2 << "/" << t3 << "ms, 平均追踪耗时: " << trackTimeTatal / mFrame.id << "ms" << endl;
 
-
-        timer.stop();
-        //cerr << "Tracking consuming time: " << timer.time << " ms" << endl;
-
-        if(checkFinish())
-            break;
-
-
+        lastOdom = odo;
         rate.sleep();
     }
 
-    cerr << "Exiting tracking .." << endl;
+    cerr << "[Track][Info ] Exiting tracking .." << endl;
 
     setFinish();
 }
 
-void Track::mCreateFrame(const Mat &img, const Se2& odo){
 
-
+void Track::mCreateFrame(const Mat& img, const Se2& odo)
+{
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    mFrame.Twb = Se2(0,0,0);
+    mFrame.Twb = Se2(0, 0, 0);
     mFrame.Tcw = Config::Tcb.clone();
 
-    if(mFrame.keyPoints.size() > 100){
+    if (mFrame.keyPoints.size() > 100) {
         printf("-- INFO TR: Create first frame with %d features.\n", mFrame.N);
         mpKF = make_shared<KeyFrame>(mFrame);
         mpMap->insertKF(mpKF);
         resetLocalTrack();
-    }else
+    } else
         Frame::nextId = 0;
 }
 
 
-
-void Track::mTrack(const Mat &img, const Se2& odo){
-
-    WorkTimer timer;
-    timer.start();
-
+void Track::mTrack(const Mat& img, const Se2& odo)
+{
     mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
     ORBmatcher matcher(0.9);
@@ -139,12 +134,12 @@ void Track::mTrack(const Mat &img, const Se2& odo){
     int nTrackedOld = doTriangulate();
 
     // Need new KeyFrame decision
-    if( needNewKF(nTrackedOld, nMatched) ) {
+    if (needNewKF(nTrackedOld, nMatched)) {
 
         // Insert KeyFrame
         PtrKeyFrame pKF = make_shared<KeyFrame>(mFrame);
 
-        assert( mpMap->getCurrentKF()->mIdKF == mpKF->mIdKF);
+        assert(mpMap->getCurrentKF()->mIdKF == mpKF->mIdKF);
         mpKF->preOdomFromSelf = make_pair(pKF, preSE2);
         pKF->preOdomToSelf = make_pair(mpKF, preSE2);
         mpLocalMapper->addNewKF(pKF, mLocalMPs, mMatchIdx, mvbGoodPrl);
@@ -153,13 +148,12 @@ void Track::mTrack(const Mat &img, const Se2& odo){
 
         mpKF = pKF;
 
-        printf("-- INFO TR: Add new KF at frame %d\n", mFrame.id);
+        cout << "[Track][Timer] #" << mFrame.id << " 成为了新的KF." << endl;
     }
-
-    timer.stop();
 }
 
-void Track::updateFramePose(){
+void Track::updateFramePose()
+{
     mFrame.Trb = mFrame.odom - mpKF->odom;
     Se2 dOdo = mpKF->odom - mFrame.odom;
     mFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
@@ -176,39 +170,37 @@ void Track::updateFramePose(){
 
     Matrix3d Ak = Matrix3d::Identity();
     Matrix3d Bk = Matrix3d::Identity();
-    Ak.block<2,1>(0,2) = Phi_ik * Vector2d(-odork[1], odork[0]);
-    Bk.block<2,2>(0,0) = Phi_ik;
+    Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]);
+    Bk.block<2, 2>(0, 0) = Phi_ik;
     Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
     Matrix3d Sigma_vk = Matrix3d::Identity();
-    Sigma_vk(0,0) = (Config::OdoNoiseX * Config::OdoNoiseX);
-    Sigma_vk(1,1) = (Config::OdoNoiseY * Config::OdoNoiseY);
-    Sigma_vk(2,2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
+    Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
+    Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
+    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 }
 
 
-void Track::resetLocalTrack(){
-    mFrame.Tcr = cv::Mat::eye(4,4,CV_32FC1);
-    mFrame.Trb = Se2(0,0,0);
+void Track::resetLocalTrack()
+{
+    mFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
+    mFrame.Trb = Se2(0, 0, 0);
     KeyPoint::convert(mFrame.keyPoints, mPrevMatched);
     mRefFrame = mFrame;
     mLocalMPs = mpKF->mViewMPs;
     mnGoodPrl = 0;
     mMatchIdx.clear();
 
-    for(int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++)
         preSE2.meas[i] = 0;
-    for(int i = 0; i < 9; i++)
+    for (int i = 0; i < 9; i++)
         preSE2.cov[i] = 0;
 }
 
 
-
-int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
-                      Mat& img1, Mat& img2,
-                      vector<int>& vMatches12) {
-
+int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2, Mat& img1, Mat& img2, vector<int>& vMatches12)
+{
     locker lock(mMutexForPub);
     mRefFrame.copyImgTo(img1);
     mFrame.copyImgTo(img2);
@@ -221,8 +213,8 @@ int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2,
 }
 
 
-void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat& cTc, g2o::Matrix6d &Info_se3){
-
+void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_se3)
+{
     const Mat bTc = Config::Tbc;
     const Mat cTb = Config::Tcb;
 
@@ -236,34 +228,21 @@ void Track::calcOdoConstraintCam(const Se2 &dOdo, Mat& cTc, g2o::Matrix6d &Info_
 
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
     //    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4, 1.f/(dtheta*dtheta) };
-    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1e-4, 1e-4, 1e-4, 1.f/(dtheta*dtheta) };
-    for(int i = 0; i < 6; i++)
-        Info_se3_bTb(i,i) = data[i];
+    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
+    for (int i = 0; i < 6; i++)
+        Info_se3_bTb(i, i) = data[i];
     Info_se3 = Info_se3_bTb;
-
-
-//    g2o::Matrix6d J_bTb_cTc = toSE3Quat(bTc).adj();
-//    J_bTb_cTc.block(0,3,3,3) = J_bTb_cTc.block(3,0,3,3);
-//    J_bTb_cTc.block(3,0,3,3) = g2o::Matrix3D::Zero();
-
-//    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
-
-//    for(int i = 0; i < 6; i++)
-//        for(int j = 0; j < i; j++)
-//            Info_se3(i,j) = Info_se3(j,i);
-
-    //assert(verifyInfo(Info_se3));
-
 }
 
-void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eigen::Matrix3d &info1, Eigen::Matrix3d &info2){
-
-    Point3f O1 = Point3f(cvu::inv(Tcw1).rowRange(0,3).col(3));
-    Point3f O2 = Point3f(cvu::inv(Tcw2).rowRange(0,3).col(3));
+void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat& Tcw1, const Mat& Tcw2, Eigen::Matrix3d& info1,
+                             Eigen::Matrix3d& info2)
+{
+    Point3f O1 = Point3f(cvu::inv(Tcw1).rowRange(0, 3).col(3));
+    Point3f O2 = Point3f(cvu::inv(Tcw2).rowRange(0, 3).col(3));
     Point3f xyz = cvu::se3map(cvu::inv(Tcw1), xyz1);
     Point3f vO1 = xyz - O1;
     Point3f vO2 = xyz - O2;
-    float sinParallax = cv::norm(vO1.cross(vO2)) / ( cv::norm(vO1) * cv::norm(vO2) );
+    float sinParallax = cv::norm(vO1.cross(vO2)) / (cv::norm(vO1) * cv::norm(vO2));
 
     Point3f xyz2 = cvu::se3map(Tcw2, xyz);
     float length1 = cv::norm(xyz1);
@@ -273,47 +252,43 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat &Tcw1, const Mat &Tcw2, Eig
     float dz1 = dxy2 / sinParallax;
     float dz2 = dxy1 / sinParallax;
 
-    Mat info_xyz1 = (Mat_<float>(3,3) <<
-                     1.f/(dxy1*dxy1), 0,               0,
-                     0,               1.f/(dxy1*dxy1), 0,
-                     0,               0,               1.f/(dz1*dz1));
+    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dxy1 * dxy1), 0, 0,
+                     0, 1.f / (dz1 * dz1));
 
-    Mat info_xyz2 = (Mat_<float>(3,3) <<
-                     1.f/(dxy2*dxy2), 0,               0,
-                     0,               1.f/(dxy2*dxy2), 0,
-                     0,               0,               1.f/(dz2*dz2));
+    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dxy2 * dxy2), 0, 0,
+                     0, 1.f / (dz2 * dz2));
 
     Point3f z1 = Point3f(0, 0, length1);
     Point3f z2 = Point3f(0, 0, length2);
     Point3f k1 = xyz1.cross(z1);
     float normk1 = cv::norm(k1);
-    float sin1 = normk1/( cv::norm(z1) * cv::norm(xyz1) );
+    float sin1 = normk1 / (cv::norm(z1) * cv::norm(xyz1));
     k1 = k1 * (std::asin(sin1) / normk1);
     Point3f k2 = xyz2.cross(z2);
     float normk2 = cv::norm(k2);
-    float sin2 = normk2/( cv::norm(z2) * cv::norm(xyz2) );
+    float sin2 = normk2 / (cv::norm(z2) * cv::norm(xyz2));
     k2 = k2 * (std::asin(sin2) / normk2);
 
     Mat R1, R2;
-    Mat k1mat = (Mat_<float>(3,1) << k1.x, k1.y, k1.z);
-    Mat k2mat = (Mat_<float>(3,1) << k2.x, k2.y, k2.z);
+    Mat k1mat = (Mat_<float>(3, 1) << k1.x, k1.y, k1.z);
+    Mat k2mat = (Mat_<float>(3, 1) << k2.x, k2.y, k2.z);
     cv::Rodrigues(k1mat, R1);
     cv::Rodrigues(k2mat, R2);
 
-    info1 = toMatrix3d( R1.t() * info_xyz1 * R1 );
-    info2 = toMatrix3d( R2.t() * info_xyz2 * R2 );
-
+    info1 = toMatrix3d(R1.t() * info_xyz1 * R1);
+    info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
 }
 
-int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &kp2, vector<int> &matches){
+int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& kp2, vector<int>& matches)
+{
     vector<Point2f> pt1, pt2;
     vector<int> idx;
     pt1.reserve(kp1.size());
     pt2.reserve(kp2.size());
     idx.reserve(kp1.size());
 
-    for(int i = 0, iend = kp1.size(); i < iend; i++){
-        if(matches[i] < 0)
+    for (int i = 0, iend = kp1.size(); i < iend; i++) {
+        if (matches[i] < 0)
             continue;
         idx.push_back(i);
         pt1.push_back(kp1[i].pt);
@@ -322,76 +297,76 @@ int Track::removeOutliers(const vector<KeyPoint> &kp1, const vector<KeyPoint> &k
 
     vector<unsigned char> mask;
 
-    if(pt1.size() != 0)
+    if (pt1.size() != 0)
         findFundamentalMat(pt1, pt2, mask);
 
     int nInlier = 0;
-    for(int i = 0, iend = mask.size(); i < iend; i++){
-        if(!mask[i])
+    for (int i = 0, iend = mask.size(); i < iend; i++) {
+        if (!mask[i])
             matches[idx[i]] = -1;
         else
             nInlier++;
     }
 
     // If too few match inlier, discard all matches. The enviroment might not be suitable for image tracking.
-    if(nInlier < 10) {
+    if (nInlier < 10) {
         nInlier = 0;
         std::fill(mMatchIdx.begin(), mMatchIdx.end(), -1);
     }
 
     return nInlier;
-
 }
 
-bool Track::needNewKF(int nTrackedOldMP, int nMatched){
+bool Track::needNewKF(int nTrackedOldMP, int nMatched)
+{
     int nOldKP = mpKF->getSizeObsMP();
     bool c0 = mFrame.id - mpKF->id > nMinFrames;
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;
     bool c3 = mFrame.id - mpKF->id > nMaxFrames;
     bool c4 = nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;
-    bool bNeedNewKF = c0 && ( (c1 && c2) || c3 || c4 );
+    bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
     bool bNeedKFByOdo = true;
-    if(mbUseOdometry){
+    if (mbUseOdometry) {
         Se2 dOdo = mFrame.odom - mpKF->odom;
-        bool c5 = dOdo.theta >= 0.0349f; // Larger than 2 degree
-        //cv::Mat cTc = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
+        bool c5 = dOdo.theta >= 0.0349f;  // Larger than 2 degree
+        // cv::Mat cTc = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
-        cv::Mat xy = cTc.rowRange(0,2).col(3);
-        bool c6 = cv::norm(xy) >= ( 0.0523f * Config::UpperDepth * 0.1f ); // 3 degree = 0.0523 rad
+        cv::Mat xy = cTc.rowRange(0, 2).col(3);
+        bool c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // 3 degree = 0.0523 rad
 
         bNeedKFByOdo = c5 || c6;
     }
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;
 
-    if( mpLocalMapper->acceptNewKF() ) {
+    if (mpLocalMapper->acceptNewKF()) {
         return bNeedNewKF;
-    }
-    else if ( c0 && (c4 || c3) && bNeedKFByOdo) {
+    } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
         mpLocalMapper->setAbortBA();
     }
 
     return false;
 }
 
-int Track::doTriangulate(){
-    if(mFrame.id - mpKF->id < nMinFrames){
+int Track::doTriangulate()
+{
+    if (mFrame.id - mpKF->id < nMinFrames) {
         return 0;
     }
 
     Mat TfromRefKF = cvu::inv(mFrame.Tcr);
-    Point3f Ocam = Point3f(TfromRefKF.rowRange(0,3).col(3));
+    Point3f Ocam = Point3f(TfromRefKF.rowRange(0, 3).col(3));
     int nTrackedOld = 0;
     mvbGoodPrl = vector<bool>(mRefFrame.N, false);
     mnGoodPrl = 0;
 
-    for(int i = 0; i < mRefFrame.N; i++){
+    for (int i = 0; i < mRefFrame.N; i++) {
 
-        if(mMatchIdx[i] < 0)
+        if (mMatchIdx[i] < 0)
             continue;
 
-        if(mpKF->hasObservation(i)){
+        if (mpKF->hasObservation(i)) {
             mLocalMPs[i] = mpKF->mViewMPs[i];
             nTrackedOld++;
             continue;
@@ -400,17 +375,16 @@ int Track::doTriangulate(){
         Point2f pt_KF = mpKF->keyPointsUn[i].pt;
         Point2f pt = mFrame.keyPointsUn[mMatchIdx[i]].pt;
         cv::Mat P_KF = Config::PrjMtrxEye;
-        cv::Mat P = Config::Kcam * mFrame.Tcr.rowRange(0,3);
+        cv::Mat P = Config::Kcam * mFrame.Tcr.rowRange(0, 3);
         Point3f pos = cvu::triangulate(pt_KF, pt, P_KF, P);
 
-        if( Config::acceptDepth(pos.z) ) {
+        if (Config::acceptDepth(pos.z)) {
             mLocalMPs[i] = pos;
-            if( cvu::checkParallax(Point3f(0,0,0), Ocam, pos, 2) ) {
+            if (cvu::checkParallax(Point3f(0, 0, 0), Ocam, pos, 2)) {
                 mnGoodPrl++;
                 mvbGoodPrl[i] = true;
             }
-        }
-        else {
+        } else {
             mMatchIdx[i] = -1;
         }
     }
@@ -418,24 +392,37 @@ int Track::doTriangulate(){
     return nTrackedOld;
 }
 
-void Track::requestFinish() {
+void Track::requestFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
-bool Track::checkFinish() {
+bool Track::checkFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinishRequested;
 }
 
-bool Track::isFinished() {
+bool Track::isFinished()
+{
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinished;
 }
 
-void Track::setFinish() {
+void Track::setFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     mbFinished = true;
 }
 
-}// namespace se2lam
+void Track::checkReady()
+{
+    assert(mpMap != nullptr);
+    assert(mpLocalMapper != nullptr);
+    assert(mpGlobalMapper != nullptr);
+    assert(mpSensors != nullptr);
+    assert(mpMapPublisher != nullptr);
+}
+
+}  // namespace se2lam

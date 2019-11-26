@@ -85,6 +85,7 @@ cv::Mat Config::PrjMtrxEye;
 float Config::ThDepthFilter;  //! TODO
 
 //! for debug
+bool Config::ShowGroundTruth = false;
 bool Config::LocalPrint = false;
 bool Config::GlobalPrint = false;
 bool Config::SaveMatchImage = false;
@@ -97,7 +98,7 @@ void Config::readConfig(const std::string& path)
     DataPath = path;
 
     //! read camera config
-    std::string camParaPath = path + "../se2_config/CamConfig.yml";
+    std::string camParaPath = path + "../config/CamConfig.yml";
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
 
@@ -136,7 +137,7 @@ void Config::readConfig(const std::string& path)
     camPara.release();
 
     //! read setting
-    std::string settingsPath = path + "../se2_config/Settings.yml";
+    std::string settingsPath = path + "../config/Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 
@@ -199,6 +200,7 @@ void Config::readConfig(const std::string& path)
     settings["depth_filter_thresh"] >> ThDepthFilter;
 
     //! NOTE for debug
+    settings["show_ground_truth"] >> ShowGroundTruth;
     settings["local_print"] >> LocalPrint;
     settings["global_print"] >> GlobalPrint;
     settings["save_match_image"] >> SaveMatchImage;
@@ -254,6 +256,7 @@ void Config::checkParamValidity()
               << " - Local print(debug): " << LocalPrint << std::endl
               << " - Global print(debug): " << GlobalPrint << std::endl
               << " - Save match images(debug): " << SaveMatchImage << std::endl
+              << " - Show ground truth(debug): " << ShowGroundTruth << std::endl
               << std::endl;
 
     assert(Kcam.data);

@@ -25,6 +25,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations"
 ################################################################################
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules/)
 
+include_directories(
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/Thirdparty
+)
+
 ## ROS packages setting
 find_package(catkin REQUIRED COMPONENTS
     geometry_msgs
@@ -49,6 +54,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 
 ## Eigen
 find_package(Eigen REQUIRED)
+message("===> Eigen Include DIR: ${EIGEN_INCLUDE_DIRS}")
 
 ## Boost
 find_package(Boost REQUIRED COMPONENTS filesystem)
@@ -132,50 +138,11 @@ add_library(se2lam
 )
 
 target_link_libraries(se2lam
-    ${LINK_LIBS}
-    ${G2O_LIBS}
+    ${LINK_LIBS}    
     ${CSPARSE_LIBRARY}
     ${CHOLMOD_LIBRARIES}
+    ${G2O_LIBS}
     DBoW2se2lam
 )
 
-## Build an exe
-add_executable(test_vn test/test_vn.cpp)
-target_link_libraries(test_vn
-    se2lam
-    ${LINK_LIBS}
-    ${G2O_LIBS}
-)
-
-add_executable(datapub test/datapub.cpp)
-target_link_libraries(datapub
-    se2lam
-    ${LINK_LIBS}
-)
-
-add_executable(imgview test/imgview.cpp)
-target_link_libraries(imgview
-    se2lam
-    ${LINK_LIBS}
-)
-
-
-# Build a subscriber test for vn dataset
-add_executable(test_ros test/test_ros.cpp)
-target_link_libraries(test_ros
-    se2lam
-    ${LINK_LIBS}
-)
-
-add_executable(run_pipeline test/run_pipeline.cpp)
-target_link_libraries(run_pipeline
-    se2lam
-    ${LINK_LIBS}
-    ${G2O_LIBS}
-)
-
-add_executable(rkOdomToSE2 test/rkOdomToSE2.cpp)
-target_link_libraries(rkOdomToSE2
-    se2lam
-    ${LINK_LIBS}
-)
+add_subdirectory(test)

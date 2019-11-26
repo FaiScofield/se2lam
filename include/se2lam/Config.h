@@ -159,6 +159,7 @@ public:
     static float ThDepthFilter;  //! TODO 深度滤波阈值
 
     //! debug
+    static bool ShowGroundTruth;
     static bool LocalPrint;
     static bool GlobalPrint;
     static bool SaveMatchImage;

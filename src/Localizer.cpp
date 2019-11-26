@@ -73,9 +73,7 @@ void Localizer::run() {
         Se2 odo;
         bool sensorUpdated = mpSensors->update();
         if (sensorUpdated) {
-            Point3f odo_3f;
-            mpSensors->readData(odo_3f, img);
-            odo = Se2(odo_3f.x, odo_3f.y, odo_3f.z);
+            mpSensors->readData(odo, img);
 
             ReadFrameInfo(img, odo);
 

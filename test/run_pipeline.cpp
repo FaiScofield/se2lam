@@ -71,13 +71,13 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "run_pipeline");
     ros::start();
 
-    if (argc > 2) {
+    if (argc < 2) {
         cerr << "Usage: rosrun se2lam run_pipeline <dataPath>" << endl;
         ros::shutdown();
         exit(-1);
     }
 
-    const string vocFile = string(argv[1]) + "../se2_config/ORBvoc.bin";
+    const string vocFile = string(argv[1]) + "../config/ORBvoc.bin";
 
     OdoSLAM system;
     system.setVocFileBin(vocFile.c_str());
