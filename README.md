@@ -6,7 +6,7 @@ On-SE(2) Localization and Mapping for Ground Vehicles by Fusing Odometry and Vis
 ### Cross Compilaion
 Set **"CROSS_COMPILE"** to **"TRUE"** in **CMakeLists.txt** flie when using cross compilation.
 
-Dependencies are successfully cross-compiled and stored in **"dependencies"** directory.
+Dependencies are successfully cross-compiled and stored in **"Thirdparty"** directory.
 
 ---
 ### Related Publication
@@ -53,16 +53,16 @@ Build this project as a ROS package
    ```
 
 4. Run se2lam:
-   
+
    ```
    rosrun se2lam test_vn PATH_TO_DatasetRoom PATH_TO_ORBvoc.bin
    ```
-   
+
 ### Related Project
 
-[izhengfan/se2clam](https://github.com/izhengfan/se2clam)  
+[izhengfan/se2clam](https://github.com/izhengfan/se2clam)
 [izhengfan/ORB_SLAM2](https://github.com/izhengfan/ORB_SLAM2)
 
-### License 
+### License
 
 [MIT](LICENSE)

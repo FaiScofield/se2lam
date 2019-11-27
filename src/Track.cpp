@@ -489,7 +489,7 @@ void Track::doTriangulate()
         PtrMapPoint pObservedMP = nullptr;                               // 对于的MP观测
         const bool bObserved = mpReferenceKF->hasObservationByIndex(i);  // 是否有对应MP观测
         if (bObserved) {
-            assert(mpReferenceKF->mvbViewMPsInfoExist[i] == true);
+            assert(mpReferenceKF->mvbViewMPsInfoExist[i] == true); //! FIXME 有出现失败的情况
             pObservedMP = mpReferenceKF->getObservation(i);
             if (pObservedMP->isGoodPrl()) {  // 情况1.1
                 mCurrentFrame.setObservation(pObservedMP, mvMatchIdx[i]);

@@ -300,8 +300,6 @@ void MapPublish::publishKeyFrames()
         vKFsAct = mpLocalizer->getLocalKFs();
     else
         vKFsAct = mpMap->getLocalKFs();
-    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " 从Map得到的KF组成: Local/Global = "
-         << vKFsAct.size() << "/" << vKFsAll.size() << endl;
 
     //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
     for (int i = 0, iend = vKFsAll.size(); i != iend; ++i) {
