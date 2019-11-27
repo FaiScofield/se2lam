@@ -408,6 +408,9 @@ void Map::updateLocalGraph_new()
     //! 1.获得LocalKFs
     vector<PtrKeyFrame> vpKFs = mCurrentKF->getBestCovisibleKFs(Config::MaxLocalFrameNum);
     setLocalKFs.insert(vpKFs.begin(), vpKFs.end());
+    int toAdd = Config::MaxLocalFrameNum - setLocalKFs.size();
+    if (toAdd > 0)   // LocalKF不够10个则补全10
+        addLocalGraphThroughKdtree(setLocalKFs, toAdd, Config::LocalFrameSearchRadius);  // lock
     double t1 = timer.count();
 
     //! 2. 获得LocalMPs, 要有良好视差

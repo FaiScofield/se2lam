@@ -40,7 +40,7 @@ Track::Track()
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(3 * Config::FPS);            // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
-    mMaxAngle = static_cast<float>(g2o::deg2rad(45.));
+    mMaxAngle = static_cast<float>(g2o::deg2rad(50.));
     mMaxDistance = 0.2f * Config::UpperDepth;
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
@@ -108,27 +108,27 @@ void Track::run()
                 processFirstFrame();
                 rate.sleep();
                 continue;
-            } else /*if (mState == cvu::OK)*/ {
+            } else if (mState == cvu::OK) {
                 bOK = trackReferenceKF();
 //                if (!bOK)
 //                    bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
-            } /* else if (mState == cvu::LOST) {
+            } else if (mState == cvu::LOST) {
                  bOK = relocalization();  // 没追上的直接检测回环重定位
-             }*/
+             }
 
-//            if (bOK) {
-//                // TODO 更新一下MPCandidates里面Tc2w
-//                mnLostFrames = 0;
-//                mState = cvu::OK;
-//            } else {
-//                mnLostFrames++;
-//                mState = cvu::LOST;
-//                if (mnLostFrames >= 50) {
-//                    startNewTrack();
-//                    rate.sleep();
-//                    continue;
-//                }
-//            }
+            if (bOK) {
+                // TODO 更新一下MPCandidates里面Tc2w
+                mnLostFrames = 0;
+                mState = cvu::OK;
+            } else {
+                mnLostFrames++;
+                mState = cvu::LOST;
+                if (mnLostFrames >= 50) {
+                    startNewTrack();
+                    rate.sleep();
+                    continue;
+                }
+            }
             //mpMap->setCurrentFramePose(mCurrentFrame.getPose());
 
             // Visualization
@@ -567,7 +567,7 @@ void Track::doTriangulate()
     }
     printf("[Track][Info ] #%ld-#%ld 三角化结果: (a)关联MP总数/视差好的/更新到好的: %d/%d/%d, "
            "(b)候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
-           "(c)三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 共生成新的MP个数: %d\n",
+           "(c)三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
            mCurrentFrame.id, mpReferenceKF->id, mnTrackedOld, n11, n121, n2, n21, n22, n32,
            mnCandidateMPs, n31, n32, n33, mnNewAddedMPs);
 
@@ -635,13 +635,9 @@ void Track::resetLocalTrack()
 
 /**
  * @brief Track::needNewKF
- * c2 - KP匹配内点数(mnInliers): 多(间隔适中, false), 少(间隔远, true)
+ * c2 - KP匹配内点数(mnInliers): 多(间隔近, false), 少(间隔远, true)
  * c3
- * 2. 候MP选多:
- *  - 2.1 新增MP多
- * 其他:
- *  - 候选MP数(mnCandidateMPs): 多(间隔近或远), 少(间隔适中或远,主要是转正扣除), 不适合做判定标准.
- *  - 新增MP数(mnNewAddedMPs): 少(间隔远或近), 不适合做判定标准. (这两个参数可能要结合在一起判断)
+ * 其他参数基本都依赖于KP匹配内点数(mnInliers), 且在间隔较近或较远时表现相似, 不适合做判定标准
  */
 bool Track::needNewKF()
 {
@@ -657,11 +653,11 @@ bool Track::needNewKF()
     int deltaFrames = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id);
 
     //! TODO  目前先按固定间隔增加KF, 以统计跟跟踪情况, 方便设置阈值!(先不开启重定位) 待改证.
-    const int fixDelta = 10;
-    if (deltaFrames < fixDelta)
-        return false;
-    else
-        return true;
+//    const int fixDelta = 10;
+//    if (deltaFrames < fixDelta)
+//        return false;
+//    else
+//        return true;
 
     // 必要条件
     bool c0 = deltaFrames > nMinFrames;  // 下限
@@ -669,7 +665,7 @@ bool Track::needNewKF()
     // 充分条件
     bool c1 = deltaFrames > nMaxFrames;  // 上限
     bool c2 = mnInliers < 15;            // 和参考帧匹配的内点数太少.
-    bool c3 = mnCandidateMPs > 200;  // 候选多且新增少(远)已经新增的MP数够多, 说明在平移
+    bool c3 = mnCandidateMPs > 100;  // 候选多且新增少(远)已经新增的MP数够多, 说明在平移
     bool c4 = (mCurrRatioGoodDepth < mLastRatioGoodDepth) && (mCurrRatioGoodParl < mLastRatioGoodParl);
     bool bNeedKFByVo = c0 && (c1 || c2 || c3 || c4);
 
@@ -677,7 +673,7 @@ bool Track::needNewKF()
     bool c5 = false, c6 = false;
     if (mbUseOdometry) {
         Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过40°
+        c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过50°
         cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大

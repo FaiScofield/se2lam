@@ -310,8 +310,8 @@ void KeyFrame::updateCovisibleGraph()
         mvpCovisibleKFsSorted = vKFs;
         mvOrderedWeights = vWs;
     }
-    printf("[KeyFrame] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(符合共视阈值(10)的KF个数:%ld), 共耗时%.2fms\n",
-           id, mIdKF, vpMPs.size(), mKFadnW.size(), vKFs.size(), timer.count());
+    printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超30%), 共耗时%.2fms\n",
+           id, mIdKF, vpMPs.size(), mKFadnW.size(), timer.count());
 }
 
 size_t KeyFrame::countCovisibleKFs()
