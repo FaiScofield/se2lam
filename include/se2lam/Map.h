@@ -100,7 +100,7 @@ public:
     std::vector<int> mIdxFtrBased;
     std::vector<int> mIdxOdoBased;
 
-    bool mbNewKFinserted; // for visualizaiton.
+    bool mbNewKFInserted; // for visualizaiton.
 protected:
     PtrKeyFrame mCurrentKF;
     cv::Mat mCurrentFramePose;  // Tcw

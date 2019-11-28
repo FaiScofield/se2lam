@@ -96,7 +96,8 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
 
     float oldObsSize = static_cast<float>(mObservations.size());
     // 插入时insert()的效率高, 更新时operator[]的效率高, emplace()不需要额外构造
-    mObservations.emplace(pKF, idx);
+    // mObservations.emplace(pKF, idx);
+    mObservations[pKF] = idx;
 
     updateMainKFandDescriptor();
     updateParallax(pKF);

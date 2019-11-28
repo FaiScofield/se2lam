@@ -13,6 +13,6 @@ dependencies/
 *lib/
 *.bag
 *.bin
-*.rviz
+rviz.rviz
 *.so
 *.a

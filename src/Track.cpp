@@ -40,7 +40,7 @@ Track::Track()
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(3 * Config::FPS);            // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
-    mMaxAngle = static_cast<float>(g2o::deg2rad(50.));
+    mMaxAngle = static_cast<float>(g2o::deg2rad(88.));
     mMaxDistance = 0.2f * Config::UpperDepth;
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
@@ -132,13 +132,8 @@ void Track::run()
             //mpMap->setCurrentFramePose(mCurrentFrame.getPose());
 
             // Visualization
-            if (mbNeedVisualization) {
-                char strMatches[64];
-                std::snprintf(strMatches, 64, "F: %ld, KF: %ld-%ld, M: %d/%d", mCurrentFrame.id,
-                              mpReferenceKF->mIdKF, mCurrentFrame.id - mpReferenceKF->id,
-                              mnGoodInliers, mnInliers);
-                copyForPub(strMatches);
-            }
+            if (mbNeedVisualization)
+                copyForPub();
 
             // Reset
             lastRefKFid = mpReferenceKF->id;  // cur更新成ref后ref的id就和cur相等了, 这里仅用于输出log
@@ -246,10 +241,11 @@ bool Track::trackReferenceKF()
     updateFramePoseFromRef();
 
     //! 2.基于仿射变换先验估计投影Cell的位置
+    //! TODO  仿射变换要改成欧氏变换!! 只有旋转和平移, 没有缩放!
     int nMatches =
         mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvMatchIdx, 20);
     if (nMatches < 15) {
-        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[总]点数过少(%d), 即将转为重定位!\n",
+        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[总]点数少于15(%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, nMatches);
         return false;
     }
@@ -257,7 +253,7 @@ bool Track::trackReferenceKF()
     //! 3.利用仿射矩阵A计算KP匹配的内点，内点数大于10才能继续
     removeOutliers();  // 更新A, mnInliers
     if (mnInliers < 10) {
-        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[内]点数过少(%d), 即将转为重定位!\n",
+        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[内]点数少于10(%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, mnInliers);
         return false;
     }
@@ -431,10 +427,10 @@ void Track::doTriangulate()
     // 以下成员变量在这个函数中会被修改
     mvGoodMatchIdx = mvMatchIdx;
     mnGoodInliers = mnInliers;
-    mnCandidateMPs = mMPCandidates.size();
     mnTrackedOld = 0;
     mnNewAddedMPs = 0;
     mnBadMatches = 0;
+    mnCandidateMPs = mMPCandidates.size();
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
     int n2 = mnCandidateMPs;
     int nObsCur = mCurrentFrame.countObservations();
@@ -580,8 +576,8 @@ void Track::doTriangulate()
     assert(n33 == mnBadMatches);
     assert(mnGoodInliers + mnBadMatches == mnInliers);
     assert((n2 - n21 + n32 == mnCandidateMPs) && (mnCandidateMPs == mMPCandidates.size()));
-    assert(nObsCur + mnTrackedOld + mnNewAddedMPs == mCurrentFrame.countObservations());  // FIXME
-    assert(nObsRef + mnNewAddedMPs == mpReferenceKF->countObservations());
+    assert(nObsCur + mnTrackedOld + mnNewAddedMPs == mCurrentFrame.countObservations());  // FIXME maybe
+    assert(nObsRef + mnNewAddedMPs == mpReferenceKF->countObservations());  // FIXME  maybe
 }
 
 void Track::resetLocalTrack()
@@ -610,6 +606,10 @@ void Track::resetLocalTrack()
             mLastRatioGoodParl = mCurrRatioGoodParl;
         }
         mLastFrame = mCurrentFrame;
+        mnGoodInliers = 0;
+        mnTrackedOld = 0;
+        mnNewAddedMPs = 0;
+        mnBadMatches = 0;
         return;
     }
 
@@ -629,8 +629,12 @@ void Track::resetLocalTrack()
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
     mLastRatioGoodDepth = 0.;
     mLastRatioGoodParl = 0.;
-    mLastFrame = mCurrentFrame;
     mMPCandidates.clear();
+    mLastFrame = mCurrentFrame;
+    mnGoodInliers = 0;
+    mnTrackedOld = 0;
+    mnNewAddedMPs = 0;
+    mnBadMatches = 0;
 }
 
 /**
@@ -720,7 +724,7 @@ void Track::addNewKF()
     mMPCandidates.clear();  // 加了新的KF后才清空. 和普通帧的匹配也会生成MP
 }
 
-void Track::copyForPub(char* txt)
+void Track::copyForPub()
 {
     locker lock(mpMapPublisher->mMutexPub);
 
@@ -733,7 +737,12 @@ void Track::copyForPub(char* txt)
     mpMapPublisher->mvReferenceKPs = mpReferenceKF->mvKeyPoints;
     mpMapPublisher->mvMatchIdx = mvMatchIdx;
     mpMapPublisher->mvGoodMatchIdx = mvGoodMatchIdx;
-    mpMapPublisher->mImageText = string(txt);
+
+    char strMatches[64];
+    std::snprintf(strMatches, 64, "F: %ld, KF: %ld(%ld), D: %ld, M: %d/%d", mCurrentFrame.id,
+                  mpReferenceKF->id, mpReferenceKF->mIdKF, mCurrentFrame.id - mpReferenceKF->id,
+                  mnGoodInliers, mnInliers);
+    mpMapPublisher->mImageText = string(strMatches);
 
     mpMapPublisher->mbUpdated = true;
 }

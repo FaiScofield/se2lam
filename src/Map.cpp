@@ -26,7 +26,7 @@ typedef unique_lock<mutex> locker;
 Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 {
     mCurrentFramePose = cv::Mat::eye(4, 4, CV_32FC1);
-    mbNewKFinserted = false;
+    mbNewKFInserted = false;
 }
 
 Map::~Map()
@@ -39,7 +39,7 @@ void Map::insertKF(const PtrKeyFrame& pKF)
     mspKFs.insert(pKF);
     mCurrentKF = pKF;
     isEmpty = false;
-    mbNewKFinserted = true;
+    mbNewKFInserted = true;
 }
 
 void Map::insertMP(const PtrMapPoint& pMP)

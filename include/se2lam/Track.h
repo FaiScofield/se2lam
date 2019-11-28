@@ -41,7 +41,7 @@ public:
 
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
     cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
-    void copyForPub(char* txt);
+    void copyForPub();
 
     bool isFinished();
     void requestFinish();

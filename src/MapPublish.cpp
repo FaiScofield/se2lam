@@ -33,36 +33,36 @@ MapPublish::MapPublish(Map* pMap)
     mKFsNeg.ns = "KeyFramesNegative";
     mKFsNeg.id = 0;
     mKFsNeg.type = visualization_msgs::Marker::LINE_LIST;
+    mKFsNeg.action = visualization_msgs::Marker::ADD;
     mKFsNeg.scale.x = 0.1;
     mKFsNeg.scale.y = 0.1;
     mKFsNeg.pose.orientation.w = 1.0;
-    mKFsNeg.action = visualization_msgs::Marker::ADD;
     mKFsNeg.color.r = 0.0;
     mKFsNeg.color.g = 0.0;
     mKFsNeg.color.b = 0.0;
-    mKFsNeg.color.a = 0.5;
+    mKFsNeg.color.a = 1.0;
 
     // Local (Active) KFs, blue
     mKFsAct.header.frame_id = MAP_FRAME_ID;
     mKFsAct.ns = "KeyFramesActive";
     mKFsAct.id = 1;
     mKFsAct.type = visualization_msgs::Marker::LINE_LIST;
+    mKFsAct.action = visualization_msgs::Marker::ADD;
     mKFsAct.scale.x = 0.1;
     mKFsAct.scale.y = 0.1;
     mKFsAct.pose.orientation.w = 1.0;
-    mKFsAct.action = visualization_msgs::Marker::ADD;
     mKFsAct.color.b = 1.0;
-    mKFsAct.color.a = 0.5;
+    mKFsAct.color.a = 1.0;
 
     // Configure Current Camera, red
     mKFNow.header.frame_id = MAP_FRAME_ID;
     mKFNow.ns = "Camera";
     mKFNow.id = 2;
     mKFNow.type = visualization_msgs::Marker::LINE_LIST;
+    mKFNow.action = visualization_msgs::Marker::ADD;
     mKFNow.scale.x = 0.1;
     mKFNow.scale.y = 0.1;
     mKFNow.pose.orientation.w = 1.0;
-    mKFNow.action = visualization_msgs::Marker::ADD;
     mKFNow.color.r = 1.0;
     mKFNow.color.a = 1.0;
 
@@ -71,10 +71,10 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNeg.ns = "MapPointsNegative";
     mMPsNeg.id = 3;
     mMPsNeg.type = visualization_msgs::Marker::POINTS;
+    mMPsNeg.action = visualization_msgs::Marker::ADD;
     mMPsNeg.scale.x = mPointSize;
     mMPsNeg.scale.y = mPointSize;
     mMPsNeg.pose.orientation.w = 1.0;
-    mMPsNeg.action = visualization_msgs::Marker::ADD;
     mMPsNeg.color.r = 0.0;
     mMPsNeg.color.g = 0.0;
     mMPsNeg.color.b = 0.0;
@@ -85,10 +85,10 @@ MapPublish::MapPublish(Map* pMap)
     mMPsAct.ns = "MapPointsActive";
     mMPsAct.id = 4;
     mMPsAct.type = visualization_msgs::Marker::POINTS;
+    mMPsAct.action = visualization_msgs::Marker::ADD;
     mMPsAct.scale.x = mPointSize;
     mMPsAct.scale.y = mPointSize;
     mMPsAct.pose.orientation.w = 1.0;
-    mMPsAct.action = visualization_msgs::Marker::ADD;
     mMPsAct.color.r = 0.0;
     mMPsAct.color.g = 0.0;
     mMPsAct.color.b = 1.0;
@@ -99,10 +99,10 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNow.ns = "MapPointsNow";
     mMPsNow.id = 5;
     mMPsNow.type = visualization_msgs::Marker::POINTS;
+    mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.scale.x = mPointSize * 1.5f;
     mMPsNow.scale.y = mPointSize * 1.5f;
     mMPsNow.pose.orientation.w = 1.0;
-    mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.color.r = 1.0;
     mMPsNow.color.g = 0.0;
     mMPsNow.color.b = 0.0;
@@ -113,10 +113,10 @@ MapPublish::MapPublish(Map* pMap)
     mCovisGraph.ns = "CovisGraph";
     mCovisGraph.id = 6;
     mCovisGraph.type = visualization_msgs::Marker::LINE_LIST;
+    mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.scale.x = 0.03;
     mCovisGraph.scale.y = 0.03;
     mCovisGraph.pose.orientation.w = 1.0;
-    mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.color.r = 0.0;
     mCovisGraph.color.g = 1.0;
     mCovisGraph.color.b = 0.0;
@@ -127,10 +127,10 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.ns = "FeatGraph";
     mFeatGraph.id = 7;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
+    mFeatGraph.action = visualization_msgs::Marker::ADD;
     mFeatGraph.scale.x = 0.03;
     mFeatGraph.scale.y = 0.03;
     mFeatGraph.pose.orientation.w = 1.0;
-    mFeatGraph.action = visualization_msgs::Marker::ADD;
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
     mFeatGraph.color.b = 1.0;
@@ -141,10 +141,11 @@ MapPublish::MapPublish(Map* pMap)
     mVIGraph.ns = "VIGraph";
     mVIGraph.id = 8;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
+    mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.scale.x = 0.06;
     mVIGraph.scale.y = 0.06;
     mVIGraph.pose.orientation.w = 1.0;
-    mVIGraph.action = visualization_msgs::Marker::ADD;
+
     mVIGraph.color.r = 0.0;
     mVIGraph.color.g = 0.0;
     mVIGraph.color.b = 0.0;
@@ -169,12 +170,12 @@ MapPublish::MapPublish(Map* pMap)
     mMPsNoGoodPrl.ns = "MapPointsNoGoodParallax";
     mMPsNoGoodPrl.id = 10;
     mMPsNoGoodPrl.type = visualization_msgs::Marker::POINTS;
+    mMPsNoGoodPrl.action = visualization_msgs::Marker::ADD;
     mMPsNoGoodPrl.scale.x = 0.08;
     mMPsNoGoodPrl.scale.y = 0.08;
     mMPsNoGoodPrl.pose.orientation.w = 1.0;
-    mMPsNoGoodPrl.action = visualization_msgs::Marker::ADD;
     mMPsNoGoodPrl.color.r = 1.0;
-    mMPsNoGoodPrl.color.g = 0.1;
+    mMPsNoGoodPrl.color.g = 0.2;
     mMPsNoGoodPrl.color.b = 1.0;
     mMPsNoGoodPrl.color.a = 0.8;
 
@@ -223,11 +224,6 @@ void MapPublish::run()
             continue;
         }
 
-        if (mpMap->countMPs() == 0){
-            rate.sleep();
-            continue;
-        }
-
         if (!mbUpdated){
             rate.sleep();
             continue;
@@ -246,20 +242,18 @@ void MapPublish::run()
                 string fileName = Config::MatchImageStorePath + to_string(nSaveId++) + ".jpg";
                 cv::imwrite(fileName, imgMatch);
             }
-
-            // Tcw = mpMap->getCurrentFramePose();
-            // Tcw = mpTracker->getCurrentFramePose();
         } else {
-            if (mpLocalizer->getKFCurr() == nullptr || mpLocalizer->getKFCurr()->isNull())
+            PtrKeyFrame pKF = mpLocalizer->getKFCurr();
+            if (pKF == nullptr || pKF->isNull())
                 continue;
 
-            Tcw = mpLocalizer->getKFCurr()->getPose();
+            Tcw = pKF->getPose();
         }
 
-        publishOdomInformation();
         publishCameraCurr(cvu::inv(mCurrentFramePose));
-        if (mpMap->mbNewKFinserted) { // Map不变时没必要重复显示
-            mpMap->mbNewKFinserted = false;
+        publishOdomInformation();
+        if (mpMap->mbNewKFInserted) { // Map不变时没必要重复显示
+            mpMap->mbNewKFInserted = false;
             publishKeyFrames();
             publishMapPoints();
         }
@@ -295,7 +289,7 @@ void MapPublish::publishKeyFrames()
     if (vKFsAll.empty())
         return;
 
-    vector<PtrKeyFrame> vKFsAct;
+    vector<PtrKeyFrame> vKFsAct, vKFsNeg;
     if (mbIsLocalize)
         vKFsAct = mpLocalizer->getLocalKFs();
     else
@@ -348,6 +342,7 @@ void MapPublish::publishKeyFrames()
         // 判断第i帧KF是Active/Active
         int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
         if (count == 0) {  // Negtive
+            vKFsNeg.push_back(pKFi);
             mKFsNeg.points.push_back(msgs_o);
             mKFsNeg.points.push_back(msgs_p1);
             mKFsNeg.points.push_back(msgs_o);
@@ -462,6 +457,7 @@ void MapPublish::publishKeyFrames()
         }
     }
 
+    mKFsAct.header.stamp = ros::Time::now();
     mKFsNeg.header.stamp = ros::Time::now();
     mCovisGraph.header.stamp = ros::Time::now();
     mFeatGraph.header.stamp = ros::Time::now();
@@ -475,6 +471,14 @@ void MapPublish::publishKeyFrames()
 
     cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " 当前Map的组成: Active/Negtive/All = "
          << mKFsAct.points.size() / 16 << "/"  << mKFsNeg.points.size() / 16 << "/" << vKFsAll.size() << endl;
+
+//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Active KFs: " << endl;
+//    for (size_t i = 0; i < vKFsAct.size(); ++i)
+//        cout << "    - " << vKFsAct[i]->mIdKF << ", "  << vKFsAct[i]->getTwb() << endl;;
+
+//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Negtive KFs: " << endl;
+//    for (size_t i = 0; i < vKFsNeg.size(); ++i)
+//        cout << "    - " << vKFsNeg[i]->mIdKF << ", "  << vKFsNeg[i]->getTwb() << endl;;
 }
 
 void MapPublish::publishMapPoints()
@@ -510,15 +514,15 @@ void MapPublish::publishMapPoints()
     vector<PtrMapPoint> vpMPActGood;
     for (auto iter = vpMPAct.begin(); iter != vpMPAct.end(); iter++) {
         PtrMapPoint pMPtemp = *iter;
-        auto it = find(vpMPNow.begin(), vpMPNow.end(), pMPtemp);
-        if (it == vpMPNow.end())
+        int count = std::count(vpMPNow.begin(), vpMPNow.end(), pMPtemp);
+        if (count == 0)
             vpMPActGood.push_back(pMPtemp);
     }
     vpMPAct.swap(vpMPActGood);  // MPsAct 去掉 MPsNow
 
     mMPsNeg.points.reserve(vpMPNeg.size());
-    for (int i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
-        if (vpMPNeg[i]->isNull())
+    for (size_t i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
+        if (!vpMPNeg[i] || vpMPNeg[i]->isNull())
             continue;
 
         geometry_msgs::Point msg_p;
@@ -533,8 +537,8 @@ void MapPublish::publishMapPoints()
     }
 
     mMPsAct.points.reserve(vpMPAct.size());
-    for (int i = 0, iend = vpMPAct.size(); i != iend; ++i) {
-        if (vpMPAct[i]->isNull())
+    for (size_t i = 0, iend = vpMPAct.size(); i != iend; ++i) {
+        if (!vpMPAct[i] || vpMPAct[i]->isNull())
             continue;
 
         geometry_msgs::Point msg_p;
@@ -546,15 +550,14 @@ void MapPublish::publishMapPoints()
     }
 
     mMPsNow.points.reserve(vpMPNow.size());
-    for (auto iter = vpMPNow.begin(); iter != vpMPNow.end(); iter++) {
-        PtrMapPoint pMPtmp = *iter;
-        if (!pMPtmp || pMPtmp->isNull())
+    for (size_t i = 0, iend = vpMPNow.size(); i != iend; ++i) {
+        if (!vpMPNow[i] || vpMPNow[i]->isNull())
             continue;
 
         geometry_msgs::Point msg_p;
-        msg_p.x = pMPtmp->getPos().x / mScaleRatio;
-        msg_p.y = pMPtmp->getPos().y / mScaleRatio;
-        msg_p.z = pMPtmp->getPos().z / mScaleRatio;
+        msg_p.x = vpMPNow[i]->getPos().x / mScaleRatio;
+        msg_p.y = vpMPNow[i]->getPos().y / mScaleRatio;
+        msg_p.z = vpMPNow[i]->getPos().z / mScaleRatio;
 
         mMPsNow.points.push_back(msg_p);
     }
@@ -637,7 +640,6 @@ void MapPublish::publishCameraCurr(const cv::Mat& Twc)
     mKFNow.points.push_back(msgs_p1);
 
     mKFNow.header.stamp = ros::Time::now();
-
     publisher.publish(mKFNow);
 }
 
@@ -732,8 +734,8 @@ cv::Mat MapPublish::drawMatchesInOneImg()
         imgRef = mReferenceImage;
 
     // 所有KP先上蓝色
-//    drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
-//    drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
     // 取逆得到A21
     invertAffineTransform(mAffineMatrix, A21);
@@ -741,21 +743,19 @@ cv::Mat MapPublish::drawMatchesInOneImg()
     hconcat(imgRef, imgWarp, imgOut);
 
     for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
-        const Point2f& ptRef = mvReferenceKPs[i].pt;
-        const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
-        Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
-        Mat pt1W = A21 * pt1;
-        Point2f ptCurWarp = Point2f(pt1W.at<double>(0), pt1W.at<double>(1)) + Point2f(imgRef.cols, 0);
-
         if (mvMatchIdx[i] < 0) {
-            circle(imgOut, ptRef, 2, Scalar(255, 0, 0));
-            circle(imgOut, ptCurWarp, 2, Scalar(255, 0, 0));
             continue;
         } else {
-            if (mvGoodMatchIdx[i] < 0) {
-                circle(imgOut, ptRef, 3, Scalar(0, 255, 0));
-                circle(imgOut, ptCurWarp, 3, Scalar(0, 255, 0));
-            } else {  // 深度好的匹配点才连线
+            const Point2f& ptRef = mvReferenceKPs[i].pt;
+            const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
+            Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+            Mat pt1W = A21 * pt1;
+            Point2f ptCurWarp = Point2f(pt1W.at<double>(0), pt1W.at<double>(1)) + Point2f(imgRef.cols, 0);
+
+            if (mvGoodMatchIdx[i] < 0) {  // 只有KP匹配对标绿色
+                circle(imgOut, ptRef, 3, Scalar(0, 255, 0), -1);
+                circle(imgOut, ptCurWarp, 3, Scalar(0, 255, 0), -1);
+            } else {  // 有MP的匹配点标黄色并连线
                 circle(imgOut, ptRef, 3, Scalar(0, 255, 255), -1);
                 circle(imgOut, ptCurWarp, 3, Scalar(0, 255, 255), -1);
                 line(imgOut, ptRef, ptCurWarp, Scalar(255, 255, 20));

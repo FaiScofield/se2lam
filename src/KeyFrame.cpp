@@ -176,7 +176,8 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
 {
     {
         locker lock(mMutexCovis);
-        mCovisibleKFsWeight.emplace(pKF, weight);
+        // mCovisibleKFsWeight.emplace(pKF, weight);
+        mCovisibleKFsWeight[pKF] = weight;
     }
     sortCovisibleKFs();
 }
@@ -202,8 +203,8 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
             weight++;
     }
 
-    if (weight == 0)
-        return;
+//    if (weight == 0)
+//        return;
 
     addCovisibleKF(pKF, weight);
 }
