@@ -65,6 +65,7 @@ public:
 
     // for visulization
     bool mbUpdated;
+    unsigned long mnCurrentFrameID;
     cv::Mat mCurrentFramePose;
     cv::Mat mCurrentImage, mReferenceImage;
     cv::Mat mAffineMatrix, mHomography;

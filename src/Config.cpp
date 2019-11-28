@@ -67,7 +67,7 @@ int Config::MaxLocalFrameNum = 20;         //! TODO
 int Config::LocalFrameSearchLevel = 3;
 float Config::LocalFrameSearchRadius = 5.f;
 
-float Config::MinScoreBest = 0.005;
+float Config::MinScoreBest = 0.01;  // 0.005
 float Config::MinMPMatchRatio = 0.05;
 int Config::MinMPMatchNum = 15;
 int Config::MinKPMatchNum = 30;
@@ -184,7 +184,7 @@ void Config::readConfig(const std::string& path)
 
     settings["gm_vcl_num_min_match_mp"] >> MinMPMatchNum;
     settings["gm_vcl_num_min_match_kp"] >> MinKPMatchNum;
-    settings["gm_vcl_ratio_min_match_kp"] >> MinMPMatchRatio;
+    settings["gm_vcl_ratio_min_match_mp"] >> MinMPMatchRatio;
     settings["gm_dcl_min_kfid_offset"] >> MinKFidOffset;
     settings["gm_dcl_min_score_best"] >> MinScoreBest;
 

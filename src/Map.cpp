@@ -440,7 +440,7 @@ void Map::updateLocalGraph_new()
         }
     }
     double t3 = timer.count();
-    printf("[Local][ Map ] #%ld(KF#%ld) L2.更新局部地图, 共得到 LocalKFs/LocalMPs/RefKFs : "
+    printf("[Local][ Map ] #%ld(KF#%ld) 更新局部地图, 共得到LocalKFs/LocalMPs(视差良好)/RefKFs数量: "
            "%ld/%ld/%ld, 共耗时%.2fms\n",
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size(), setLocalMPs.size(),
            setRefKFs.size(), t1 + t2 + t3);

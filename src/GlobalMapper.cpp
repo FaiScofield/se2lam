@@ -205,8 +205,8 @@ bool GlobalMapper::detectLoopClose()
     // Loop closure detection with ORB-BOW method
 
     bool bDetected = false;
-    int minKFIdOffset = Config::MinKFidOffset;   // 25
-    double minScoreBest = Config::MinScoreBest;  // 0.005
+    const int minKFIdOffset = Config::MinKFidOffset;   // 25
+    const double minScoreBest = Config::MinScoreBest;  // 0.005
 
     PtrKeyFrame pKFCurr = mpMap->getCurrentKF();
     if (pKFCurr == nullptr) {
@@ -216,25 +216,25 @@ bool GlobalMapper::detectLoopClose()
         return bDetected;
     }
 
-    DBoW2::BowVector& BowVecCurr = pKFCurr->mBowVec;
-    int idKFCurr = pKFCurr->mIdKF;
+    const DBoW2::BowVector& BowVecCurr = pKFCurr->mBowVec;
+    const int idKFCurr = pKFCurr->mIdKF;
 
-    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
-    int numKFs = vpKFsAll.size();
+    const vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
+    const int numKFs = vpKFsAll.size();
+
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
-
     for (int i = 0; i < numKFs; ++i) {
-        PtrKeyFrame pKF = vpKFsAll[i];
-        DBoW2::BowVector& BowVec = pKF->mBowVec;
+        const PtrKeyFrame& pKF = vpKFsAll[i];
+        const DBoW2::BowVector& BowVec = pKF->mBowVec;
 
         // Omit neigbor KFs
-        int idKF = pKF->mIdKF;
+        const int idKF = pKF->mIdKF;
         if (abs(idKF - idKFCurr) < minKFIdOffset) {
             continue;
         }
 
-        double score = mpORBVoc->score(BowVecCurr, BowVec);
+        const double score = mpORBVoc->score(BowVecCurr, BowVec);
         if (score > scoreBest) {
             scoreBest = score;
             pKFBest = pKF;
@@ -795,7 +795,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
 
         int idxMPin1 = iter->first;
-        //        PtrMapPoint pMPin1 = _pKFFrom->mDualObservations[idxMPin1];
+        // PtrMapPoint pMPin1 = _pKFFrom->mDualObservations[idxMPin1];
         MeasSE3XYZ Meas1;
         Meas1.idKF = 0;
         Meas1.idMP = count;
@@ -803,7 +803,7 @@ int GlobalMapper::createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
         Meas1.info = _pKFFrom->mvViewMPsInfo[idxMPin1];
 
         int idxMPin2 = iter->second;
-        //        PtrMapPoint pMPin2 = _pKFTo->mDualObservations[idxMPin2];
+        // PtrMapPoint pMPin2 = _pKFTo->mDualObservations[idxMPin2];
         MeasSE3XYZ Meas2;
         Meas2.idKF = 1;
         Meas2.idMP = count;

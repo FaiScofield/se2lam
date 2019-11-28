@@ -39,6 +39,8 @@ public:
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
     void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
+    // for visulization
+    unsigned long getCurrentFrameID() { return mCurrentFrame.id; }
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
     cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
     void copyForPub();
@@ -106,10 +108,12 @@ private:
     PtrKeyFrame mpReferenceKF;
     PtrKeyFrame mpLoopKF;
     std::map<size_t, MPCandidate> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
-    std::vector<int> mvMatchIdx, mvGoodMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
-    int mnNewAddedMPs, mnCandidateMPs, mnBadMatches;  // 新增/潜在的MP数及不好的匹配点数
-    int mnInliers, mnGoodInliers, mnTrackedOld;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
+    std::map<int, int> mKPMatchesLoop;  // 重定位回环中通过BoW匹配的KP匹配对
+    std::vector<int> mvKPMatchIdx, mvMPMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
+    int mnMPsNewAdded, mnCandidateMPs, mnKPMatchesBad;  // 新增/潜在的MP数及不好的匹配点数
+    int mnKPMatches, mnKPInliers, mnMPInliers, mnMPTracked;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
     int mnLostFrames;                            // 连续追踪失败的帧数
+    double mLoopScore;
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames, nMinMatches;

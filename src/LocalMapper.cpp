@@ -79,8 +79,8 @@ void LocalMapper::processNewKF()
 
     mpNewKF->updateCovisibleGraph();
     double t2 = timer.count();
-    printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF\n",
-           mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs());
+    printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF, MP观测数: %ld\n",
+           mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs(), mpNewKF->countObservations());
     timer.start();
 
     //! 3.Add KeyFrame-KeyFrame relation. 添加前后KF的约束
