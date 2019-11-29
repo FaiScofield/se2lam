@@ -376,4 +376,35 @@ int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& k
     return nInlier;
 }
 
+cv::Mat predictAffineMatrix(const Se2& dOdom)
+{
+    Point2f rotationCenter;
+    rotationCenter.x = 160.5827 - 0.01525;  // cx - Tbc.y / 12
+    rotationCenter.y = 117.7329 - 3.6984;  // cy - Tbc.x / 12
+    // rotationCenter.x = Config::cx - Config::Tbc.at<float>(0, 3) / 12;
+    // rotationCenter.y =  Config::cy - Config::Tbc.at<float>(1, 3) / 12;
+
+    Mat R = getRotationMatrix2D(rotationCenter, dOdom.theta * 180.f / CV_PI, 1.);
+    // cout << "Affine Matrix of R3 = " << endl << R << endl;
+
+    return R.clone();
+}
+
+// dOdom = Ref.odo - Cur.odo
+cv::Mat calculateAffineMatrix(const Se2& dOdom)
+{
+    Mat Tc1c2 = Config::Tcb * dOdom.inv().toCvSE3() * Config::Tbc;
+    Mat Rc1c2 = Tc1c2.rowRange(0, 3).colRange(0, 3).clone();
+    Mat R1 = Config::Kcam * Rc1c2 * (Config::Kcam).inv();
+    cout << "Affine Matrix of R1 = " << endl << R1.rowRange(0, 2) << endl;
+
+    Point2f rotationCenter;
+    rotationCenter.x = Config::cx + Config::Tbc.at<float>(1, 3) / 12;
+    rotationCenter.y =  Config::cy + Config::Tbc.at<float>(0, 3) / 12;
+    Mat R2 = getRotationMatrix2D(rotationCenter, dOdom.theta * 180.f / CV_PI, 1.);
+    cout << "Affine Matrix of R2 = " << endl << R2 << endl;
+
+    return R1.rowRange(0, 2).clone();
+}
+
 #endif  // TEST_FUNCTIONS_HPP

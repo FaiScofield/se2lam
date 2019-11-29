@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
         string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
-        if (!img.data) {
+        if (img.empty()) {
             cerr << "[Main ][Error] No image data for image " << fullImgName << endl;
             continue;
         }

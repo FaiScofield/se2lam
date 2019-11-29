@@ -762,7 +762,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(false);
+    optimizer.setVerbose(true);
     optimizer.verifyInformationMatrices(true);
 
     int camParaId = 0;

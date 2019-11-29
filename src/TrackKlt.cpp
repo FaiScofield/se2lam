@@ -890,7 +890,7 @@ Mat TrackKlt::drawMatchesPointsToRefFrame(const string& title)
         ptsFor.push_back(mCurrentFrame.mvKeyPoints[mvMatchIdxToRefKF[i]].pt);
     }
 
-    double angle = normalizeAngle(mpReferenceKF->odom.theta - mCurrentFrame.odom.theta);
+    double angle = normalizeAngle(mpReferenceKF->odom.theta - mCurrentFrame.odom.theta); 
     Point rotationCenter;
     rotationCenter.x = 160.5827 - 0.01525;  //! TODO
     rotationCenter.y = 117.7329 - 3.6984;

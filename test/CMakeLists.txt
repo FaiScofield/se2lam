@@ -13,14 +13,14 @@ target_link_libraries(test_vn
 #)
 
 
-#add_executable(test_KeyPointMatch
-#    test_KeyPointMatch.cpp
-#    test_functions.hpp
-#)
-#target_link_libraries(test_KeyPointMatch
-#    se2lam
-#    ${LINK_LIBS}
-#)
+add_executable(test_KeyPointMatch
+   test_KeyPointMatch.cpp
+   test_functions.hpp
+)
+target_link_libraries(test_KeyPointMatch
+   se2lam
+   ${LINK_LIBS}
+)
 
 #add_executable(test_lineDetection test_lineDetection.cpp)
 #target_link_libraries(test_lineDetection

@@ -1,8 +1,8 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+ */
 
 #ifndef TRACK_H
 #define TRACK_H
@@ -39,6 +39,10 @@ public:
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
     void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
+    cv::Mat getAffineMatrix(const Se2& dOdo);
+    int removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, std::vector<int>& vKPMatchIdx, cv::Mat& A12);
+    int removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, std::map<int, int>& mapKPMatchIdx, cv::Mat& A12);
+
     // for visulization
     unsigned long getCurrentFrameID() { return mCurrentFrame.id; }
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
@@ -64,7 +68,7 @@ private:
 
     void updateFramePoseFromLast();
     void updateFramePoseFromRef();
-    void removeOutliers();
+
     void doTriangulate();
     void resetLocalTrack();
     bool needNewKF();
@@ -74,11 +78,9 @@ private:
     bool detectIfLost();
     bool detectIfLost(int cros, double projError);
 
-    bool relocalization();
+    bool doRelocalization();
     bool detectLoopClose();
     bool verifyLoopClose();
-    void removeMatchOutlierRansac(const Frame* _pKFCurrent, const PtrKeyFrame& _pKFLoop,
-                                  std::map<int, int>& mapiMatch);
     void doLocalBA(Frame& pKF);
     void startNewTrack();
 
@@ -90,7 +92,7 @@ private:
     static bool mbUseOdometry;  //! TODO 冗余变量
     bool mbPrint;
     bool mbNeedVisualization;
-    bool mbRelocalized; // 成功重定位标志
+    bool mbRelocalized;  // 成功重定位标志
     std::string mImageText;
 
     // set in OdoSLAM class
@@ -112,7 +114,7 @@ private:
     std::vector<int> mvKPMatchIdx, mvMPMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
     int mnMPsNewAdded, mnCandidateMPs, mnKPMatchesBad;  // 新增/潜在的MP数及不好的匹配点数
     int mnKPMatches, mnKPInliers, mnMPInliers, mnMPTracked;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
-    int mnLostFrames;                            // 连续追踪失败的帧数
+    int mnLostFrames;  // 连续追踪失败的帧数
     double mLoopScore;
 
     // New KeyFrame rules (according to fps)
@@ -121,7 +123,7 @@ private:
     float mCurrRatioGoodDepth, mCurrRatioGoodParl;
     float mLastRatioGoodDepth, mLastRatioGoodParl;
 
-    cv::Mat mAffineMatrix;
+    cv::Mat mAffineMatrix;  // A12
 
     // preintegration on SE2
     PreSE2 preSE2;

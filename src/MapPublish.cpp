@@ -1,9 +1,9 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG
-* (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG
+ * (github.com/hbtang)
+ */
 
 #include "MapPublish.h"
 #include "Map.h"
@@ -181,8 +181,7 @@ MapPublish::MapPublish(Map* pMap)
 
     tf::Transform tfT;
     tfT.setIdentity();
-    tfb.sendTransform(
-        tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
+    tfb.sendTransform(tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
 
     publisher = nh.advertise<visualization_msgs::Marker>("se2lam/Map", 10);
 
@@ -202,8 +201,7 @@ MapPublish::MapPublish(Map* pMap)
     publisher.publish(mOdomRawGraph);
 }
 
-MapPublish::~MapPublish()
-{}
+MapPublish::~MapPublish() {}
 
 void MapPublish::run()
 {
@@ -223,7 +221,7 @@ void MapPublish::run()
             continue;
         }
 
-        if (!mbUpdated){
+        if (!mbUpdated) {
             rate.sleep();
             continue;
         }
@@ -251,7 +249,7 @@ void MapPublish::run()
 
         publishCameraCurr(cvu::inv(mCurrentFramePose));
         publishOdomInformation();
-        if (mpMap->mbNewKFInserted) { // Map不变时没必要重复显示
+        if (mpMap->mbNewKFInserted) {  // Map不变时没必要重复显示
             mpMap->mbNewKFInserted = false;
             publishKeyFrames();
             publishMapPoints();
@@ -358,7 +356,7 @@ void MapPublish::publishKeyFrames()
             mKFsNeg.points.push_back(msgs_p4);
             mKFsNeg.points.push_back(msgs_p4);
             mKFsNeg.points.push_back(msgs_p1);
-        } else {    // Active
+        } else {  // Active
             mKFsAct.points.push_back(msgs_o);
             mKFsAct.points.push_back(msgs_p1);
             mKFsAct.points.push_back(msgs_o);
@@ -406,14 +404,14 @@ void MapPublish::publishKeyFrames()
         }
 
         // Visual Odometry Graph (estimate). VI轨迹转到odo坐标系下, 方便和odo轨迹对比
-        PtrKeyFrame pKFOdoChild = pKFi->mOdoMeasureFrom.first; // 上一帧
+        PtrKeyFrame pKFOdoChild = pKFi->mOdoMeasureFrom.first;  // 上一帧
         if (pKFOdoChild != nullptr && !mbIsLocalize) {
             Mat Twb = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
             geometry_msgs::Point msgs_b2;
             msgs_b2.x = Twb.at<float>(0, 3) / mScaleRatio;
             msgs_b2.y = Twb.at<float>(1, 3) / mScaleRatio;
             msgs_b2.z = Twb.at<float>(2, 3) / mScaleRatio;
-            mVIGraph.points.push_back(msgs_b);   // 当前帧的位姿(odo坐标系)
+            mVIGraph.points.push_back(msgs_b);  // 当前帧的位姿(odo坐标系)
             mVIGraph.points.push_back(msgs_b2);  // 上一帧的位姿
         }
     }
@@ -421,8 +419,7 @@ void MapPublish::publishKeyFrames()
     //! Visual Odometry Graph for Localize only case
     //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
     if (mbIsLocalize) {
-        static geometry_msgs::Point
-            msgsLast;  // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
+        static geometry_msgs::Point msgsLast;  // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
         geometry_msgs::Point msgsCurr;
 
         auto currState = mpLocalizer->getTrackingState();
@@ -468,16 +465,17 @@ void MapPublish::publishKeyFrames()
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
 
-    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " 当前Map的组成: Active/Negtive/All = "
-         << mKFsAct.points.size() / 16 << "/"  << mKFsNeg.points.size() / 16 << "/" << vKFsAll.size() << endl;
+    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF
+         << " 当前Map的组成: Active/Negtive/All = " << mKFsAct.points.size() / 16 << "/"
+         << mKFsNeg.points.size() / 16 << "/" << vKFsAll.size() << endl;
 
-//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Active KFs: " << endl;
-//    for (size_t i = 0; i < vKFsAct.size(); ++i)
-//        cout << "    - " << vKFsAct[i]->mIdKF << ", "  << vKFsAct[i]->getTwb() << endl;;
+    //    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Active KFs: " << endl;
+    //    for (size_t i = 0; i < vKFsAct.size(); ++i)
+    //        cout << "    - " << vKFsAct[i]->mIdKF << ", "  << vKFsAct[i]->getTwb() << endl;;
 
-//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Negtive KFs: " << endl;
-//    for (size_t i = 0; i < vKFsNeg.size(); ++i)
-//        cout << "    - " << vKFsNeg[i]->mIdKF << ", "  << vKFsNeg[i]->getTwb() << endl;;
+    //    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Negtive KFs: " << endl;
+    //    for (size_t i = 0; i < vKFsNeg.size(); ++i)
+    //        cout << "    - " << vKFsNeg[i]->mIdKF << ", "  << vKFsNeg[i]->getTwb() << endl;;
 }
 
 void MapPublish::publishMapPoints()
@@ -582,8 +580,7 @@ void MapPublish::publishCameraCurr(const cv::Mat& Twc)
     tf::Vector3 t(Twc.at<float>(0, 3) / mScaleRatio, Twc.at<float>(1, 3) / mScaleRatio,
                   Twc.at<float>(2, 3) / mScaleRatio);
     tf::Transform tfwTc(R, t);
-    tfb.sendTransform(
-        tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
+    tfb.sendTransform(tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
 
     float d = mCameraSize;
 
@@ -670,7 +667,7 @@ void MapPublish::publishOdomInformation()
             static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
 
             Mat Twbi = (pKF->odom).toCvSE3();
-            Mat Tb0bi = Tb0w * Twbi;              // 先变换到首帧的odom坐标系原点下
+            Mat Tb0bi = Tb0w * Twbi;  // 先变换到首帧的odom坐标系原点下
             Mat Twc_bi = (Twc_b * Tb0bi).col(3);  // 再变换到首帧的pose坐标系原点下
             msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
             msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
@@ -762,12 +759,14 @@ cv::Mat MapPublish::drawMatchesInOneImg()
                 }
             }
         }
-    } else { // 说明定位丢失且找不到回环帧
+    } else {  // 说明定位丢失且找不到回环帧
         hconcat(imgCur, imgRef, imgOut);
     }
     putText(imgOut, mImageText, Point(100, 15), 1, 1, Scalar(0, 0, 255), 2);
+    Mat imgScalar;
+    resize(imgOut, imgScalar, Size2i(imgOut.cols * 2, imgOut.rows * 2));
 
-    return imgOut.clone();
+    return imgScalar.clone();
 }
 
 
