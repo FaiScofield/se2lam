@@ -118,27 +118,31 @@ void LocalMapper::processNewKF()
 void LocalMapper::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
 {
     WorkTimer timer;
-    PtrKeyFrame pRefKF = mpMap->getCurrentKF();
+
+    PtrKeyFrame pRefKF = nullptr;
+    if (MPCandidates.empty())
+        pRefKF = mpMap->getCurrentKF();
+    else
+        pRefKF = (*MPCandidates.begin()).second.pKF;  // 回环成功refKF为LoopKF
+    assert(pRefKF != nullptr);
     assert(mpNewKF->id > pRefKF->id);
 
     const Mat Tc1w = pRefKF->getPose();
     const Mat Tc2w = mpNewKF->getPose();
 
-    // 1.为newKF在Track线程中添加的可视MP添加info
-    // trackRefKF()情况下可以保证视差都是好的, relocalization()和tackLocalMap()情况下不一定
+    // 1.为newKF在Track线程中添加的可视MP添加info. 可以保证视差都是好的
     int nAddInfo = 0;
-    int nObs = mpNewKF->countObservations();
+    const int nObs = mpNewKF->countObservations();
     for (size_t i = 0, iend = mpNewKF->N; i < iend; ++i) {
         PtrMapPoint pMP = mpNewKF->getObservation(i);
         if (pMP) {
+            assert(pMP->isGoodPrl());
             Point3f Pc1 = cvu::se3map(Tc1w, pMP->getPos());
             Eigen::Matrix3d xyzinfo1, xyzinfo2;
             calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
             mpNewKF->setObsAndInfo(pMP, i, xyzinfo2);
             pMP->addObservation(mpNewKF, i);
             nAddInfo++;
-        } else {
-            mpNewKF->mvbViewMPsInfoExist[i] = false;
         }
     }
     double t1 = timer.count();
@@ -180,6 +184,7 @@ void LocalMapper::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
                 Eigen::Matrix3d infoOld, infoNew;
                 calcSE3toXYZInfo(Pc2, Tc2w, pMP->getMainKF()->getPose(), infoNew, infoOld);
                 mpNewKF->setObsAndInfo(pMP, i, infoNew);
+                pMP->addObservation(mpNewKF, i);
                 nProjLocalMPs++;
             }
             double t2 = timer.count();
@@ -200,6 +205,8 @@ void LocalMapper::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
         const size_t idx1 = cand.first;
         const size_t idx2 = cand.second.kpIdx2;
         const unsigned long frameId = cand.second.id2;
+
+        assert(pRefKF == cand.second.pKF);
         assert(!pRefKF->hasObservationByIndex(idx1));
 
         // 局部地图投影到newKF中的MP, 如果把候选的坑占了, 则取消此候选.
@@ -219,10 +226,10 @@ void LocalMapper::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
         Point3f Pw = cvu::se3map(Tc1w, cand.second.Pc1);
         PtrMapPoint pNewMP = make_shared<MapPoint>(Pw, false);  // 候选的视差都是不好的
 
-        assert(!pRefKF->hasObservationByIndex(cand.first));
         pRefKF->setObsAndInfo(pNewMP, idx1, xyzinfo1);
         pNewMP->addObservation(pRefKF, idx1);
         if (frameId == mpNewKF->id) {
+            assert(!mpNewKF->hasObservationByIndex(idx2));
             mpNewKF->setObsAndInfo(pNewMP, idx2, xyzinfo2);
             pNewMP->addObservation(mpNewKF, idx2);
         }

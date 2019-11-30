@@ -703,7 +703,7 @@ bool verifyInfo(const Eigen::Matrix3d& info)
 void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
 {
     VertexSE3Expmap* vi = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    Vector3d xyz_trans = vi->estimate() * (Xw);
+    Vector3d xyz_trans = vi->estimate().map(Xw);
 
     double x = xyz_trans[0];
     double y = xyz_trans[1];
@@ -736,9 +736,10 @@ Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
 
 /**
  * @brief   根据MP的观测情况进行一次对Frame的位姿优化调整(最小化重投影误差), 迭代最多4次
+ *  3D-2D 最小化重投影误差 e = (u,v) - project(Tcw*Pw)
  *  优化后MP的内外点情况由成员变量 mvbOutlier 决定.
  *  Vertex:
- *      - g2o::VertexSE3Expmap, 即当前Frame的位姿
+ *      - g2o::VertexSE3Expmap, 即当前Frame的位姿Tcw
  *  Edge:
  *      - se2lam::EdgeSE3ExpmapPrior, 即平面运动约束, 一元边
  *          + Vertex: 待优化的当前帧位姿Tcw
@@ -757,16 +758,23 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     nMPInliers = 0;
     error = 10000.;
 
-    SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
-    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+//    SlamOptimizer optimizer;
+//    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+//    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+//    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+
+    g2o::SparseOptimizer optimizer;
+    g2o::BlockSolver_6_3::LinearSolverType *linearSolver;
+    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
+    g2o::BlockSolver_6_3 *solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(true);
+    optimizer.setVerbose(false);
     optimizer.verifyInformationMatrices(true);
 
-    int camParaId = 0;
-    addCamPara(optimizer, Config::Kcam, camParaId);
+//    int camParaId = 0;
+//    addCamPara(optimizer, Config::Kcam, camParaId);
 
     // 当前帧位姿节点(待优化变量)
     g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
@@ -786,29 +794,26 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     vnIndexEdge.reserve(N);
 
     const float delta = Config::ThHuber;
-    vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false, false);
+    const vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false, false);
     for (int i = 0; i < N; i++) {
         const PtrMapPoint& pMP = vAllMPs[i];
         if (!pMP || pMP->isNull())
             continue;
 
         nMPInliers++;
-        pFrame->mvbMPOutlier[i] = false;
+        pFrame->mvbMPOutlier[i] = false;  // mvbMPOutlier变量在此更新
 
         const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
-        Eigen::Vector2d uv = toVector2d(kpUn.pt);
+        const Eigen::Vector2d uv = toVector2d(kpUn.pt);
 
         se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
-
         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
         e->setMeasurement(uv);
         const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
         e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-        e->setRobustKernel(rk);
         rk->setDelta(delta);
-
+        e->setRobustKernel(rk);
         e->Xw = toVector3d(pMP->getPos());
         optimizer.addEdge(e);
         vpEdges.push_back(e);
@@ -820,9 +825,6 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
         return;
     }
 
-    // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
-    // At the next optimization, outliers are not included, but at the end they can be classified as
-    // inliers again.
     for (size_t it = 0; it < 4; it++) {
         vSE3->setEstimate(toSE3Quat(pFrame->getPose()));
         optimizer.initializeOptimization(0);
@@ -830,21 +832,30 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 
         for (size_t i = 0, iend = vpEdges.size(); i < iend; i++) {
             se2lam::EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
-
             const size_t idx = vnIndexEdge[i];  // MP对应的KP索引
 
-            if (pFrame->mvbMPOutlier[idx])  //! TODO 对吗?? 和ORB的一样
+            if (!pFrame->mvbMPOutlier[idx]) {
+                const float chi2 = e->chi2();
+
+                if (chi2 > 5.991) {
+                    pFrame->mvbMPOutlier[idx] = true;
+                    e->setLevel(1);
+                    nMPInliers--;
+                } else {
+                    pFrame->mvbMPOutlier[idx] = false;
+                    e->setLevel(0);
+                }
+            } else {  // 如果在优化过程中被剔除外点, 新的优化结果可能又会使其变回内点?
                 e->computeError();
-
-            const float chi2 = e->chi2();
-
-            if (chi2 > 5.991) {
-                pFrame->mvbMPOutlier[idx] = true;
-                e->setLevel(1);
-                nMPInliers--;
-            } else {
-                pFrame->mvbMPOutlier[idx] = false;
-                e->setLevel(0);
+                const float chi2 = e->chi2();
+                if (chi2 > 5.991) {
+                    pFrame->mvbMPOutlier[idx] = true;
+                    e->setLevel(1);
+                } else {
+                    pFrame->mvbMPOutlier[idx] = false;
+                    e->setLevel(0);
+                    nMPInliers++;
+                }
             }
 
             if (it == 2)
@@ -857,7 +868,8 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 
     // Recover optimized pose and return number of inliers
     g2o::VertexSE3Expmap* vSE3_recov = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
-    pFrame->setPose(toCvMat(vSE3_recov->estimate()));
+    Mat Tcw = toCvMat(vSE3_recov->estimate());
+    pFrame->setPose(Tcw);
 
     error = optimizer.chi2();
 }

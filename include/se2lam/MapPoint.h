@@ -24,6 +24,20 @@ class Frame;
 class KeyFrame;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
+struct MPCandidate {
+    PtrKeyFrame pKF;  //  Reference or Loop KF
+    cv::Point3f Pc1;  // Pc in Camera Frame of KF
+
+    unsigned long id2;  // Frame id
+    size_t kpIdx2;
+    cv::Mat Tc2w;  // Camera pose of Frame
+
+    MPCandidate() : pKF(nullptr) {}
+    MPCandidate(const PtrKeyFrame& pkf, const cv::Point3f& PcKF, unsigned long id, size_t idx, const cv::Mat& Tcw)
+        : pKF(pkf), Pc1(PcKF), id2(id), kpIdx2(idx), Tc2w(Tcw)
+    {}
+};
+
 class MapPoint : public std::enable_shared_from_this<MapPoint>
 {
 public:
@@ -32,8 +46,7 @@ public:
     ~MapPoint();
 
     struct IdLessThan {
-        bool operator()(const std::shared_ptr<MapPoint>& lhs,
-                        const std::shared_ptr<MapPoint>& rhs) const
+        bool operator()(const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const
         {
             return lhs->mId < rhs->mId;
         }
@@ -44,7 +57,7 @@ public:
 
     //! 观测属性
     std::vector<PtrKeyFrame> getObservations();
-    void addObservation(const PtrKeyFrame& pKF, size_t idx); // Do pKF.setViewMP() before use this
+    void addObservation(const PtrKeyFrame& pKF, size_t idx);  // Do pKF.setViewMP() before use this
     void eraseObservation(const PtrKeyFrame& pKF);
     bool hasObservation(const PtrKeyFrame& pKF);
     size_t countObservations();
@@ -74,10 +87,10 @@ public:
 private:
     //! 内部使用的成员函数, 不需要加锁, 因为调用它的函数已经加了锁
     void setNullSelf();
-//    void updateMeasureInKFs();  // setPos()后调用
+    //    void updateMeasureInKFs();  // setPos()后调用
     void updateParallax(const PtrKeyFrame& pKF);  // addObservation()后调用, 更新视差
     void updateMainKFandDescriptor();  // addObservation()后调用, 更新相关参数
-    bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2); // 更新视差里调用
+    bool updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2);  // 更新视差里调用
 
     Map* mpMap;
 
@@ -96,7 +109,7 @@ private:
     std::map<PtrKeyFrame, size_t> mObservations;  // 最重要的成员变量
     cv::Point3f mNormalVector;  // 平均观测方向
     PtrKeyFrame mMainKF;
-    cv::Mat mMainDescriptor;    // 最优描述子, 到其他描述子平均距离最小
+    cv::Mat mMainDescriptor;  // 最优描述子, 到其他描述子平均距离最小
     int mMainOctave;
     float mLevelScaleFactor;
     std::mutex mMutexObs;

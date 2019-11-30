@@ -31,17 +31,6 @@ public:
     double cov[9];  // 3*3, RowMajor
 };
 
-struct MPCandidate {
-    cv::Point3f Pc1;  // Pw in world
-    unsigned long id2;
-    size_t kpIdx2;
-    cv::Mat Tc2w;
-
-    MPCandidate(){}
-    MPCandidate(const cv::Point3f& PcKF, unsigned long id, size_t idx, const cv::Mat& Tcw)
-        : Pc1(PcKF), id2(id), kpIdx2(idx), Tc2w(Tcw)
-    {}
-};
 
 //! 分块数目
 const int GRID_ROWS = 12;  // default 48 for 480, 23

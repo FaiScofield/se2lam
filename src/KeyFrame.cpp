@@ -311,7 +311,7 @@ void KeyFrame::updateCovisibleGraph()
         mvpCovisibleKFsSorted = vKFs;
         mvOrderedWeights = vWs;
     }
-    printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超30%), 共耗时%.2fms\n",
+    printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超30%%), 共耗时%.2fms\n",
            id, mIdKF, vpMPs.size(), mKFadnW.size(), timer.count());
 }
 
@@ -354,6 +354,8 @@ void KeyFrame::setObsAndInfo(const PtrMapPoint& pMP, size_t idx, const Matrix3d&
         mvpMapPoints[idx] = pMP;
         mvViewMPsInfo[idx] = info;
         mvbViewMPsInfoExist[idx] = true;
+    } else {
+        cerr << "[KeyFrame][Warni] 设置观测错误! 不存在的索引号 idx = " << idx << endl;
     }
 }
 

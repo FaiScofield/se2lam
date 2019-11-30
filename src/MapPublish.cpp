@@ -211,7 +211,7 @@ void MapPublish::run()
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
     image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
-    ros::Rate rate(Config::FPS * 2);
+    ros::Rate rate(Config::FPS * 5);
     while (nh.ok()) {
         if (checkFinish())
             break;
@@ -744,10 +744,10 @@ cv::Mat MapPublish::drawMatchesInOneImg()
             } else {
                 const Point2f& ptRef = mvReferenceKPs[i].pt;
                 const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
-                Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
-                Mat pt1W = A21 * pt1;
-                Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
-                Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
+                const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+                const Mat pt1W = A21 * pt1;
+                const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+                const Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
 
                 if (mvGoodMatchIdx[i] < 0) {  // 只有KP匹配对标绿色
                     circle(imgOut, ptL, 3, Scalar(0, 255, 0), -1);

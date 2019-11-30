@@ -25,6 +25,7 @@ class MapPublish;
 
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
+
 class Track
 {
 public:
@@ -69,7 +70,7 @@ private:
     void updateFramePoseFromLast();
     void updateFramePoseFromRef();
 
-    void doTriangulate();
+    void doTriangulate(PtrKeyFrame& pKF);
     void resetLocalTrack();
     bool needNewKF();
     void addNewKF();

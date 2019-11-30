@@ -278,31 +278,34 @@ bool Track::trackReferenceKF()
     }
 
     //! 4.三角化生成潜在MP, 由LocalMap线程创造MP
-    doTriangulate();  // 更新 mnTrackedOld, mnGoodInliers, mvGoodMatchIdx
+    doTriangulate(mpReferenceKF);  // 更新 mnTrackedOld, mnGoodInliers, mvGoodMatchIdx
 
-    //! 5.最小化重投影误差优化当前帧位姿
-    if (0 && mnMPTracked && mnMPsNewAdded) {  // 保证有MP观测才做优化 // TODO
+    //! TODO FIXME 5.最小化重投影误差优化当前帧位姿
+    const int nObs = mCurrentFrame.countObservations();
+    if (0 && mnMPTracked > 0 && nObs > 0) {  // 保证有MP观测才做优化 // TODO
         Se2 Twb = mCurrentFrame.getTwb();
         printf(
-            "[Track][Warni] #%ld-#%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
-            mCurrentFrame.id, mLastFrame.id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
+            "[Track][Warni] #%ld-#%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%d\n",
+            mCurrentFrame.id, mpReferenceKF->id, Twb.x, Twb.y, Twb.theta, nObs);
 
         int nCros = 0;
         double projError = 10000.;
         poseOptimization(&mCurrentFrame, nCros, projError);  // 更新 mPose, mvbOutlier
-        mCurrentFrame.updateObservationsAfterOpt();  // 根据 mvbOutlier 更新Frame的观测情况
+        // mCurrentFrame.updateObservationsAfterOpt();  // 根据 mvbOutlier 更新Frame的观测情况
 
         Twb = mCurrentFrame.getTwb();
-        printf("[Track][Warni] #%ld-#%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f]\n",
-               mCurrentFrame.id, mLastFrame.id, Twb.x, Twb.y, Twb.theta);
+        printf("[Track][Warni] #%ld-#%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
+               mCurrentFrame.id, mpReferenceKF->id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
+        printf("[Track][Warni] #%ld-#%ld 位姿优化情况: MP内点数/重投影误差为: %d/%.3f,\n",
+               mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
 
-        bool lost = detectIfLost(nCros, projError);
-        if (lost) {
-            printf("[Track][Warni] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, "
-                   "即将转为重定位!\n",
-                   mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
-            return false;
-        }
+//        bool lost = detectIfLost(nCros, projError);
+//        if (lost) {
+//            printf("[Track][Warni] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, "
+//                   "即将转为重定位!\n",
+//                   mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
+//            return false;
+//        }
     } /*else if (mCurrentFrame.id - mpReferenceKF->id >= 0.8 * nMaxFrames) {  //
     没有MP观测说明太仅或者太远
         return false;
@@ -335,8 +338,7 @@ bool Track::trackLocalMap()
 void Track::updateFramePoseFromLast()
 {
     Se2 Tb1b2 = mCurrentFrame.odom - mLastFrame.odom;
-    Se2 Twb = mLastFrame.getTwb() + Tb1b2;
-    mCurrentFrame.setPose(Twb);
+    mCurrentFrame.setPose(mLastFrame.getTwb() + Tb1b2);
 }
 
 //! 根据RefKF和当前帧的里程计更新先验位姿和变换关系, odom是se2绝对位姿而非增量
@@ -403,33 +405,35 @@ int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, vector<
 
     int nKPInliers = 0;
 
-    vector<Point2f> ptRef, ptCur;
-    vector<size_t> idxRef;
-    idxRef.reserve(pKFRef->N);
-    ptRef.reserve(pKFRef->N);
-    ptCur.reserve(pFCur->N);
+    vector<Point2f> vPtRef, vPtCur;
+    vector<size_t> vIdxRef;
+    vIdxRef.reserve(pKFRef->N);
+    vPtRef.reserve(pKFRef->N);
+    vPtCur.reserve(pFCur->N);
 
     assert(pKFRef->N == vKPMatchIdx12.size());
     for (size_t i = 0, iend = pKFRef->N; i < iend; ++i) {
         if (vKPMatchIdx12[i] < 0)
             continue;
-        idxRef.push_back(i);
-        ptRef.push_back(pKFRef->mvKeyPoints[i].pt);
-        ptCur.push_back(pFCur->mvKeyPoints[vKPMatchIdx12[i]].pt);
+        vIdxRef.push_back(i);
+        vPtRef.push_back(pKFRef->mvKeyPoints[i].pt);
+        vPtCur.push_back(pFCur->mvKeyPoints[vKPMatchIdx12[i]].pt);
     }
 
-    if (ptRef.size() == 0)
+    if (vPtRef.size() == 0)
         return 0;
 
-    vector<unsigned char> mask;
-    A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0);
-    // Mat H = findHomography(pt1, pt2, RANSAC, 3, mask);  // 朝天花板摄像头应该用H矩阵, F会退化
+    vector<uchar> vInlier;
+    if (!A12.empty())  // 一般情况下更新A
+        A12 = estimateAffine2D(vPtRef, vPtCur, vInlier, RANSAC, 3.0);
+    else  //NOTE 重定位情况中不能用A去外点, 因为KP匹配本来就是通过A来匹配的. 要用H来剔除外点
+        A12 = findHomography(vPtRef, vPtCur, RANSAC, 3, vInlier);
 
-    assert(idxRef.size() == mask.size());
-    for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
-        if (!mask[i]) {
-            assert(vKPMatchIdx12[idxRef[i]] >= 0);
-            vKPMatchIdx12[idxRef[i]] = -1;
+    assert(vIdxRef.size() == vInlier.size());
+    for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
+        if (!vInlier[i]) {
+            assert(vKPMatchIdx12[vIdxRef[i]] >= 0);
+            vKPMatchIdx12[vIdxRef[i]] = -1;
         } else
             nKPInliers++;
     }
@@ -449,18 +453,18 @@ int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, map<int
     for (auto iter = mapMatch12.begin(); iter != mapMatch12.end(); iter++) {
         const int idxRef = iter->first;
         const int idxCur = iter->second;
-
         vIdxRef.push_back(idxRef);
         vIdxCur.push_back(idxCur);
-
         vPtRef.push_back(pKFRef->mvKeyPoints[idxRef].pt);
         vPtCur.push_back(pFCur->mvKeyPoints[idxCur].pt);
     }
 
-    // RANSAC with fundemantal matrix
-    vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
-    // findHomography(vPtCur, vPtRef, FM_RANSAC, 3.0, vInlier);
-    A12 = estimateAffine2D(vPtRef, vPtCur, vInlier, RANSAC, 3.0);
+    vector<uchar> vInlier;
+    if (!A12.empty())  // 一般情况下更新A
+        A12 = estimateAffine2D(vPtRef, vPtCur, vInlier, RANSAC, 3.0);
+    else  //NOTE 重定位情况中不能用A去外点, 因为KP匹配本来就是通过A来匹配的. 要用H来剔除外点
+        A12 = findHomography(vPtRef, vPtCur, RANSAC, 3, vInlier);
+
     for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
         if (vInlier[i] == true)
             mapMatchGood.emplace(vIdxRef[i], vIdxCur[i]);
@@ -477,7 +481,7 @@ int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, map<int
  * @note    这里的变量对应关系不能出错, 很重要!
  * @date    2019.11.22
  */
-void Track::doTriangulate()
+void Track::doTriangulate(PtrKeyFrame& pKF)
 {
     if (mvKPMatchIdx.empty())
         return;
@@ -492,11 +496,11 @@ void Track::doTriangulate()
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
     int n2 = mnCandidateMPs;
     int nObsCur = mCurrentFrame.countObservations();
-    int nObsRef = mpReferenceKF->countObservations();
+    int nObsRef = pKF->countObservations();
     assert(nObsCur == 0);  // 当前帧应该还没有观测!
 
     // 相机1和2的投影矩阵
-    const Mat Tc1w = mpReferenceKF->getPose();
+    const Mat Tc1w = pKF->getPose();
     const Mat Tc2w = mCurrentFrame.getPose();
     const Mat Tcr = mCurrentFrame.getTcr();
     const Mat Tc1c2 = cvu::inv(Tcr);
@@ -505,7 +509,7 @@ void Track::doTriangulate()
     const cv::Mat Proj1 = Config::PrjMtrxEye;  // P1 = K * cv::Mat::eye(3, 4, CV_32FC1)
     const cv::Mat Proj2 = Config::Kcam * Tcr.rowRange(0, 3);  // P2 = K * Tc2c1(3*4)
 
-    /* 遍历参考帧的KP, 根据'mvMatchIdx'对有匹配点对的KP进行处理, 如果:
+    /* 遍历参考帧的KP, 根据'mvKPMatchIdx'对有匹配点对的KP进行处理, 如果:
      * 1. 参考帧KP已经有对应的MP观测:
      *  - 1.1 对于视差好的MP, 直接给当前帧关联一下MP观测;
      *  - 1.2 对于视差不好的MP, 再一次三角化更新其坐标值. 如果更新后:
@@ -525,10 +529,10 @@ void Track::doTriangulate()
      *      - 3.3 深度不符合, 则丢弃此匹配点对.
      *
      * 几个变量的关系:
-     *  - mnTrackedOld  = 1.1 + 1.2.1
-     *  - mnNewAddedMPs = 2.1 + 3.1
-     *  - mnBadMatches  = 3.3
-     *  - mnGoodInliers = mnInliers - 3.3
+     *  - mnMPTracked  = 1.1 + 1.2.1
+     *  - mnMPsNewAdded = 2.1 + 3.1
+     *  - mnKPMatchesBad  = 3.3
+     *  - mnMPInliers = mnKPInliers - 3.3
      *  - mnCandidateMPs = mnCandidateMPs - 2.1 + 3.2
      *
      * NOTE 对视差不好的MP或者MP候选, 说明它是参考帧和其他帧生成的, 并不是和自己生成的,
@@ -536,15 +540,14 @@ void Track::doTriangulate()
      * 能成为MP或MP候选的点说明其深度都是符合预期的.
      * 最后MP候选将在LocalMap线程中生成视差不好的MP, 他们在添加KF观测后有机会更新视差.
      */
-    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; ++i) {
+    for (size_t i = 0, iend = pKF->N; i < iend; ++i) {
         if (mvKPMatchIdx[i] < 0)
             continue;
 
         PtrMapPoint pObservedMP = nullptr;  // 对于的MP观测
-        const bool bObserved = mpReferenceKF->hasObservationByIndex(i);  // 是否有对应MP观测
+        const bool bObserved = pKF->hasObservationByIndex(i);  // 是否有对应MP观测
         if (bObserved) {
-            assert(mpReferenceKF->mvbViewMPsInfoExist[i] == true);  //! FIXME 有出现失败的情况
-            pObservedMP = mpReferenceKF->getObservation(i);
+            pObservedMP = pKF->getObservation(i);
             if (pObservedMP->isGoodPrl()) {  // 情况1.1
                 mCurrentFrame.setObservation(pObservedMP, mvKPMatchIdx[i]);
                 mnMPTracked++;
@@ -553,12 +556,12 @@ void Track::doTriangulate()
             }
         }
 
-        // 如果参考帧KP没有对应的MP,或者对应MP视差不好，则为此匹配对KP三角化计算深度(相对参考帧的坐标)
+        // 如果参考帧KP没有对应的MP, 或者对应MP视差不好, 则为此匹配对KP三角化计算深度(相对参考帧的坐标)
         // 由于两个投影矩阵是两KF之间的相对投影, 故三角化得到的坐标是相对参考帧的坐标, 即Pc1
-        Point2f pt1 = mpReferenceKF->mvKeyPoints[i].pt;
-        Point2f pt2 = mCurrentFrame.mvKeyPoints[mvKPMatchIdx[i]].pt;
-        Point3f Pc1 = cvu::triangulate(pt1, pt2, Proj1, Proj2);
-        Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
+        const Point2f pt1 = pKF->mvKeyPoints[i].pt;
+        const Point2f pt2 = mCurrentFrame.mvKeyPoints[mvKPMatchIdx[i]].pt;
+        const Point3f Pc1 = cvu::triangulate(pt1, pt2, Proj1, Proj2);
+        const Point3f Pw = cvu::se3map(cvu::inv(Tc1w), Pc1);
 
         // Pc2用Tcr计算出来的是预测值, 故这里用Pc1的深度判断即可
         const bool bAccepDepth = Config::acceptDepth(Pc1.z);  // 深度是否符合
@@ -573,15 +576,15 @@ void Track::doTriangulate()
                 if (bObserved) {  // 情况1.2.1
                     pObservedMP->setPos(Pw);
                     pObservedMP->setGoodPrl(true);
-                    mpReferenceKF->setObsAndInfo(pObservedMP, i, xyzinfo1);
+                    pKF->setObsAndInfo(pObservedMP, i, xyzinfo1);
                     mCurrentFrame.setObservation(pObservedMP, mvKPMatchIdx[i]);
                     mnMPTracked++;
                     n121++;
                 } else {  // 情况2.1和3.1
                     PtrMapPoint pNewMP = make_shared<MapPoint>(Pw, true);
-                    mpReferenceKF->setObsAndInfo(pNewMP, i, xyzinfo1);
+                    pKF->setObsAndInfo(pNewMP, i, xyzinfo1);
+                    pNewMP->addObservation(pKF, i);  // MP只添加KF的观测
                     mCurrentFrame.setObservation(pNewMP, mvKPMatchIdx[i]);
-                    pNewMP->addObservation(mpReferenceKF, i);  // MP只添加KF的观测
                     mpMap->insertMP(pNewMP);
                     mnMPsNewAdded++;
                     if (bCandidated) {  // 对于情况2.1, 候选转正后还要删除候选名单
@@ -593,17 +596,18 @@ void Track::doTriangulate()
                     }
                 }
             } else {  // 如果视差不好
-                if (bObserved) {  // 情况1.2.2更新Pw
+                if (bObserved) {  // 情况1.2.2, 更新Pw
                     pObservedMP->setPos(Pw);
-                } else if (bCandidated) {  // 情况2.2
-                    assert(!mpReferenceKF->hasObservationByIndex(i));
+                } else if (bCandidated) {  // 情况2.2, 更新候选MP
+                    assert(!pKF->hasObservationByIndex(i));
                     mMPCandidates[i].Pc1 = Pc1;
                     mMPCandidates[i].id2 = mCurrentFrame.id;
                     mMPCandidates[i].kpIdx2 = mvKPMatchIdx[i];
+                    mMPCandidates[i].Tc2w = mCurrentFrame.getPose().clone();
                     n22++;
                 } else {  // 情况3.2
-                    assert(!mpReferenceKF->hasObservationByIndex(i));
-                    MPCandidate MPcan(Pc1, mCurrentFrame.id, mvKPMatchIdx[i], Tc2w);
+                    assert(!pKF->hasObservationByIndex(i));
+                    MPCandidate MPcan(pKF, Pc1, mCurrentFrame.id, mvKPMatchIdx[i], Tc2w);
                     mMPCandidates.emplace(i, MPcan);
                     mnCandidateMPs++;
                     n32++;
@@ -620,12 +624,12 @@ void Track::doTriangulate()
         }
     }
     printf("[Track][Info ] #%ld-#%ld KP匹配结果: KP内点数/KP匹配数: %d/%d, "
-           "MP总观测数/关联数/视差好的/更新到好的: %d/%d/%d/%d\n",
-           mCurrentFrame.id, mpReferenceKF->id, mnKPInliers, mnKPMatches, nObsRef, mnMPTracked, n11, n121);
+           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n",
+           mCurrentFrame.id, pKF->id, mnKPInliers, mnKPMatches, nObsRef, mnMPTracked, n11, n121);
     printf("[Track][Info ] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: "
            "%d/%d/%d/%d/%d, "
            "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
-           mCurrentFrame.id, mpReferenceKF->id, n2, n21, n22, n32, mnCandidateMPs, n31, n32, n33, mnMPsNewAdded);
+           mCurrentFrame.id, pKF->id, n2, n21, n22, n32, mnCandidateMPs, n31, n32, n33, mnMPsNewAdded);
 
     // KF判定依据变量更新
     mCurrRatioGoodDepth = mnKPInliers > 0 ? mnCandidateMPs / mnKPInliers : 0;
@@ -638,7 +642,7 @@ void Track::doTriangulate()
     assert((n2 - n21 + n32 == mnCandidateMPs) && (mnCandidateMPs == mMPCandidates.size()));
     assert(nObsCur + mnMPTracked + mnMPsNewAdded ==
            mCurrentFrame.countObservations());  // FIXME maybe
-    assert(nObsRef + mnMPsNewAdded == mpReferenceKF->countObservations());  // FIXME  maybe
+    assert(nObsRef + mnMPsNewAdded == pKF->countObservations());  // FIXME  maybe
 }
 
 void Track::resetLocalTrack()
@@ -891,10 +895,10 @@ void Track::checkReady()
 // 根据优化内点数和重投影误差来判断是否丢失定位
 bool Track::detectIfLost(int nCros, double projError)
 {
-    const int th = (mnMPTracked + mnMPsNewAdded) * 0.6;
+    const int th = mCurrentFrame.countObservations() * 0.6;
     if (nCros < th)
         return true;
-    if (projError > 100.)  // TODO 阈值待调整
+    if (projError > 1000.)  // TODO 阈值待调整
         return true;
 
     return false;
@@ -965,7 +969,7 @@ bool Track::detectIfLost()
  */
 Mat Track::getAffineMatrix(const Se2& dOdo)
 {
-    Mat R0 = getRotationMatrix2D(Point2f(0, 0), dOdo.theta * 180.f / CV_PI, 1.);
+    Mat R0 = getRotationMatrix2D(Point2f(0, 0), dOdo.theta * 180.f / CV_PI, 1);
 
     Mat Tc1c2 = Config::Tcb * dOdo.inv().toCvSE3() * Config::Tbc;  // 4x4
     Mat Rc1c2 = Tc1c2.rowRange(0, 3).colRange(0, 3).clone();  // 3x3
@@ -976,8 +980,8 @@ Mat Track::getAffineMatrix(const Se2& dOdo)
     Mat A;
     R.rowRange(0, 2).convertTo(A, CV_64FC1);
     R0.colRange(0, 2).copyTo(A.colRange(0, 2));  // 去掉尺度变换
-    A.at<double>(0, 2) += t.at<float>(0, 0);  // 加上平移对图像造成的影响
-    A.at<double>(1, 2) += t.at<float>(1, 0);
+    A.at<double>(0, 2) += (double)t.at<float>(0, 0);  // 加上平移对图像造成的影响
+    A.at<double>(1, 2) += (double)t.at<float>(1, 0);
 
     return A.clone();
 }
@@ -1048,7 +1052,7 @@ bool Track::detectLoopClose()
         if (mLoopScore >= minScoreBest) {
             mpLoopKF = pKFBest;
             bDetected = true;
-            fprintf(stderr, "[Track][Info ] #%ld-#%ld(Loop) 重定位-检测到回环#%ld! score = %.3f >= "
+            fprintf(stderr, "[Track][Info ] #%ld-KF#%ld(Loop) 重定位-检测到回环#%ld! score = %.3f >= "
                             "%.3f, 等待验证!\n",
                     mCurrentFrame.id, pKFBest->mIdKF, pKFBest->id, mLoopScore, minScoreBest);
         } else {
@@ -1080,36 +1084,37 @@ bool Track::verifyLoopClose()
     bool bIfMatchMPOnly = false;  // 要看总体匹配点数多不多
     mnKPMatches = mpORBmatcher->SearchByBoW(&(*mpLoopKF), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
     if (mnKPMatches < nMinKPMatch) {
-        fprintf(stderr, "[Track][Warni] #%ld-#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
+        fprintf(stderr, "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);
         return false;
     }
 
     // 匹配点数足够则剔除外点
-    // removeMatchOutlierRansac(&mCurrentFrame, mpLoopKF, mKPMatchesLoop);
     Se2 dOdo = mCurrentFrame.odom - mpLoopKF->odom;
-    mAffineMatrix = getAffineMatrix(dOdo);
+    mAffineMatrix = getAffineMatrix(dOdo);  // 计算先验A
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(*mpLoopKF, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
     if (mnKPMatches < nMinKPMatch) {
-        printf("[Track][Warni] #%ld-#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
+        printf("[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);
         return false;
     }
 
-    mnKPInliers = removeOutliers(mpLoopKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
+    Mat H; // 重定位这里要用H去除外点, 不能用先验A
+    mnKPInliers = removeOutliers(mpLoopKF, &mCurrentFrame, mvKPMatchIdx, H);
     if (mnKPInliers < 10) {
-        printf("[Track][Warni] #%ld-#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
+        printf("[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPInliers, mnKPMatches);
         return false;
     }
+    H.rowRange(0, 2).copyTo(mAffineMatrix);
 
-    //! FIXME 要改成传入参数, 这里是要跟LoopKF做三角化!
-    doTriangulate();  //  对MP视差好的会关联
+    assert(mMPCandidates.empty());
+    doTriangulate(mpLoopKF);  //  对MP视差好的会关联
     const int nObs = mCurrentFrame.countObservations();
     const float ratio = nObs == 0 ? 0 : mnMPInliers * 1.f / nObs;
-    fprintf(stderr, "[Track][Info ] #%ld-#%ld(Loop) 重定位-回环验证成功! 和回环帧的KP匹配数为: %d/%d, "
-                    "MP关联/匹配率为: %d/%.2f(TODO)\n",
-            mCurrentFrame.id, mpLoopKF->mIdKF, mnKPInliers, mnKPMatches, mnMPInliers, ratio);
+    fprintf(stderr, "[Track][Info ] #%ld-KF#%ld(Loop) 重定位-回环验证, 和回环帧的MP关联/KP内点/KP匹配数为: %d/%d/%d, "
+                    "当前帧观测数/MP匹配率为: %d/%.2f (TODO)\n",
+            mCurrentFrame.id, mpLoopKF->mIdKF, mnMPInliers, mnKPInliers, mnKPMatches, nObs, ratio);
 
     //! FIXME 优化位姿, 并计算重投影误差
     int nCorres = 0;
@@ -1119,19 +1124,19 @@ bool Track::verifyLoopClose()
            mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
     poseOptimization(&mCurrentFrame, nCorres, projError);  // 确保已经setViewMP()
     Twb = mCurrentFrame.getTwb();
-    printf("[Track][Warni] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
-           mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
+    printf("[Track][Warni] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 重投影误差为:%.2f\n",
+           mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, projError);
 
     const bool bProjLost = detectIfLost(nCorres, projError);
     if (bProjLost) {
         fprintf(stderr,
-                "[Track][Warni] #%ld-#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
+                "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, nCorres, nObs, projError);
         return false;
     } else {
         mnKPInliers = mnMPInliers;
         mvKPMatchIdx = mvMPMatchIdx;
-        fprintf(stderr, "[Track][Info ] #%ld-#%ld(Loop) 重定位-回环验证成功! MP内点数/总数/重投影误差为: %d/%d/%.2f\n",
+        fprintf(stderr, "[Track][Info ] #%ld-KF#%ld(Loop) 重定位-回环验证成功! MP内点数/总数/重投影误差为: %d/%d/%.2f\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, nCorres, nObs, projError);
         return true;
     }
