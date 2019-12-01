@@ -29,8 +29,8 @@ bool Track::mbUseOdometry = true;
 Track::Track()
 {
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
-    nMinFrames = cvCeil(0.25 * Config::FPS);  // 上溢
-    nMaxFrames = cvFloor(2 * Config::FPS);    // 下溢
+    nMinFrames = min(8, cvCeil(0.25 * Config::FPS));  // 上溢
+    nMaxFrames = cvFloor(1 * Config::FPS);    // 下溢
     mnGoodPrl = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
@@ -73,9 +73,7 @@ void Track::run()
         cv::Mat img;
         Se2 odo;
         mpSensors->readData(odo, img);
-        double t1 = timer.count(), t2 = 0, t3 = 0;
-
-        timer.start();
+ 
         {
             locker lock(mMutexForPub);
             bool noFrame = !(Frame::nextId);
@@ -86,11 +84,9 @@ void Track::run()
 
             mpMap->setCurrentFramePose(mFrame.Tcw);
         }
-        t2 = timer.count();
-        t3 = t1 + t2;
-        trackTimeTatal += t3;
-        cout << "[Track][Timer] #" << mFrame.id << " 前端的耗时: 读取数据/构建+追踪/总耗时为: " << t1 << "/"
-             << t2 << "/" << t3 << "ms, 平均追踪耗时: " << trackTimeTatal / mFrame.id << "ms" << endl;
+        double dt = timer.count();
+        trackTimeTatal += dt;
+        cout << "[Track][Timer] #" << mFrame.id << " 前端总耗时为: " << dt << "ms, 平均耗时: " << trackTimeTatal / mFrame.id << "ms" << endl;
 
         lastOdom = odo;
         rate.sleep();
@@ -110,7 +106,7 @@ void Track::mCreateFrame(const Mat& img, const Se2& odo)
     mFrame.Tcw = Config::Tcb.clone();
 
     if (mFrame.keyPoints.size() > 100) {
-        printf("-- INFO TR: Create first frame with %d features.\n", mFrame.N);
+        cout << "[Track][Info ] #" << mFrame.id << " Create first frame with " << mFrame.N << " features." << endl;
         mpKF = make_shared<KeyFrame>(mFrame);
         mpMap->insertKF(mpKF);
         resetLocalTrack();
@@ -148,7 +144,7 @@ void Track::mTrack(const Mat& img, const Se2& odo)
 
         mpKF = pKF;
 
-        cout << "[Track][Timer] #" << mFrame.id << " 成为了新的KF." << endl;
+        cout << "[Track][Info ] #" << mFrame.id << " 成为了新的KF." << endl;
     }
 }
 

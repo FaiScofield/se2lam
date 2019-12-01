@@ -31,7 +31,7 @@ MapPublish::MapPublish(Map* pMap)
     mKFsNeg.id = 0;
     mKFsNeg.type = visualization_msgs::Marker::LINE_LIST;
     mKFsNeg.scale.x = 0.1;
-    mKFsNeg.scale.y = 0.1;
+    // mKFsNeg.scale.y = 0.1;
     mKFsNeg.pose.orientation.w = 1.0;
     mKFsNeg.action = visualization_msgs::Marker::ADD;
     mKFsNeg.color.r = 0.0;
@@ -45,7 +45,7 @@ MapPublish::MapPublish(Map* pMap)
     mKFsAct.id = 1;
     mKFsAct.type = visualization_msgs::Marker::LINE_LIST;
     mKFsAct.scale.x = 0.1;
-    mKFsAct.scale.y = 0.1;
+    // mKFsAct.scale.y = 0.1;
     mKFsAct.pose.orientation.w = 1.0;
     mKFsAct.action = visualization_msgs::Marker::ADD;
     mKFsAct.color.b = 1.0;
@@ -57,7 +57,7 @@ MapPublish::MapPublish(Map* pMap)
     mKFNow.id = 2;
     mKFNow.type = visualization_msgs::Marker::LINE_LIST;
     mKFNow.scale.x = 0.1;
-    mKFNow.scale.y = 0.1;
+    // mKFNow.scale.y = 0.1;
     mKFNow.pose.orientation.w = 1.0;
     mKFNow.action = visualization_msgs::Marker::ADD;
     mKFNow.color.r = 1.0;
@@ -111,7 +111,7 @@ MapPublish::MapPublish(Map* pMap)
     mCovisGraph.id = 6;
     mCovisGraph.type = visualization_msgs::Marker::LINE_LIST;
     mCovisGraph.scale.x = 0.03;
-    mCovisGraph.scale.y = 0.03;
+    // mCovisGraph.scale.y = 0.03;
     mCovisGraph.pose.orientation.w = 1.0;
     mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.color.r = 0.0;
@@ -125,7 +125,7 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.id = 7;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
     mFeatGraph.scale.x = 0.03;
-    mFeatGraph.scale.y = 0.03;
+    // mFeatGraph.scale.y = 0.03;
     mFeatGraph.pose.orientation.w = 1.0;
     mFeatGraph.action = visualization_msgs::Marker::ADD;
     mFeatGraph.color.r = 0.0;
@@ -139,7 +139,7 @@ MapPublish::MapPublish(Map* pMap)
     mVIGraph.id = 8;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
     mVIGraph.scale.x = 0.06;
-    mVIGraph.scale.y = 0.06;
+    // mVIGraph.scale.y = 0.06;
     mVIGraph.pose.orientation.w = 1.0;
     mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.color.r = 0.0;
@@ -154,7 +154,7 @@ MapPublish::MapPublish(Map* pMap)
     mOdomRawGraph.type = visualization_msgs::Marker::LINE_LIST;
     mOdomRawGraph.action = visualization_msgs::Marker::ADD;
     mOdomRawGraph.scale.x = 0.05;
-    mOdomRawGraph.scale.y = 0.05;
+    // mOdomRawGraph.scale.y = 0.05;
     mOdomRawGraph.pose.orientation.w = 1.0;
     mOdomRawGraph.color.r = 0.8;
     mOdomRawGraph.color.g = 0.0;
@@ -181,13 +181,13 @@ MapPublish::MapPublish(Map* pMap)
         mGroundTruthGraph.id = 11;
         mGroundTruthGraph.type = visualization_msgs::Marker::LINE_LIST;
         mGroundTruthGraph.scale.x = 0.06;
-        mGroundTruthGraph.scale.y = 0.06;
+        // mGroundTruthGraph.scale.y = 0.06;
         mGroundTruthGraph.pose.orientation.w = 1.0;
         mGroundTruthGraph.action = visualization_msgs::Marker::ADD;
         mGroundTruthGraph.color.r = 1.0;
-        mGroundTruthGraph.color.g = 1.0;
-        mGroundTruthGraph.color.b = 0.0;
-        mGroundTruthGraph.color.a = 0.9;
+        mGroundTruthGraph.color.g = 0.0;
+        mGroundTruthGraph.color.b = 1.0;
+        mGroundTruthGraph.color.a = 1.0;
     }
 
     tf::Transform tfT;
@@ -224,28 +224,35 @@ void MapPublish::run()
 
     // load ground truth
     if (Config::ShowGroundTruth) {
-        mvGroundTruth1.reserve(Config::ImgCount);
-        mvGroundTruth2.reserve(Config::ImgCount);
+        mvGroundTruth.reserve(Config::ImgCount);
         int id;
         float x1, y1, t1, x2, y2, t2;
-        string gtFile("/home/vance/dataset/se2/DatasetRoom/id_odo_real.csv");
+        string gtFile("/home/vance/dataset/se2/DatasetRoom/ground_truth.txt");
         ifstream ifs(gtFile, ios_base::in);
+        int i = 0;
+        int offset = 0;
         if (ifs.is_open()) {
             string lineData;
             while (!ifs.eof()) {
+                i++;
+                if (i <= 500)  // 前500个数据紊乱
+                    offset = 0;
+                else
+                    offset = -11680;
+
                 getline(ifs, lineData);
                 if (lineData.empty())
                     continue;
 
                 stringstream ss(lineData);
                 ss >> id >> x1 >> y1 >> t1 >> x2 >> y2 >> t2;
-                Se2 g1(x1, y1, t1, id), g2(x2, y2, t2, id);
-                mvGroundTruth1.push_back(g1);
-                mvGroundTruth2.push_back(g2);
+                Se2 gt(x2 + offset, y2, t2, id);
+                mvGroundTruth.push_back(gt);
             }
         } else {
-            cerr << "[MapPu][Error] Read ground truth file error!" << endl;
+            cerr << "[MapPublisher] Read ground truth file error!" << endl;
         }
+        cout << "[MapPublisher] Read  ground truth data: " << mvGroundTruth.size() << endl;
     }
 
     image_transport::ImageTransport it(nh);
@@ -288,7 +295,7 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cerr << "[MapPu] Exiting mappublish..." << endl;
+    cerr << "[MapPublisher] Exiting mappublish..." << endl;
 
     nh.shutdown();
 
@@ -665,25 +672,22 @@ void MapPublish::publishOdomInformation()
 
 void MapPublish::publishGroundTruth()
 {
-    static int pubId = 0;
-    geometry_msgs::Point msgsLast;
+    static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
+    static int pubId = 0;
     if (pubId == 0) {
-        msgsLast.x = mvGroundTruth1[0].x / mScaleRatio;
-        msgsLast.y = mvGroundTruth1[0].y / mScaleRatio;
-        pubId++;
-        return;
+        msgsLast.x = mvGroundTruth[0].x / mScaleRatio;
+        msgsLast.y = mvGroundTruth[0].y / mScaleRatio;
     }
-
-    if (!mbIsLocalize) {
-        msgsCurr.x = mvGroundTruth1[pubId].x / mScaleRatio;
-        msgsCurr.y = mvGroundTruth1[pubId].y / mScaleRatio;
+    if (!mbIsLocalize && pubId < mvGroundTruth.size()) {
+        msgsCurr.x = mvGroundTruth[pubId].x / mScaleRatio;
+        msgsCurr.y = mvGroundTruth[pubId].y / mScaleRatio;
         mGroundTruthGraph.points.push_back(msgsLast);
         mGroundTruthGraph.points.push_back(msgsCurr);
+        msgsLast = msgsCurr;
+        pubId += 2;  // GT数据量更多，防止显示不全
     }
-    msgsLast = msgsCurr;
-    pubId++;
 
     mGroundTruthGraph.header.stamp = ros::Time::now();
     publisher.publish(mGroundTruthGraph);

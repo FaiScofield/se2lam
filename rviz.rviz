@@ -3,9 +3,7 @@ Panels:
     Help Height: 0
     Name: Displays
     Property Tree Widget:
-      Expanded:
-        - /Marker1
-        - /Image1
+      Expanded: ~
       Splitter Ratio: 0.652482271194458
     Tree Height: 324
   - Class: rviz/Selection
@@ -42,8 +40,9 @@ Visualization Manager:
         Camera: true
         CovisGraph: false
         FeatGraph: false
+        GTGraph: true
         KeyFramesActive: true
-        KeyFramesNegative: false
+        KeyFramesNegative: true
         MapPointsActive: true
         MapPointsNegative: true
         MapPointsNow: true
@@ -62,6 +61,13 @@ Visualization Manager:
       Queue Size: 2
       Transport Hint: raw
       Unreliable: false
+      Value: true
+    - Class: rviz/Axes
+      Enabled: true
+      Length: 3.3333001136779785
+      Name: Axes
+      Radius: 0.15000000596046448
+      Reference Frame: <Fixed Frame>
       Value: true
   Enabled: true
   Global Options:
@@ -91,25 +97,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 32.62171936035156
+      Distance: 57.445396423339844
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -4.2384467124938965
-        Y: -1.8178550004959106
-        Z: 4.673330307006836
+        X: -14.77449893951416
+        Y: 0.6224080324172974
+        Z: 6.9696760177612305
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7648007869720459
+      Pitch: 0.45979738235473633
       Target Frame: se2lam/World
       Value: Orbit (rviz)
-      Yaw: 1.8754029273986816
+      Yaw: 1.2954119443893433
     Saved: ~
 Window Geometry:
   Displays:

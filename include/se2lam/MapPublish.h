@@ -48,7 +48,7 @@ public:
 
 public:
     bool mbIsLocalize;
-    std::vector<Se2> mvGroundTruth1, mvGroundTruth2;
+    std::vector<Se2> mvGroundTruth;
 
     Map* mpMap;
     Track* mpTracker;
