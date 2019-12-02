@@ -12,6 +12,14 @@ target_link_libraries(test_vn
 #    ${LINK_LIBS}
 #)
 
+add_executable(test_Affine
+   test_Affine.cpp
+   test_functions.hpp
+)
+target_link_libraries(test_Affine
+   se2lam
+   ${LINK_LIBS}
+)
 
 add_executable(test_KeyPointMatch
    test_KeyPointMatch.cpp
@@ -28,16 +36,16 @@ target_link_libraries(test_KeyPointMatch
 #    ${LINK_LIBS}
 #)
 
-#add_executable(test_MapPointManager
-#    test_MapPointManager.cpp
-#    test_functions.hpp
-#    TestTrack.hpp
-#    TestViewer.hpp
-#)
-#target_link_libraries(test_MapPointManager
-#    se2lam
-#    ${LINK_LIBS}
-#)
+add_executable(test_SingleThreadTracking
+    test_SingleThreadTracking.cpp
+    test_functions.hpp
+    TestTrack.h
+    TestTrack.cpp
+)
+target_link_libraries(test_SingleThreadTracking
+    se2lam
+    ${LINK_LIBS}
+)
 
 
 #add_executable(test_KltTracking

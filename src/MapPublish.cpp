@@ -749,7 +749,7 @@ cv::Mat MapPublish::drawMatchesInOneImg()
                 const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
                 const Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
 
-                if (mvGoodMatchIdx[i] < 0) {  // 只有KP匹配对标绿色
+                if (mvMatchIdxGood[i] < 0) {  // 只有KP匹配对标绿色
                     circle(imgOut, ptL, 3, Scalar(0, 255, 0), -1);
                     circle(imgOut, ptR, 3, Scalar(0, 255, 0), -1);
                 } else {  // 有MP的匹配点标黄色并连线

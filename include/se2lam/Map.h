@@ -70,13 +70,10 @@ public:
     void updateCovisibility(const PtrKeyFrame& pNewKF);
     void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
                                     float searchRadius = 5.f);
-    bool pruneRedundantKF();
-    int removeLocalOutlierMP(const std::vector<std::vector<int>>& vnOutlierIdxAll);
+    int pruneRedundantKF();
+    int removeLocalOutlierMP(SlamOptimizer& optimizer);
 
     void loadLocalGraph(SlamOptimizer& optimizer);
-    void loadLocalGraph(SlamOptimizer& optimizer,
-                        std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,
-                        std::vector<std::vector<int>>& vnAllIdx);
 
     void loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
                               std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,
@@ -101,7 +98,12 @@ public:
     std::vector<int> mIdxOdoBased;
 
     bool mbNewKFInserted; // for visualizaiton.
-protected:
+
+private:
+    void loadLocalGraph(SlamOptimizer& optimizer,
+                        std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,
+                        std::vector<std::vector<int>>& vnAllIdx);
+
     PtrKeyFrame mCurrentKF;
     cv::Mat mCurrentFramePose;  // Tcw
 
@@ -115,7 +117,7 @@ protected:
     //! updateLocalGraph()和pruneRedundantKF()会更新此变量, 都是LocalMapper在调用. 根据id升序排序
     std::vector<PtrMapPoint> mvLocalGraphMPs;
     std::vector<PtrKeyFrame> mvLocalGraphKFs;
-    std::vector<PtrKeyFrame> mvRefKFs;
+    std::vector<PtrKeyFrame> mvLocalRefKFs;
     LocalMapper* mpLocalMapper;
 
     std::mutex mMutexGlobalGraph;

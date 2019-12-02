@@ -117,7 +117,7 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
 
     mObservations.erase(pKF);
     if (mObservations.empty()) {
-        fprintf(stderr, "[MapPoint] MP#%ld 因为没有观测而被自己设置为null\n", mId);
+        fprintf(stderr, "[MapPoint] MP#%ld 在取消KF#%ld观测时因为没有观测而被自己设置为null\n", pKF->mIdKF, mId);
         setNullSelf();  // 这个函数不能加锁mMutexObs
     } else {
         updateMainKFandDescriptor();

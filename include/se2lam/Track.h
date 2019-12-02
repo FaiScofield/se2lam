@@ -53,6 +53,8 @@ public:
     bool isFinished();
     void requestFinish();
 
+    cv::Mat computeA12(const PtrKeyFrame& pKFRef, const Frame* pFCur, std::vector<int>& vKPMatchIdx);
+
 public:
     // Tracking states
     cvu::eTrackingState mState;
@@ -112,9 +114,9 @@ private:
     PtrKeyFrame mpLoopKF;
     std::map<size_t, MPCandidate> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
     std::map<int, int> mKPMatchesLoop;  // 重定位回环中通过BoW匹配的KP匹配对
-    std::vector<int> mvKPMatchIdx, mvMPMatchIdx;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
-    int mnMPsNewAdded, mnCandidateMPs, mnKPMatchesBad;  // 新增/潜在的MP数及不好的匹配点数
-    int mnKPMatches, mnKPInliers, mnMPInliers, mnMPTracked;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
+    std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
+    int mnMPsNewAdded, mnMPsCandidate, mnKPMatchesBad;  // 新增/潜在的MP数及不好的匹配点数
+    int mnKPMatches, mnKPsInline, mnMPsInline, mnMPsTracked;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
     int mnLostFrames;  // 连续追踪失败的帧数
     double mLoopScore;
 

@@ -70,7 +70,7 @@ public:
     cv::Mat mCurrentImage, mReferenceImage;
     cv::Mat mAffineMatrix, mHomography;
     std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
-    std::vector<int> mvMatchIdx, mvGoodMatchIdx;
+    std::vector<int> mvMatchIdx, mvMatchIdxGood;
     std::string mImageText;
     std::mutex mMutexPub;
 

@@ -63,6 +63,7 @@ void LocalMapper::processNewKF()
     map<size_t, MPCandidate> MPCandidates;
     {
         locker lock(mMutexNewKFs);
+        assert(!mlNewKFs.empty());
         mpNewKF = mlNewKFs.front();
         mlNewKFs.pop_front();
         MPCandidates = mMPCandidates;
@@ -245,12 +246,12 @@ void LocalMapper::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
 }
 
 /**
- * @brief LocalMapper::removeOutlierChi2
+ * @brief   通过一次localBA计算MP内点, 剔除MP外点
  * 把Local Map中的KFs和MPs添加到图中进行优化，然后解除离群MPs的联接关系.
- * 离群MPs观测数小于2时会被删除
  */
 void LocalMapper::removeOutlierChi2()
 {
+/*
     WorkTimer timer;
 
     locker lockmapper(mutexMapper);
@@ -269,9 +270,9 @@ void LocalMapper::removeOutlierChi2()
     const float chi2 = 25;
 
     optimizer.initializeOptimization(0);
-    optimizer.optimize(10);
-    printf("[Local][Info ] #%ld(KF#%ld) 移除离群点前优化成功! 耗时%.2fms. 正在提取离群MP...\n",
-           mpNewKF->id, mpNewKF->mIdKF, timer.count());
+    optimizer.optimize(Config::LocalIterNum);
+    printf("[Local][Info ] #%ld(KF#%ld) 移除离群点前优化成功! 耗时%.2fms. 正在对%ld个局部MP计算内点...\n",
+           mpNewKF->id, mpNewKF->mIdKF, timer.count(), vpEdgesAll.size());
     timer.start();
 
     // 优化后去除离群MP
@@ -279,6 +280,7 @@ void LocalMapper::removeOutlierChi2()
     int nBadMP = 0;
     vector<vector<int>> vnOutlierIdxAll;
 
+    int nToRemoved = 0;
     for (size_t i = 0; i != nAllMP; ++i) {
         vector<int> vnOutlierIdx;
         for (size_t j = 0, jend = vpEdgesAll[i].size(); j < jend; ++j) {
@@ -288,13 +290,14 @@ void LocalMapper::removeOutlierChi2()
                 continue;
 
             eij->computeError();
-            bool chi2Bad = eij->chi2() > chi2;
+            const bool chi2Bad = eij->chi2() > chi2;
 
-            int& idKF = vnAllIdx[i][j];
+            const int& idKF = vnAllIdx[i][j];
 
             if (chi2Bad) {
                 eij->setLevel(1);
                 vnOutlierIdx.push_back(idKF);
+                nToRemoved++;
             }
         }
 
@@ -302,13 +305,24 @@ void LocalMapper::removeOutlierChi2()
     }
 
     nBadMP = mpMap->removeLocalOutlierMP(vnOutlierIdxAll);
-    printf("[Local][Timer] #%ld(KF#%ld) 提取+移除离群MP耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF,
-           timer.count());
-
     vpEdgesAll.clear();
     vnAllIdx.clear();
-    printf("[Local][Info ] #%ld(KF#%ld) 移除离群点共移除了%d个MP, 当前MP总数为%ld个\n", mpNewKF->id,
-           mpNewKF->mIdKF, nBadMP, nAllMP);
+
+    printf("[Local][Info ] #%ld(KF#%ld) MP外点提取/移除数为: %d/%d个, 耗时: %.2fms\n",
+           mpNewKF->id, mpNewKF->mIdKF, nToRemoved, nBadMP, timer.count());
+*/
+    WorkTimer timer;
+
+    if (mpMap->countMPs() == 0)
+        return;
+
+    SlamOptimizer optimizer;
+    initOptimizer(optimizer);
+
+    int nBadMP = mpMap->removeLocalOutlierMP(optimizer);
+
+    printf("[INFO] #%ld(KF#%ld) 移除离群点%d成功! 耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF,
+           nBadMP, timer.count());
 }
 
 /**
@@ -380,6 +394,7 @@ void LocalMapper::run()
 
             setAcceptNewKF(false);  // 干活了，这单先处理，现在不接单了
 
+            //!FIXME MP的关联可能要放到前端去处理, 否则局部线程太慢会影响前端的匹配效果.
             processNewKF();  // 更新MP观测和共视图, 加入到Map中
 
             updateLocalGraphInMap();  // 加了新的KF进来，要更新一下Map里的Local Map 和 RefKFs.
@@ -390,16 +405,16 @@ void LocalMapper::run()
             }
 
             //! 去除冗余的KF和MP，共视关系会被取消，mLocalGraphKFs和mLocalGraphMPs会更新
-            // pruneRedundantKFinMap();
+            //pruneRedundantKFinMap();
 
-            //! NOTE 原作者把这个步骤给注释掉了.
+            //! NOTE 原作者把这个步骤给注释掉了. // FIXME 好像有死锁造成本线程无法继续工作 20191202
             // removeOutlierChi2();  // 这里做了一次LocalBA,并对离群MPs取消联接关系,但没有更新KF位姿
 
             //! 再次更新LocalMap，由于冗余的KF和MP共视关系已经被取消，所以不必但心它们被添加回来
             // updateLocalGraphInMap();
 
             //! LocalMap优化，并更新Local KFs和MPs的位姿
-            // localBA();  // 这里又做了一次LocalBA，更新了KF和MP的位姿
+            localBA();  // 这里又做了一次LocalBA，更新了KF和MP的位姿
 
             //! 看全局地图有没有在执行Global BA，如果在执行会等它先执行完毕
             // mpGlobalMapper->waitIfBusy();
@@ -514,9 +529,20 @@ void LocalMapper::updateLocalGraphInMap()
 //! 去除冗余关键帧
 void LocalMapper::pruneRedundantKFinMap()
 {
-    printf("[Local][Info ] #%ld(KF#%ld) 正在修剪冗余KF...\n", mpNewKF->id, mpNewKF->mIdKF);
+    WorkTimer timer;
     locker lock(mutexMapper);
-    mpMap->pruneRedundantKF();
+
+    int nLocalKFs = mpMap->countLocalKFs();
+    int nLocalMPs = mpMap->countLocalMPs();
+    int nLocalRefs = mpMap->countRefKFs();
+
+    int nPruned = mpMap->pruneRedundantKF();
+
+    printf("[Local][Info ] #%ld(KF#%ld) 修剪冗余KF前后, 局部KF/MP/RefKF的数量为: %d/%d/%d, %ld/%ld/%ld\n",
+           mpNewKF->id, mpNewKF->mIdKF, nLocalKFs, nLocalMPs, nLocalRefs,
+           mpMap->countLocalKFs(), mpMap->countLocalMPs(), mpMap->countRefKFs());
+    printf("[Local][Info ] #%ld(KF#%ld) 修剪冗余KF, 共修剪了%d帧KF, 耗时:%.2fms.\n",
+           mpNewKF->id, mpNewKF->mIdKF, nPruned, timer.count());
 }
 
 void LocalMapper::setGlobalBABegin(bool value)

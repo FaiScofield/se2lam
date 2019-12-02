@@ -8,7 +8,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 
-#include "TestTrack.hpp"
+#include "TestTrack.h"
 
 
 class TestViewer
@@ -256,7 +256,7 @@ void TestViewer::run()
         if (mpMap->empty())
             continue;
 
-        Mat imgMatch = mpTracker->drawMatchesForPub();
+        Mat imgMatch/* = mpTracker->drawMatchesForPub()*/;
         if (imgMatch.empty())
             continue;
 
@@ -458,7 +458,7 @@ void TestViewer::publishKeyFrames()
         }
 
         // Covisibility Graph
-        std::set<PtrKeyFrame> covKFs = pKFi->getAllCovisibleKFs();
+        std::vector<PtrKeyFrame> covKFs = pKFi->getAllCovisibleKFs();
         if (!covKFs.empty()) {
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; ++it) {
                 if ((*it)->mIdKF > pKFi->mIdKF)

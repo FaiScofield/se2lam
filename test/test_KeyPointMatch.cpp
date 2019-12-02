@@ -192,35 +192,36 @@ int main(int argc, char** argv)
         //        vvInliners[idx].push_back(nInlines2);
 
         //! 匹配情况可视化
-        // outImgCV = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxCV);
-        // outImgBow = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxBow);
-        // outImgORBMatch = drawKPMatches(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdx);
-        // outImgWarpH = drawKPMatchesHA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxH, H12);
-        // outImgWarpA = drawKPMatchesHA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxA, A12);
+         outImgCV = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxCV);
+         outImgBow = drawKPMatches(KFRef, KFCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxBow);
+         outImgORBMatch = drawKPMatches(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdx);
+         double projError1 = 0, projError2 = 0;
+         outImgWarpH = drawKPMatchesH(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxH, H12, projError1);
+         outImgWarpA = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxA, A12, projError2);
 
-        // char strMatches1[64], strMatches2[64], strMatches3[64], strMatches4[64], strMatches5[64];
-        // std::snprintf(strMatches1, 64, "CV    F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
-        //               nInliers1, nMatched1);
-        // std::snprintf(strMatches2, 64, "BOW   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
-        //               nInliers2, nMatched2);
-        // std::snprintf(strMatches3, 64, "ORB   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
-        //               nInliers3, nMatched3);
-        // std::snprintf(strMatches4, 64, "WarpH F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
-        //               nInliers4, nMatched4);
-        // std::snprintf(strMatches5, 64, "WarpA F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
-        //               nInliers5, nMatched5);
-        // putText(outImgCV, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        // putText(outImgBow, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        // putText(outImgORBMatch, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        // putText(outImgWarpH, strMatches4, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        // putText(outImgWarpA, strMatches5, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+         char strMatches1[64], strMatches2[64], strMatches3[64], strMatches4[64], strMatches5[64];
+         std::snprintf(strMatches1, 64, "CV    F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
+                       nInliers1, nMatched1);
+         std::snprintf(strMatches2, 64, "BOW   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
+                       nInliers2, nMatched2);
+         std::snprintf(strMatches3, 64, "ORB   F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
+                       nInliers3, nMatched3);
+         std::snprintf(strMatches4, 64, "WarpH F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
+                       nInliers4, nMatched4);
+         std::snprintf(strMatches5, 64, "WarpA F: %ld-%ld, M: %d/%d", frameRef.id, frameCur.id,
+                       nInliers5, nMatched5);
+         putText(outImgCV, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+         putText(outImgBow, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+         putText(outImgORBMatch, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+         putText(outImgWarpH, strMatches4, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+         putText(outImgWarpA, strMatches5, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
 
-        // Mat imgTmp1, imgTmp2, imgTmp3;
-        // hconcat(outImgCV, outImgBow, imgTmp1);
-        // hconcat(outImgORBMatch, outImgWarpH, imgTmp2);
-        // hconcat(imgTmp1, imgTmp2, imgTmp3);
-        // hconcat(imgTmp3, outImgWarpA, outImgConcat);
-        // imshow("CV & BOW & ORB & WarpH & WarpA Matches", outImgConcat);
+         Mat imgTmp1, imgTmp2, imgTmp3;
+         hconcat(outImgCV, outImgBow, imgTmp1);
+         hconcat(outImgORBMatch, outImgWarpH, imgTmp2);
+         hconcat(imgTmp1, imgTmp2, imgTmp3);
+         hconcat(imgTmp3, outImgWarpA, outImgConcat);
+         imshow("CV & BOW & ORB & WarpH & WarpA Matches", outImgConcat);
 
 
         // test A
@@ -233,7 +234,7 @@ int main(int argc, char** argv)
         Mat Rc1c2 = Tc1c2.rowRange(0, 3).colRange(0, 3).clone();  // 3x3
         Mat tc1c2 = Tc1c2.rowRange(0, 3).col(3).clone();    // 3x1
         Mat R = Config::Kcam * Rc1c2 * (Config::Kcam).inv();  // 3x3 这里相当于仿射变换里的A, 不过少了部分平移信息
-        Mat t = Config::Kcam * tc1c2 / 3000.f;  // 3x1 深度假设3.5m
+        Mat t = Config::Kcam * tc1c2 / 3000.f;  // 3x1 深度假设3m
         cout << "R = " << endl << R.rowRange(0, 2) << endl;
         cout << "R的缩放因子 = " << R.at<float>(0, 0) / cos(dOdom.theta) << endl;
 

@@ -20,6 +20,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/calib3d.hpp>
+#include <opencv2/video/video.hpp>
 //#include <boost/algorithm/string.hpp>
 //#include <boost/algorithm/string_regex.hpp>
 #include <boost/filesystem.hpp>
@@ -92,84 +93,31 @@ void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
 {
     ifstream rec(odomFile);
     if (!rec.is_open()) {
-        cerr << "[ERROR] Opening file error in '%s'" << odomFile << endl;
+        cerr << "[ERROR] Opening file error in " << odomFile << endl;
         rec.close();
         return;
     }
 
-    odoData.clear();
+    vector<Se2> vOdoData;
+    vOdoData.reserve(Config::ImgCount);
+
     string line;
     while (std::getline(rec, line) && !line.empty()) {
         istringstream iss(line);
         Se2 odo;
-        iss >> odo.timeStamp >> odo.x >> odo.y >> odo.theta;  // theta 可能会比超过pi,使用前要归一化
-        odo.timeStamp *= 1e-6;
-        odo.x *= 1000.f;
-        odo.y *= 1000.f;
-        odoData.emplace_back(odo);
+        iss >> odo.x >> odo.y >> odo.theta;
+        vOdoData.emplace_back(odo);
     }
     rec.close();
 
-    if (odoData.empty()) {
+    if (vOdoData.empty()) {
         cerr << "[ERROR] Not odom data in the file!" << endl;
         return;
     } else {
-        cout << "[ INFO] Read " << odoData.size() << " odom datas from the file." << endl;
+        cout << "[INFO ] Read " << vOdoData.size() << " odom datas from the file." << endl;
     }
-}
 
-void dataAlignment(vector<RK_IMAGE>& allImages, const vector<Se2>& allOdoms,
-                   vector<Se2>& alignedOdoms)
-{
-    // 去除掉没有odom数据的图像
-    Se2 firstOdo = allOdoms[0];
-    auto iter = allImages.begin();
-    int cut = 0;
-    for (auto iend = allImages.end(); iter != iend; ++iter) {
-        if (iter->timeStamp < firstOdo.timeStamp) {
-            cut++;
-            continue;
-        } else {
-            break;
-        }
-    }
-    allImages.erase(allImages.begin(), iter);
-    printf("[ INFO] Cut %d images for timestamp too earlier, now image size is %ld\n", cut, allImages.size());
-
-    // 数据对齐
-    auto ite = allOdoms.begin(), its = allOdoms.begin();
-    for (size_t i = 0, iend = allImages.size(); i < iend; ++i) {
-        double imgTime = allImages[i].timeStamp;
-
-        while (ite != allOdoms.end()) {
-            if (ite->timeStamp <= imgTime)
-                ite++;
-            else
-                break;
-        }
-        vector<Se2> odoDeq = vector<Se2>(its, ite);
-        its = ite;
-
-        // 插值计算对应的odom
-        Se2 res;
-        size_t n = odoDeq.size();
-        if (n < 2) {
-            cerr << "[Track] ** WARNING ** Less odom sequence input!" << endl;
-            alignedOdoms.push_back(alignedOdoms.back());
-        }
-
-        //! 计算单帧图像时间内的平均速度
-        Se2 tranSum = odoDeq[n - 1] - odoDeq[0];
-        double dt = odoDeq[n - 1].timeStamp - odoDeq[0].timeStamp;
-        double r = (imgTime - odoDeq[n - 1].timeStamp) / dt;
-        assert(r >= 0.f);
-
-        Se2 transDelta(tranSum.x * r, tranSum.y * r, tranSum.theta * r);
-        res = odoDeq[n - 1] + transDelta;
-
-        alignedOdoms.push_back(res);
-    }
-    assert(alignedOdoms.size() == allImages.size());
+    odoData = vOdoData;
 }
 
 Mat drawKPMatches(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef,
@@ -193,43 +141,81 @@ Mat drawKPMatches(const Frame* frameRef, const Frame* frameCur, const Mat& imgRe
     return outImg;
 }
 
-Mat drawKPMatchesHA(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef, const Mat& imgCur,
-                  const vector<int>& matchIdx12, const Mat& HA12)
+Mat drawKPMatchesH(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef, const Mat& imgCur,
+                  const vector<int>& matchIdx12, const Mat& H12, double& projError)
 {
-    Mat H_tmp = Mat::eye(3, 3, CV_64FC1), H21;
-
-    if (!HA12.data)  // H_3x3
+    if (!H12.data)  // H_3x3
         cerr << "Empty H matrix!!" << endl;
-    if (HA12.rows == 2) {
-        HA12.copyTo(H_tmp.rowRange(0, 2));
-        H21 = H_tmp.inv(DECOMP_SVD);
-    } else {
-        H21 = HA12.inv(DECOMP_SVD);
-    }
 
+    Mat H21 = H12.inv(DECOMP_SVD);
 
     Mat imgWarp, outImg;
-//    Mat H21 = H12.inv(DECOMP_SVD);
     warpPerspective(imgCur, imgWarp, H21, imgCur.size());
-    vconcat(imgWarp, imgRef, outImg);
+    hconcat(imgWarp, imgRef, outImg);
 
+    projError = 0;
+    int n = 0;
     for (size_t i = 0, iend = frameRef->N; i < iend; ++i) {
         if (matchIdx12[i] < 0) {
             continue;
         } else {
-            Point2f p = frameCur->mvKeyPoints[matchIdx12[i]].pt;
-            Mat ptCur = (Mat_<double>(3, 1) << p.x, p.y, 1);
-            Mat ptWap = H21 * ptCur;
-            ptWap /= ptWap.at<double>(2);
+            const Point2f& ptRef = frameRef->mvKeyPoints[i].pt;
+            const Point2f& ptCur = frameCur->mvKeyPoints[matchIdx12[i]].pt;
+            const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+            Mat pt1W = H21 * pt1;
+            pt1W /= pt1W.at<double>(2);
 
-            Point2f p1 = Point2f(ptWap.at<double>(0), ptWap.at<double>(1));
-            Point2f p2 = frameRef->mvKeyPoints[i].pt + Point2f(0, imgCur.rows);
+            const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+            const Point2f ptR = ptRef + Point2f(imgCur.cols, 0);
 
-            circle(outImg, p1, 3, Scalar(0, 255, 0));
-            circle(outImg, p2, 3, Scalar(0, 255, 0));
-            line(outImg, p1, p2, Scalar(0, 0, 255));
+            n++;
+            projError += norm(ptRef - ptL);
+            circle(outImg, ptL, 3, Scalar(0, 255, 0));
+            circle(outImg, ptR, 3, Scalar(0, 255, 0));
+            if (i % 3 == 0)
+                line(outImg, ptL, ptR, Scalar(0, 0, 255));
         }
     }
+    projError /= n * 1.f;
+    return outImg.clone();
+}
+
+Mat drawKPMatchesA(const Frame* frameRef, const Frame* frameCur, const Mat& imgRef, const Mat& imgCur,
+                  const vector<int>& matchIdx12, const Mat& A12, double& projError)
+{
+    if (!A12.data)  // A12_2x3
+        cerr << "Empty A matrix!!" << endl;
+
+    Mat A21;
+    invertAffineTransform(A12, A21);  // A21_2x3
+
+    Mat imgWarp, outImg;
+    warpAffine(imgCur, imgWarp, A21, imgCur.size());
+    hconcat(imgWarp, imgRef, outImg);
+
+    projError = 0;
+    int n = 0;
+    for (size_t i = 0, iend = frameRef->N; i < iend; ++i) {
+        if (matchIdx12[i] < 0) {
+            continue;
+        } else {
+            const Point2f& ptRef = frameRef->mvKeyPoints[i].pt;
+            const Point2f& ptCur = frameCur->mvKeyPoints[matchIdx12[i]].pt;
+            const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+            const Mat pt1W = A21 * pt1;
+
+            const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+            const Point2f ptR = ptRef + Point2f(imgCur.cols, 0);
+
+            n++;
+            projError += norm(ptRef - ptL);
+            circle(outImg, ptL, 3, Scalar(0, 255, 0));
+            circle(outImg, ptR, 3, Scalar(0, 255, 0));
+            if (i % 5 == 0)
+                line(outImg, ptL, ptR, Scalar(0, 0, 255));
+        }
+    }
+    projError /= n * 1.f;
     return outImg;
 }
 
@@ -259,7 +245,7 @@ Mat drawKPMatches(const PtrKeyFrame KFRef, const PtrKeyFrame KFCur, const Mat& i
  * @return          返回内点数
  */
 int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
-                         vector<int>& matches12, Mat& H12, const int flag = 1)
+                         vector<int>& matches12, Mat& H12, int flag = 1)
 {
     assert(kpRef.size() == kpCur.size());
     assert(!matches12.empty());
@@ -305,7 +291,7 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
 }
 
 int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
-                         map<int, int>& matches12, Mat& H12, const int flag = 1)
+                         map<int, int>& matches12, Mat& H12, int flag = 1)
 {
     assert(!matches12.empty());
 
@@ -342,8 +328,17 @@ int removeOutliersWithHF(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& 
     return nInlier;
 }
 
+/**
+ * @brief removeOutliersWithA
+ * @param flag
+ *  0:  estimateAffine2D(), full A
+ *  1:  estimateAffinePartial2D(),  partial A
+ *  2:  estimateRigidTransform(),   rigid transform
+ *
+ * @return
+ */
 int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
-                         vector<int>& matches12, Mat& A12)
+                        vector<int>& matches12, Mat& A12, const int flag = 0)
 {
     assert(kpRef.size() == kpCur.size());
     assert(!matches12.empty());
@@ -363,7 +358,26 @@ int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& k
     }
 
     vector<unsigned char> mask;
-    A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0); // 2x3
+    switch (flag) {
+    case 0:
+        A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0);
+        break;
+    case 1:
+        A12 = estimateAffinePartial2D(ptRef, ptCur, mask, RANSAC, 3.0);
+        break;
+    case 2:
+        //! NOTE 内点数<50%后无法计算
+        A12 = estimateRigidTransform(ptRef, ptCur, false);
+        mask.resize(ptRef.size(), 1);
+        if (A12.empty()) {
+            cerr << "Warning! 内点数太少无法计算RigidTransform!" << endl;
+            A12 = Mat::eye(2, 3, CV_64FC1);
+        }
+        break;
+    default:
+        A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0);
+        break;
+    }
 
     int nInlier = 0;
     for (size_t i = 0, iend = mask.size(); i < iend; ++i) {
