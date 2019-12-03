@@ -93,6 +93,6 @@ int main(int argc, char** argv)
     delete pVocabulary;
     delete pMap;
     delete pMapPub;
-    delete pMapPub;
+    delete pTracker;
     return 0;
 }

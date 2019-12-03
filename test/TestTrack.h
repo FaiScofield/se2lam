@@ -75,6 +75,9 @@ private:
     void doLocalBA(Frame& pKF);
     void startNewTrack();
 
+    // for debug
+    void localBA_test();
+
     Map* mpMap;
     MapPublish* mpMapPublisher;
     ORBextractor* mpORBextractor;  // 这三个有new
@@ -89,7 +92,7 @@ private:
     std::map<int, int> mKPMatchesLoop;  // 和回环帧的BoW匹配情况
     std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;  // KP内点匹配对/三角化结果都好的匹配
     int mnMPsCandidate;  // 潜在MP总数
-    int mnKPMatches, mnKPsInline, mnKPMatchesBad;  // KP匹配对数/内点数/三角化结果不符而剔除的匹配对数
+    int mnKPMatches, mnKPsInline, mnKPMatchesGood;  // KP匹配对数/内点数/三角化结果不符而剔除的匹配对数
     int mnMPsTracked, mnMPsNewAdded, mnMPsInline;  // 三角化中关联上MP数/新增MP数/总MP配对数(前两者之和)
     int mnLostFrames;  // 连续追踪失败的帧数
     double mLoopScore;

@@ -112,8 +112,8 @@ void MapPoint::eraseObservation(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexObs);
 
-    Point3f viewPos = pKF->getMPPoseInCamareFrame(mObservations[pKF]);
-    Point3f normPos = viewPos * (1.f / cv::norm(viewPos));
+    Point3f viewPos = cvu::se3map(pKF->getPose(), mPos);
+    Point3f normPos = viewPos * 1.f / cv::norm(viewPos);
 
     mObservations.erase(pKF);
     if (mObservations.empty()) {

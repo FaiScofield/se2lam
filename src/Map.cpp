@@ -47,7 +47,6 @@ void Map::insertMP(const PtrMapPoint& pMP)
     locker lock(mMutexGlobalGraph);
     pMP->setMap(this);
     mspMPs.insert(pMP);
-    // printf("[ Map ][Info ] 插入了MP#%ld, 观测数: %ld\n", pMP->mId, pMP->countObservations());
 }
 
 void Map::eraseKF(const PtrKeyFrame& pKF)
@@ -66,7 +65,6 @@ void Map::eraseKF(const PtrKeyFrame& pKF)
 
 void Map::eraseMP(const PtrMapPoint& pMP)
 {
-    printf("[ Map ][Info ] 正在删除MP#%ld...\n", pMP->mId);
     locker lock(mMutexGlobalGraph);
     mspMPs.erase(pMP);
 

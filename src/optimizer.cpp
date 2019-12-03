@@ -773,8 +773,8 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     optimizer.setVerbose(false);
     optimizer.verifyInformationMatrices(true);
 
-//    int camParaId = 0;
-//    addCamPara(optimizer, Config::Kcam, camParaId);
+    int camParaId = 0;
+    addCamPara(optimizer, Config::Kcam, camParaId);
 
     // 当前帧位姿节点(待优化变量)
     g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();

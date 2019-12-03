@@ -20,7 +20,7 @@ typedef unique_lock<mutex> locker;
 TestTrack::TestTrack()
     : mState(cvu::NO_READY_YET), mLastState(cvu::NO_READY_YET), mpReferenceKF(nullptr),
       mpNewKF(nullptr), mpLoopKF(nullptr), mnMPsCandidate(0), mnKPMatches(0), mnKPsInline(0),
-      mnKPMatchesBad(0), mnMPsTracked(0), mnMPsNewAdded(0), mnMPsInline(0), mnLostFrames(0), mLoopScore(0)
+      mnKPMatchesGood(0), mnMPsTracked(0), mnMPsNewAdded(0), mnMPsInline(0), mnLostFrames(0), mLoopScore(0)
 {
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
     mpORBmatcher = new ORBmatcher(0.9, true);
@@ -77,8 +77,8 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
             return;
         } else if (mState == cvu::OK) {
             bOK = trackReferenceKF();
-            if (!bOK)
-                bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
+            //if (!bOK)
+            //    bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
         } else if (mState == cvu::LOST) {
             // FIXME 回环通过产生新的KF的MP观测数太少!
             bOK = doRelocalization();  // 没追上的直接检测回环重定位
@@ -95,13 +95,9 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
         mState = cvu::LOST;
     }
 
-    copyForPub();
-
-    {  // Reset
-        locker lock(mMutexForPub);
-        mLastRefKFid = mpReferenceKF->id;  // cur更新成ref后ref的id就和cur相等了, 这里仅用于输出log
-        resetLocalTrack();  // KF判断在这里
-    }
+    //copyForPub();
+    mLastRefKFid = mpReferenceKF->id;  // cur更新成ref后ref的id就和cur相等了, 这里仅用于输出log
+    resetLocalTrack();  // KF判断在这里
 
     t3 = t1 + t2;
     trackTimeTatal += t3;
@@ -125,7 +121,7 @@ void TestTrack::processFirstFrame()
         mLastFrame = mCurrentFrame;
         mState = cvu::OK;
     } else {
-        cerr << "[Warni] Failed to create first frame for too less keyPoints: "
+        cerr << "[WARN] Failed to create first frame for too less keyPoints: "
              << mCurrentFrame.N << endl;
 
         Frame::nextId = 0;
@@ -138,7 +134,7 @@ bool TestTrack::trackReferenceKF()
     if (mCurrentFrame.isNull())
         return false;
     if (mCurrentFrame.mTimeStamp < mLastFrame.mTimeStamp) {
-        fprintf(stderr, "[Warni] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
+        fprintf(stderr, "[WARN] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
                 mCurrentFrame.id, mLastFrame.id, mLastFrame.mTimeStamp, mCurrentFrame.mTimeStamp);
         return false;
     }
@@ -150,9 +146,9 @@ bool TestTrack::trackReferenceKF()
 
     //! 2.基于等距变换先验估计投影Cell的位置
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix,
-                                                  mvKPMatchIdx, 20);
+                                                  mvKPMatchIdx, 25);
     if (mnKPMatches < 15) {
-        printf("[Warni] #%ld-#%ld 与参考帧匹配[总]点数少于15(%d), 即将转为重定位!\n",
+        printf("[WARN] #%ld-#%ld 与参考帧匹配[总]点数少于15(%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, mnKPMatches);
         return false;
     }
@@ -160,7 +156,7 @@ bool TestTrack::trackReferenceKF()
     //! 3.利用仿射矩阵A计算KP匹配的内点，内点数大于10才能继续
     mnKPsInline = removeOutliers(mpReferenceKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
     if (mnKPsInline < 10) {
-        printf("[Warni] #%ld-#%ld 与参考帧匹配[内]点数少于10(%d/%d), 即将转为重定位!\n",
+        printf("[WARN] #%ld-#%ld 与参考帧匹配[内]点数少于10(%d/%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, mnKPsInline, mnKPMatches);
         return false;
     }
@@ -170,25 +166,23 @@ bool TestTrack::trackReferenceKF()
 
     //! TODO FIXME 5.最小化重投影误差优化当前帧位姿
     const int nObs = mCurrentFrame.countObservations();
-    if (0 && mnMPsTracked > 0 && nObs > 0) {  // 保证有MP观测才做优化 // TODO
-        Se2 Twb = mCurrentFrame.getTwb();
-        printf("[Warni] #%ld-#%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%d\n",
-            mCurrentFrame.id, mpReferenceKF->id, Twb.x, Twb.y, Twb.theta, nObs);
+    if (mnMPsTracked > 0 && nObs > 0) {  // 保证有MP观测才做优化 // TODO
+        Se2 Twb1 = mCurrentFrame.getTwb();
 
         int nCros = 0;
         double projError = 10000.;
         poseOptimization(&mCurrentFrame, nCros, projError);  // 更新 mPose, mvbOutlier
         // mCurrentFrame.updateObservationsAfterOpt();  // 根据 mvbOutlier 更新Frame的观测情况
 
-        Twb = mCurrentFrame.getTwb();
-        printf("[Warni] #%ld-#%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
-               mCurrentFrame.id, mpReferenceKF->id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
-        printf("[Warni] #%ld-#%ld 位姿优化情况: MP内点数/重投影误差为: %d/%.3f,\n",
-               mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
+        Se2 Twb2 = mCurrentFrame.getTwb();
+        printf("[INFO] #%ld-#%ld 位姿更新前后的值为: [%.2f, %.2f, %.2f] ==> [%.2f, %.2f, %.2f]\n",
+               mCurrentFrame.id, mpReferenceKF->id, Twb1.x, Twb1.y, Twb1.theta, Twb2.x, Twb2.y, Twb2.theta);
+        printf("[WARN] #%ld-#%ld 位姿优化情况: 可视MP数/MP内点数/重投影误差为: %ld/%d/%.3f,\n",
+               mCurrentFrame.id, mpReferenceKF->id, nObs, nCros, projError);
 
 //        bool lost = detectIfLost(nCros, projError);
 //        if (lost) {
-//            printf("[Warni] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, 即将转为重定位!\n",
+//            printf("[WARN] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, 即将转为重定位!\n",
 //                   mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
 //            return false;
 //        }
@@ -241,8 +235,7 @@ void TestTrack::doTriangulate(PtrKeyFrame& pKF)
     mnMPsInline = 0;
     mnMPsTracked = 0;
     mnMPsNewAdded = 0;
-    mnKPMatchesBad = 0;
-    int nKPMatchesGood = 0;
+    mnKPMatchesGood = 0;
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
     int n2 = mnMPsCandidate;
     int nObsCur = mCurrentFrame.countObservations();
@@ -294,7 +287,7 @@ void TestTrack::doTriangulate(PtrKeyFrame& pKF)
         if (mvKPMatchIdx[i] < 0)
             continue;
 
-        nKPMatchesGood++;
+        mnKPMatchesGood++;
         PtrMapPoint pObservedMP = nullptr;  // 对于的MP观测
         const bool bObserved = pKF->hasObservationByIndex(i);  // 是否有对应MP观测
         if (bObserved) {
@@ -370,18 +363,16 @@ void TestTrack::doTriangulate(PtrKeyFrame& pKF)
         } else {  // 如果深度计算不符合预期
             if (!bObserved && !bCandidated) {  // 情况3.3
                 n33++;
-                mnKPMatchesBad++;
-                nKPMatchesGood--;
+                mnKPMatchesGood--;
                 mvKPMatchIdxGood[i] = -1;
             }
             // 情况1.2.3和2.3不处理
         }
     }
-    printf("[INFO] #%ld-#%ld KP匹配结果: KP内点数/KP匹配数: %d/%d, "
-           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n",
-           mCurrentFrame.id, pKF->id, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
-    printf("[INFO] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: "
-           "%d/%d/%d/%d/%d, "
+    printf("[INFO] #%ld-#%ld KP匹配结果: KP好匹配数/总内点数/总匹配数: %d/%d/%d, "
+           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n", mCurrentFrame.id, pKF->id,
+           mnKPMatchesGood, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
+    printf("[INFO] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
            "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
            mCurrentFrame.id, pKF->id, n2, n21, n22, n32, mnMPsCandidate, n31, n32, n33, mnMPsNewAdded);
 
@@ -391,8 +382,7 @@ void TestTrack::doTriangulate(PtrKeyFrame& pKF)
 
     assert(n11 + n121 == mnMPsTracked);
     assert(n21 + n31 == mnMPsNewAdded);
-    assert(n33 == mnKPMatchesBad);
-    assert(nKPMatchesGood + mnKPMatchesBad == mnKPsInline);
+    assert(n33 + mnKPMatchesGood == mnKPsInline);
     assert(mnMPsTracked + mnMPsNewAdded == mnMPsInline);
     assert((n2 - n21 + n32 == mnMPsCandidate) && (mnMPsCandidate == mMPCandidates.size()));
     assert(nObsCur + mnMPsTracked + mnMPsNewAdded == mCurrentFrame.countObservations());
@@ -459,6 +449,7 @@ void TestTrack::resetLocalTrack()
 
             addNewKF(pNewKF, mMPCandidates);  // 新的KF观测和共视关系在LocalMap里更新
 
+            copyForPub();
             mpReferenceKF = pNewKF;
             mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
             mMPCandidates.clear();  // 加了新的KF后才清空. 和普通帧的匹配也会生成MP
@@ -466,13 +457,14 @@ void TestTrack::resetLocalTrack()
             mLastRatioGoodDepth = 0.;
             mLastRatioGoodParl = 0.;
         } else {
+            copyForPub();
             mLastRatioGoodDepth = mCurrRatioGoodDepth;
             mLastRatioGoodParl = mCurrRatioGoodParl;
         }
         mLastFrame = mCurrentFrame;
         mnKPMatches = 0;
         mnKPsInline = 0;
-        mnKPMatchesBad = 0;
+        mnKPMatchesGood = 0;
         mnMPsTracked = 0;
         mnMPsNewAdded = 0;
         mnMPsInline = 0;
@@ -488,15 +480,29 @@ void TestTrack::resetLocalTrack()
 
         PtrKeyFrame pNewKF = make_shared<KeyFrame>(mLastFrame);
         addNewKF(pNewKF, mMPCandidates);
+
+        copyForPub();
         mpReferenceKF = pNewKF;
+        mMPCandidates.clear();
+        mLastFrame = mCurrentFrame;
+        mnKPMatches = 0;
+        mnKPsInline = 0;
+        mnKPMatchesGood = 0;
+        mnMPsTracked = 0;
+        mnMPsNewAdded = 0;
+        mnMPsInline = 0;
+        mLastRatioGoodDepth = 0.f;
+        mLastRatioGoodParl = 0.f;
+        return;
     }
 
     // 处于丢失的状态则直接交换前后帧数据
+    copyForPub();
     mMPCandidates.clear();
     mLastFrame = mCurrentFrame;
     mnKPMatches = 0;
     mnKPsInline = 0;
-    mnKPMatchesBad = 0;
+    mnKPMatchesGood = 0;
     mnMPsTracked = 0;
     mnMPsNewAdded = 0;
     mnMPsInline = 0;
@@ -515,32 +521,38 @@ bool TestTrack::needNewKF()
     int deltaFrames = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id);
 
     // 必要条件
-    bool c0 = deltaFrames > nMinFrames;  // 下限
+    bool c0 = deltaFrames >= nMinFrames;  // 下限
 
     // 充分条件
-    bool c1 = deltaFrames > nMaxFrames;  // 上限
-    bool c2 = mnKPMatches < 20 || mnKPsInline < 15;  // 和参考帧匹配的内点数太少.
-    bool c3 = mnMPsCandidate > 80;  // 候选MP多且新增MP少(远)已经新增的MP数够多
-    bool c4 = (mCurrRatioGoodDepth < mLastRatioGoodDepth) && (mCurrRatioGoodParl < mLastRatioGoodParl);
-    bool bNeedKFByVo = c0 && (c1 || c2 || c3 || c4);
+    bool c1 = mnKPMatches < 50 && (mnKPsInline < 20 || mnKPMatchesGood < 15); // 和参考帧匹配的内点数太少. 这里顺序很重要!
+    bool c2 = mnMPsCandidate > 80;  // 候选MP多且新增MP少(远)已经新增的MP数够多
+    bool c3 = (mCurrRatioGoodDepth < mLastRatioGoodDepth) && (mCurrRatioGoodParl < mLastRatioGoodParl);
+    bool bNeedKFByVO = c0 && (c1 || c2 || c3);
 
-    // 旋转平移的条件可以和跟踪条件结合考虑
+    //! 1.跟踪要跪了必须要加入新的KF
+    if (bNeedKFByVO) {
+        printf("[INFO] #%ld-#%ld 成为了新的KF(#%ld), 其KF条件满足情况: 内点少(%d)/潜在或已增多(%d)/追踪要丢(%d)\n",
+               mCurrentFrame.id, mpReferenceKF->id, KeyFrame::mNextIdKF, c1, c2, c3);
+        return true;
+    }
+
+    // 上限/旋转/平移
+    bool c4 = deltaFrames > nMaxFrames;  // 上限
     Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
     bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过50°
     cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     cv::Mat xy = cTc.rowRange(0, 2).col(3);
     bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
-    bool bNeedKFByOdo = c5 || c6;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+    bool bNeedKFByOdo = c4 && (c5 || c6);  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
 
-    bool bNeedNewKF = bNeedKFByVo || bNeedKFByOdo;
-    if (!bNeedNewKF) {
-        return false;
-    } else {
-        printf("[INFO] #%ld-#%ld 成为了新的KF(#%ld), 其KF条件满足情况: "
-               "下限(%d)/上限(%d)/内点(%d)/潜在或已增(%d)/追踪(%d)/旋转(%d)/平移(%d)\n",
-               mCurrentFrame.id, mpReferenceKF->id, KeyFrame::mNextIdKF, c0, c1, c2, c3, c4, c5, c6);
+    //! 2.如果跟踪效果还可以, 就看旋转平移条件
+    if (bNeedKFByOdo) {
+        printf("[INFO] #%ld-#%ld 成为了新的KF(#%ld), 其KF条件满足情况: 达上限(%d)/大旋转(%d)/大平移(%d)\n",
+               mCurrentFrame.id, mpReferenceKF->id, KeyFrame::mNextIdKF, c4, c5, c6);
         return true;
     }
+
+    return false;
 }
 
 void TestTrack::copyForPub()
@@ -561,23 +573,23 @@ void TestTrack::copyForPub()
         mpMapPublisher->mReferenceImage = mpReferenceKF->mImage.clone();
 
         mpMapPublisher->mvReferenceKPs = mpReferenceKF->mvKeyPoints;
-        std::snprintf(strMatches, 64, "F: %ld-%ld, KF: %ld(%ld)-%ld, D: %ld, M: %d/%d/%d",
+        std::snprintf(strMatches, 64, "F: %ld->%ld, KF: %ld(%ld)->%ld, D: %ld, M: %d/%d/%d/%d",
                       mCurrentFrame.id, mCurrentFrame.countObservations(), mpReferenceKF->id,
                       mpReferenceKF->mIdKF, mpReferenceKF->countObservations(),
-                      mCurrentFrame.id - mpReferenceKF->id, mnMPsInline, mnKPsInline - mnKPMatchesBad,
-                      mnKPMatches);
+                      mCurrentFrame.id - mpReferenceKF->id, mnMPsInline, mnKPMatchesGood,
+                      mnKPsInline, mnKPMatches);
     } else {  // 丢失情况和刚完成重定位
         if (mpLoopKF) {
             mpMapPublisher->mReferenceImage = mpLoopKF->mImage.clone();
             mpMapPublisher->mvReferenceKPs = mpLoopKF->mvKeyPoints;
-            std::snprintf(strMatches, 64, "F: %ld-%ld, LoopKF: %ld(%ld)-%ld, Score: %.3f, M: %d/%d/%d",
+            std::snprintf(strMatches, 64, "F: %ld->%ld, LoopKF: %ld(%ld)->%ld, Score: %.3f, M: %d/%d/%d/%d",
                           mCurrentFrame.id, mCurrentFrame.countObservations(), mpLoopKF->id,
                           mpLoopKF->mIdKF, mpLoopKF->countObservations(), mLoopScore, mnMPsInline,
-                          mnKPsInline - mnKPMatchesBad, mnKPMatches);
+                          mnKPMatchesGood, mnKPsInline, mnKPMatches);
         } else {
             mpMapPublisher->mReferenceImage = Mat::zeros(mCurrentFrame.mImage.size(), CV_8UC1);
             mpMapPublisher->mvReferenceKPs.clear();
-            std::snprintf(strMatches, 64, "F: %ld-%ld, Have no LoopKF!", mCurrentFrame.id,
+            std::snprintf(strMatches, 64, "F: %ld->%ld, Have no LoopKF!", mCurrentFrame.id,
                           mCurrentFrame.countObservations());
         }
     }
@@ -626,11 +638,12 @@ bool TestTrack::doRelocalization()
     if (mCurrentFrame.mTimeStamp < mLastFrame.mTimeStamp)
         return false;
 
-    mnMPsNewAdded = mnMPsCandidate = mnKPMatchesBad = 0;
+    mnMPsNewAdded = mnMPsCandidate = mnKPMatchesGood = 0;
     mnKPsInline = mnMPsInline = mnMPsTracked = 0;
 
     updateFramePoseFromRef();
 
+    fprintf(stderr, "[INFO] #%ld 正在进行重定位...\n", mCurrentFrame.id);
     bool bDetected = detectLoopClose();
     bool bVerified = false;
     if (bDetected) {
@@ -685,12 +698,9 @@ bool TestTrack::detectLoopClose()
             fprintf(stderr, "[INFO] #%ld-KF#%ld(Loop) 重定位-检测到回环#%ld! score = %.3f >= "
                             "%.3f, 等待验证!\n",
                     mCurrentFrame.id, pKFBest->mIdKF, pKFBest->id, mLoopScore, minScoreBest);
-        } else {
-            mpLoopKF.reset();
-            fprintf(stderr,
-                    "[Warni] #%ld 重定位-回环检测#%ld(KF#%ld)失败! score = %.3f < %.3f\n",
-                    mCurrentFrame.id, pKFBest->id, pKFBest->mIdKF, mLoopScore, minScoreBest);
         }
+    } else {
+        fprintf(stderr, "[WARN] #%ld 重定位-回环检测失败! 所有的KF场景相识度都太低!\n", mCurrentFrame.id);
     }
 
     return bDetected;
@@ -713,7 +723,7 @@ bool TestTrack::verifyLoopClose()
     bool bIfMatchMPOnly = false;  // 要看总体匹配点数多不多
     mnKPMatches = mpORBmatcher->SearchByBoW(&(*mpLoopKF), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
     if (mnKPMatches < nMinKPMatch * 0.6) {
-        fprintf(stderr, "[Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
+        fprintf(stderr, "[WARN] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, int(nMinKPMatch * 0.6));
         return false;
     }
@@ -723,14 +733,14 @@ bool TestTrack::verifyLoopClose()
     mAffineMatrix = getAffineMatrix(dOdo);  // 计算先验A
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(*mpLoopKF, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
     if (mnKPMatches < nMinKPMatch) {
-        printf("[Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
+        printf("[WARN] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);
         return false;
     }
 
     mnKPsInline = removeOutliers(mpLoopKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
     if (mnKPsInline < 10) {
-        printf("[Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
+        printf("[WARN] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPsInline, mnKPMatches);
         return false;
     }
@@ -747,17 +757,17 @@ bool TestTrack::verifyLoopClose()
     int nCorres = 0;
     double projError = 1000.;
     Se2 Twb = mCurrentFrame.getTwb();
-    printf("[Warni] #%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
+    printf("[WARN] #%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
            mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
     poseOptimization(&mCurrentFrame, nCorres, projError);  // 确保已经setViewMP()
     Twb = mCurrentFrame.getTwb();
-    printf("[Warni] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 重投影误差为:%.2f\n",
+    printf("[WARN] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 重投影误差为:%.2f\n",
            mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, projError);
 
     const bool bProjLost = detectIfLost(nCorres, projError);
     if (bProjLost) {
         fprintf(stderr,
-                "[Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
+                "[WARN] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, nCorres, nObs, projError);
         return false;
     } else {
@@ -772,6 +782,8 @@ bool TestTrack::verifyLoopClose()
 void TestTrack::doLocalBA(Frame& frame)
 {
     WorkTimer timer;
+
+    Se2 Twb1 = frame.getTwb();
 
     SlamOptimizer optimizer;
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
@@ -831,10 +843,11 @@ void TestTrack::doLocalBA(Frame& frame)
     Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, 0));
     frame.setPose(Tcw);  // 更新Tcw和Twb
 
-    Se2 Twb = frame.getTwb();
-    fprintf(stderr, "[INFO] #%ld-#%ld 局部地图投影优化成功, 参与优化的MP观测数 = %d, 耗时 "
-                    "= %.2fms, 位姿更新为:[%.2f, %.2f, %.2f]\n",
-            frame.id, mpReferenceKF->id, vertexId, timer.count(), Twb.x, Twb.y, Twb.theta);
+    Se2 Twb2 = frame.getTwb();
+    printf("[INFO] #%ld-#%ld 局部地图投影优化成功, 参与优化的MP观测数为%d, 耗时%.2fms, "
+           "优化前后位姿为: [%.2f, %.2f, %.2f] ==> [%.2f, %.2f, %.2f]\n",
+           frame.id, mpReferenceKF->id, vertexId, timer.count(),
+           Twb1.x, Twb1.y, Twb1.theta, Twb2.x, Twb2.y, Twb2.theta);
 }
 
 void TestTrack::startNewTrack()
@@ -869,6 +882,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
     mpNewKF->updateCovisibleGraph();
 
     PtrKeyFrame pKFLast = mpMap->getCurrentKF();
+    assert(mpNewKF->mIdKF - pKFLast->mIdKF == 1);
     Mat measure;
     g2o::Matrix6d info;
     calcOdoConstraintCam(mpNewKF->odom - pKFLast->odom, measure, info);
@@ -902,22 +916,25 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
     printf("[TIME] #%ld(KF#%ld) L5.修剪冗余KF耗时: %.2fms\n", pKF->id, pKF->mIdKF, t5);
 
     //! 6.删除MP外点
-    timer.start();
-    removeOutlierChi2();
-    double t6 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) L6.删除MP外点耗时: %.2fms\n", pKF->id, pKF->mIdKF, t6);
+//    timer.start();
+//    removeOutlierChi2();
+//    double t6 = timer.count();
+//    printf("[TIME] #%ld(KF#%ld) L6.删除MP外点耗时: %.2fms\n", pKF->id, pKF->mIdKF, t6);
 
     //! 7.再一次更新局部地图
-    timer.start();
-    updateLocalGraph();
-    double t7 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) L7.第二次更新局部地图耗时: %.2fms\n", pKF->id, pKF->mIdKF, t7);
+//    timer.start();
+//    updateLocalGraph();
+//    double t7 = timer.count();
+//    printf("[TIME] #%ld(KF#%ld) L7.第二次更新局部地图耗时: %.2fms\n", pKF->id, pKF->mIdKF, t7);
 
     //! 8.局部图优化
     timer.start();
-    localBA();
+//    localBA();
+    doLocalBA(*mpNewKF);
     double t8 = timer.count();
     printf("[TIME] #%ld(KF#%ld) L8.局部图优化耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
+
+
 }
 
 void TestTrack::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
@@ -1064,10 +1081,10 @@ void TestTrack::pruneRedundantKFinMap()
 
     int nPruned = mpMap->pruneRedundantKF();
 
-    printf("[INFO] #%ld(KF#%ld) 修剪冗余KF前后, 局部KF/MP/RefKF的数量为: %d/%d/%d, %ld/%ld/%ld\n",
+    printf("[INFO] #%ld(KF#%ld) L5.修剪冗余KF前后, 局部KF/MP/RefKF的数量为: %d/%d/%d, %ld/%ld/%ld\n",
            mpNewKF->id, mpNewKF->mIdKF, nLocalKFs, nLocalMPs, nLocalRefs,
            mpMap->countLocalKFs(), mpMap->countLocalMPs(), mpMap->countRefKFs());
-    printf("[INFO] #%ld(KF#%ld) 修剪冗余KF, 共修剪了%d帧KF, 耗时:%.2fms.\n",
+    printf("[INFO] #%ld(KF#%ld) L5.修剪冗余KF, 共修剪了%d帧KF, 耗时:%.2fms.\n",
            mpNewKF->id, mpNewKF->mIdKF, nPruned, timer.count());
 }
 
@@ -1083,7 +1100,7 @@ void TestTrack::removeOutlierChi2()
 
     int nBadMP = mpMap->removeLocalOutlierMP(optimizer);
 
-    printf("[INFO] #%ld(KF#%ld) 移除离群点%d成功! 耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF,
+    printf("[INFO] #%ld(KF#%ld) L6.移除离群点%d成功! 耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF,
            nBadMP, timer.count());
 }
 
@@ -1092,7 +1109,7 @@ void TestTrack::localBA()
     WorkTimer timer;
     timer.start();
 
-    printf("[INFO] #%ld(KF#%ld) 正在执行localBA()...\n", mpNewKF->id, mpNewKF->mIdKF);
+    printf("[INFO] #%ld(KF#%ld) L8.正在执行localBA()...\n", mpNewKF->id, mpNewKF->mIdKF);
 
     SlamOptimizer optimizer;
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
@@ -1103,7 +1120,7 @@ void TestTrack::localBA()
 
     mpMap->loadLocalGraph(optimizer);
     if (optimizer.edges().empty()) {
-        fprintf(stderr, "[Error] #%ld(KF#%ld) No MPs in graph, leave localBA().\n",
+        fprintf(stderr, "[ERRO] #%ld(KF#%ld) No MPs in graph, leave localBA().\n",
                 mpNewKF->id, mpNewKF->mIdKF);
         return;
     }
@@ -1114,10 +1131,10 @@ void TestTrack::localBA()
     optimizer.optimize(Config::LocalIterNum);
 
     double t1 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) L2.localBA()耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t1);
+    printf("[TIME] #%ld(KF#%ld) L8.localBA()耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t1);
 
     if (solver->currentLambda() > 100.0) {
-        cerr << "[Error] current lambda too large " << solver->currentLambda()
+        cerr << "[ERRO] current lambda too large " << solver->currentLambda()
              << " , reject optimized result!" << endl;
         return;
     }
@@ -1125,7 +1142,7 @@ void TestTrack::localBA()
     timer.start();
     mpMap->optimizeLocalGraph(optimizer);  // 用优化后的结果更新KFs和MPs
     double t2 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) localBA()优化结果更新耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t2);
+    printf("[TIME] #%ld(KF#%ld) L8.localBA()优化结果更新耗时: %.2fms\n", mpNewKF->id, mpNewKF->mIdKF, t2);
 }
 
 }

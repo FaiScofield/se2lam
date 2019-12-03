@@ -46,7 +46,7 @@ public:
     void publishCameraCurr(const cv::Mat& Twc);
     void publishOdomInformation();
 
-    cv::Mat drawMatchesInOneImg();
+    cv::Mat drawCurrentFrameMatches();
 
     bool isFinished();
     void requestFinish();
