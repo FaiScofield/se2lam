@@ -20,8 +20,8 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.2f), mCameraSize(0.5f),
-      mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
+    : mbIsLocalize(Config::LocalizationOnly), mbDataUpdated(false), mpMap(pMap), mPointSize(0.2f),
+      mCameraSize(0.5f), mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
 
@@ -257,38 +257,41 @@ void MapPublish::run()
 
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
+    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
-    int nSaveId = 1;
-    ros::Rate rate(Config::FPS);
+    ros::Rate rate(Config::FPS * 2);
     while (nh.ok()) {
         if (checkFinish())
             break;
         if (mpMap->empty())
             continue;
-        if (mpMap->countMPs() == 0)
+        if (!mbDataUpdated)
             continue;
 
-        cv::Mat img = mpFramePub->drawFrame();
-        if (img.empty())
-            continue;
+        mbDataUpdated = false;
 
+        Mat img = mpFramePub->drawFrame();
         sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
         pub.publish(msg);
 
-        cv::Mat cTw;
-        if (mbIsLocalize) {
-            if (mpLocalizer->mpKFCurr == NULL || mpLocalizer->mpKFCurr->isNull()) {
-                continue;
-            }
-            cTw = mpLocalizer->mpKFCurr->getPose();
-        } else {
-            cTw = mpMap->getCurrentFramePose();
+        Mat imgMatch = drawCurrentFrameMatches();
+        sensor_msgs::ImagePtr msgMatch =
+            cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
+        pubImgMatches.publish(msgMatch);
+
+        // debug 存下match图片
+        if (Config::SaveMatchImage) {
+            string fileName = Config::MatchImageStorePath + to_string(mnCurrentFrameID) + ".jpg";
+            imwrite(fileName, imgMatch);
         }
 
+        publishCameraCurr(cvu::inv(mCurrentFramePose));
         publishOdomInformation();
-        publishCameraCurr(cvu::inv(cTw));
-        publishKeyFrames();
-        publishMapPoints();
+        if (mpMap->mbNewKFInserted) {  // Map不变时没必要重复显示
+            mpMap->mbNewKFInserted = false;
+            publishKeyFrames();
+            publishMapPoints();
+        }
         if (Config::ShowGroundTruth)
             publishGroundTruth();
 
@@ -313,11 +316,11 @@ void MapPublish::publishKeyFrames()
 
     // Camera is a pyramid. Define in camera coordinate system
     float d = mCameraSize;
-    cv::Mat o = (cv::Mat_<float>(4, 1) << 0, 0, 0, 1);
-    cv::Mat p1 = (cv::Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
-    cv::Mat p2 = (cv::Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
+    Mat o = (Mat_<float>(4, 1) << 0, 0, 0, 1);
+    Mat p1 = (Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
+    Mat p2 = (Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
+    Mat p3 = (Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
+    Mat p4 = (Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
     vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
     if (vKFsAll.empty()) {
@@ -335,17 +338,17 @@ void MapPublish::publishKeyFrames()
         if (vKFsAll[i]->isNull())
             continue;
 
-        cv::Mat Twc = vKFsAll[i]->getPose().inv();
+        Mat Twc = vKFsAll[i]->getPose().inv();
 
         Twc.at<float>(0, 3) = Twc.at<float>(0, 3) / mScaleRatio;
         Twc.at<float>(1, 3) = Twc.at<float>(1, 3) / mScaleRatio;
         Twc.at<float>(2, 3) = Twc.at<float>(2, 3) / mScaleRatio;
 
-        cv::Mat ow = Twc * o;
-        cv::Mat p1w = Twc * p1;
-        cv::Mat p2w = Twc * p2;
-        cv::Mat p3w = Twc * p3;
-        cv::Mat p4w = Twc * p4;
+        Mat ow = Twc * o;
+        Mat p1w = Twc * p1;
+        Mat p2w = Twc * p2;
+        Mat p3w = Twc * p3;
+        Mat p4w = Twc * p4;
 
         geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
         msgs_o.x = ow.at<float>(0);
@@ -410,7 +413,7 @@ void MapPublish::publishKeyFrames()
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++) {
                 if ((*it)->mIdKF > vKFsAll[i]->mIdKF)
                     continue;
-                cv::Mat Twc2 = (*it)->getPose().inv();
+                Mat Twc2 = (*it)->getPose().inv();
                 geometry_msgs::Point msgs_o2;
                 msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
                 msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
@@ -548,7 +551,7 @@ void MapPublish::publishMapPoints()
     publisher.publish(mMPsNow);
 }
 
-void MapPublish::publishCameraCurr(const cv::Mat& Twc)
+void MapPublish::publishCameraCurr(const Mat& Twc)
 {
     mKFNow.points.clear();
 
@@ -563,21 +566,21 @@ void MapPublish::publishCameraCurr(const cv::Mat& Twc)
     float d = mCameraSize;
 
     // Camera is a pyramid. Define in camera coordinate system
-    cv::Mat o = (cv::Mat_<float>(4, 1) << 0, 0, 0, 1);
-    cv::Mat p1 = (cv::Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
-    cv::Mat p2 = (cv::Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p3 = (cv::Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
-    cv::Mat p4 = (cv::Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
+    Mat o = (Mat_<float>(4, 1) << 0, 0, 0, 1);
+    Mat p1 = (Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
+    Mat p2 = (Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
+    Mat p3 = (Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
+    Mat p4 = (Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
-    cv::Mat T = Twc.clone();
+    Mat T = Twc.clone();
     T.at<float>(0, 3) = T.at<float>(0, 3) / mScaleRatio;
     T.at<float>(1, 3) = T.at<float>(1, 3) / mScaleRatio;
     T.at<float>(2, 3) = T.at<float>(2, 3) / mScaleRatio;
-    cv::Mat ow = T * o;
-    cv::Mat p1w = T * p1;
-    cv::Mat p2w = T * p2;
-    cv::Mat p3w = T * p3;
-    cv::Mat p4w = T * p4;
+    Mat ow = T * o;
+    Mat p1w = T * p1;
+    Mat p2w = T * p2;
+    Mat p3w = T * p3;
+    Mat p4w = T * p4;
 
     geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
     msgs_o.x = ow.at<float>(0);

@@ -102,6 +102,7 @@ public:
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
     bool UpdateFeatGraph(const PtrKeyFrame &_pKF);
 
+    bool mbNewKFInserted; // for visualizaiton.
 
 protected:
 

@@ -223,7 +223,7 @@ void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_
     float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
 
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
-    //    float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4, 1.f/(dtheta*dtheta) };
+    // float data[6] = { 1.f/(dx*dx), 1.f/(dy*dy), 1, 1e4, 1e4, 1.f/(dtheta*dtheta) };
     float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
     for (int i = 0; i < 6; i++)
         Info_se3_bTb(i, i) = data[i];

@@ -41,7 +41,8 @@ public:
     void publishOdomInformation();
     void publishGroundTruth();
 
-    cv::Mat drawMatchesInOneImg();
+    cv::Mat drawCurrentFrameMatches();
+    cv::Mat drawMatchesInOneImg();    
 
     void requestFinish();
     bool isFinished();
@@ -55,6 +56,17 @@ public:
     LocalMapper* mpLocalMapper;
     Localizer* mpLocalizer;
     FramePublish* mpFramePub;
+
+    // for visulization
+    bool mbDataUpdated;
+    unsigned long mnCurrentFrameID;
+    cv::Mat mCurrentFramePose;
+    cv::Mat mCurrentImage, mReferenceImage;
+    cv::Mat mAffineMatrix, mHomography;
+    std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
+    std::vector<int> mvMatchIdx, mvMatchIdxGood;
+    std::string mImageText;
+    std::mutex mMutexUpdate;
 
 private:
     bool checkFinish();
