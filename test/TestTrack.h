@@ -104,6 +104,7 @@ private:
     float mLastRatioGoodDepth, mLastRatioGoodParl;
 
     cv::Mat mAffineMatrix;
+    PreSE2 preSE2;  // 参考帧到当前帧的se2积分
 
     std::mutex mMutexForPub;
 };

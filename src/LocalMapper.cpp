@@ -341,9 +341,9 @@ void LocalMapper::localBA()
     locker lockMapper(mutexMapper);
 
     SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(Config::LocalVerbose);
     optimizer.setForceStopFlag(&mbAbortBA);

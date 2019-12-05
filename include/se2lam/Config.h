@@ -165,6 +165,7 @@ public:
     static bool GlobalPrint;
     static bool SaveMatchImage;
     static std::string MatchImageStorePath;
+    static std::string G2oResultsStorePath;
 
 public:
     //! functions

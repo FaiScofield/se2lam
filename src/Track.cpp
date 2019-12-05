@@ -368,33 +368,25 @@ void Track::updateFramePoseFromRef()
     mCurrentFrame.setTcr(Tc2c1);
     mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
 
-    //    cout << "参考帧/当前帧的里程计输入为: " << mpReferenceKF->odom << ", " <<
-    //    mCurrentFrame.odom << endl;
-    //    cout << "参考帧/当前帧的Twb为: " << mpReferenceKF->getTwb() << ", " <<
-    //    mCurrentFrame.getTwb() << endl;
-
     // preintegration 预积分
-    //! TODO 这里并没有使用上预积分？都是局部变量，且实际一帧图像仅对应一帧Odom数据
-    /*
-        Eigen::Map<Vector3d> meas(preSE2.meas);
-        Se2 odok = mCurrentFrame.odom - mLastFrame.odom;
-        Vector2d odork(odok.x, odok.y);
-        Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
-        meas.head<2>() += Phi_ik * odork;
-        meas[2] += odok.theta;
+    Eigen::Map<Vector3d> meas(preSE2.meas);
+    Se2 odok = mCurrentFrame.odom - mLastFrame.odom;
+    Vector2d odork(odok.x, odok.y);
+    Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
+    meas.head<2>() += Phi_ik * odork;
+    meas[2] += odok.theta;
 
-        Matrix3d Ak = Matrix3d::Identity();
-        Matrix3d Bk = Matrix3d::Identity();
-        Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]);
-        Bk.block<2, 2>(0, 0) = Phi_ik;
-        Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
-        Matrix3d Sigma_vk = Matrix3d::Identity();
-        Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
-        Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
-        Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
-        Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
-        Sigmak = Sigma_k_1;
-    */
+    Matrix3d Ak = Matrix3d::Identity();
+    Matrix3d Bk = Matrix3d::Identity();
+    Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]);
+    Bk.block<2, 2>(0, 0) = Phi_ik;
+    Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
+    Matrix3d Sigma_vk = Matrix3d::Identity();
+    Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
+    Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
+    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
+    Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
+    Sigmak = Sigma_k_1;
 }
 
 //! 根据仿射矩阵A剔除外点，利用了RANSAC算法
@@ -1215,9 +1207,9 @@ void Track::doLocalBA(Frame& frame)
     WorkTimer timer;
 
     SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(Config::LocalVerbose);
 

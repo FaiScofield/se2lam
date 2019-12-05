@@ -347,15 +347,14 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     }
     double t1 = timer.count();
 
-    //! 2. 获得LocalMPs, 不要求要有良好视差
-    //! FIXME 如果要求要有良好视差, 则刚开始时视差都是差的, 会导致后面localMPs数量一直为0
+    //! 2. 获得所有LocalMPs, 包括视差不好的
     timer.start();
     for (auto it = setLocalKFs.begin(), iend = setLocalKFs.end(); it != iend; ++it) {
-        PtrKeyFrame pKF = (*it);
+        const PtrKeyFrame pKF = (*it);
         if (!pKF || pKF->isNull())
             continue;
 
-        vector<PtrMapPoint> pMPs = pKF->getObservations(true, false);
+        const vector<PtrMapPoint> pMPs = pKF->getObservations(true, false);
         setLocalMPs.insert(pMPs.begin(), pMPs.end());
     }
     double t2 = timer.count();
@@ -363,11 +362,11 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     //! 3.获得RefKFs, 在优化时会被固定.
     timer.start();
     for (auto it = setLocalMPs.begin(), iend = setLocalMPs.end(); it != iend; ++it) {
-        PtrMapPoint pMP = (*it);
+        const PtrMapPoint pMP = (*it);
         if (!pMP || pMP->isNull())
             continue;
 
-        vector<PtrKeyFrame> pKFs = pMP->getObservations();
+        const vector<PtrKeyFrame> pKFs = pMP->getObservations();
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
             if (setLocalKFs.find((*j)) != setLocalKFs.end())
                 continue;
@@ -383,9 +382,12 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
     mvLocalRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
+    std::sort(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), KeyFrame::IdLessThan());
+    std::sort(mvLocalRefKFs.begin(), mvLocalRefKFs.end(), KeyFrame::IdLessThan());
+    std::sort(mvLocalGraphMPs.begin(), mvLocalGraphMPs.end(), MapPoint::IdLessThan());
 }
 
-void Map::updateLocalGraph_new()
+void Map::updateLocalGraph_new(int maxLevel, int maxN, float searchRadius)
 {
     WorkTimer timer;
 
@@ -400,21 +402,27 @@ void Map::updateLocalGraph_new()
     set<PtrMapPoint> setLocalMPs;
 
     //! 1.获得LocalKFs
-    vector<PtrKeyFrame> vpKFs = mCurrentKF->getBestCovisibleKFs(Config::MaxLocalFrameNum);
-    setLocalKFs.insert(vpKFs.begin(), vpKFs.end());
-    int toAdd = Config::MaxLocalFrameNum - setLocalKFs.size();
-    if (toAdd > 0)   // LocalKF不够10个则补全10
-        addLocalGraphThroughKdtree(setLocalKFs, toAdd, Config::LocalFrameSearchRadius);  // lock
+    if (static_cast<int>(countKFs()) <= maxN) {
+        locker lock(mMutexGlobalGraph);
+        setLocalKFs.insert(mspKFs.begin(), mspKFs.end());
+    } else {
+        setLocalKFs.insert(mCurrentKF);
+        vector<PtrKeyFrame> vpKFs = mCurrentKF->getBestCovisibleKFs(maxN);
+        setLocalKFs.insert(vpKFs.begin(), vpKFs.end());
+        int toAdd = maxN - setLocalKFs.size();
+        if (toAdd > 0)   // LocalKF不够maxN个则补全
+            addLocalGraphThroughKdtree(setLocalKFs, toAdd, searchRadius);  // lock
+    }
     double t1 = timer.count();
 
-    //! 2. 获得LocalMPs, 要有良好视差
+    //! 2. 获得LocalMPs
     timer.start();
     for (auto it = setLocalKFs.begin(), iend = setLocalKFs.end(); it != iend; ++it) {
-        PtrKeyFrame pKF = (*it);
+        const PtrKeyFrame pKF = (*it);
         if (!pKF || pKF->isNull())
             continue;
 
-        vector<PtrMapPoint> vpMPs = pKF->getObservations(true, true);
+        const vector<PtrMapPoint> vpMPs = pKF->getObservations(true, false);
         setLocalMPs.insert(vpMPs.begin(), vpMPs.end());
     }
     double t2 = timer.count();
@@ -422,11 +430,11 @@ void Map::updateLocalGraph_new()
     //! 3.获得RefKFs, 在优化时会被固定.
     timer.start();
     for (auto it = setLocalMPs.begin(), iend = setLocalMPs.end(); it != iend; ++it) {
-        PtrMapPoint pMP = (*it);
+        const PtrMapPoint pMP = (*it);
         if (!pMP || pMP->isNull())
             continue;
 
-        vector<PtrKeyFrame> vpKFs = pMP->getObservations();
+        const vector<PtrKeyFrame> vpKFs = pMP->getObservations();
         for (auto j = vpKFs.begin(), jend = vpKFs.end(); j != jend; ++j) {
             if (setLocalKFs.find((*j)) != setLocalKFs.end())
                 continue;
@@ -442,6 +450,9 @@ void Map::updateLocalGraph_new()
     mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
     mvLocalRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
+    std::sort(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), KeyFrame::IdLessThan());
+    std::sort(mvLocalRefKFs.begin(), mvLocalRefKFs.end(), KeyFrame::IdLessThan());
+    std::sort(mvLocalGraphMPs.begin(), mvLocalGraphMPs.end(), MapPoint::IdLessThan());
 }
 
 /**
@@ -592,9 +603,9 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(pKF->getPose()), vertexIdKF, Config::Tbc);
     }
 
-    // Add odometry based constraints. 添加里程计约束边
-    for (int i = 0; i < nLocalKFs; ++i) {
-        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
+    // Add odometry based constraints. 添加基于里程约束的相机位姿边
+    for (int idi = 0; idi < nLocalKFs; ++idi) {
+        const PtrKeyFrame& pKF = mvLocalGraphKFs[idi];
         assert(!pKF->isNull());
 
         const PtrKeyFrame pKF1 = pKF->mOdoMeasureFrom.first;
@@ -605,11 +616,11 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         if (it == mvLocalGraphKFs.end())
             continue;
 
-        const int id1 = it - mvLocalGraphKFs.begin();  // 这里id1倒是可以跟上面的i对应上
+        const int idj = it - mvLocalGraphKFs.begin();  // 这里id1倒是可以跟上面的i对应上
         g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
         // id1 - from, i - to
-        // addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), id1, i, info);
-        addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), i, id1, info);
+        addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), idj, idi, info);
+        //addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), i, id1, info);
     }
 
     // Add Reference KeyFrames as fixed. 将RefKFs固定
@@ -702,7 +713,18 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
 }
 
 
-//! 在LocalMap::localBA()中调用
+/**
+ * @brief   加载局部地图做优化, 在LocalMap::localBA()中调用
+ *  - Vertices:
+ *      - VertexSE2: 机器人位姿顶点, g2o的slam2d中标准类, _estimate为3维SE2类型
+ *      - addVertexSBAXYZ: MP的坐标顶点, g2o的sba中标准类, _estimate为3维Vector3D类型
+ *
+ *  - Edges:
+ *      - PreEdgeSE2: KF之间的预积分约束, 自定义类型
+ *      - EdgeSE2XYZ: 计算重投影误差, 自定义类型
+ *
+ * @param optimizer 优化求解器
+ */
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
     printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
@@ -744,18 +766,18 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
     }
 
-    // Add odometry based constraints. 添加里程计约束边
-    //! TODO preOdomFromSelf这个变量暂时都是0
+    // Add odometry based constraints. 添加里程计约束边, 预积分信息
     for (int i = 0; i < nLocalKFs; ++i) {
-        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
-        assert(!pKF->isNull());
+        const PtrKeyFrame& pKFi = mvLocalGraphKFs[i];
+        assert(!pKFi->isNull());
 
-        const PtrKeyFrame pKF1 = pKF->preOdomFromSelf.first;
-        if (!pKF1 || pKF1->isNull())
+        const PtrKeyFrame pKFj = pKFi->preOdomFromSelf.first;
+        if (!pKFj || pKFj->isNull())
             continue;
 
-        PreSE2 meas = pKF->preOdomFromSelf.second;
-        auto it = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF1);
+        assert(pKFj->mIdKF > pKFi->mIdKF); // from是指自己的下一KF
+        PreSE2 meas = pKFi->preOdomFromSelf.second;
+        auto it = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKFj);
         if (it == mvLocalGraphKFs.end())
             continue;
 
@@ -787,30 +809,31 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         const PtrMapPoint& pMP = mvLocalGraphMPs[i];
         assert(!pMP->isNull());
 
-        const int vertexIdMP = maxKFid + i;
+        const int vertexIdMP = i + maxKFid;
         const Eigen::Vector3d lw = toVector3d(pMP->getPos());
         addVertexSBAXYZ(optimizer, lw, vertexIdMP);
 
         const vector<PtrKeyFrame> pKFs = pMP->getObservations();
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
-            const PtrKeyFrame pKF = (*j);
-            if (checkAssociationErr(pKF, pMP)) {
+            const PtrKeyFrame pKFj = (*j);
+            if (checkAssociationErr(pKFj, pMP)) {
                 fprintf(stderr, "[ Map ][Warni] localBA() 索引错误! For KF#%ld-%d and MP#%ld-%d\n",
-                        pKF->mIdKF, pKF->getFeatureIndex(pMP), pMP->mId, pMP->getKPIndexInKF(pKF));
+                        pKFj->mIdKF, pKFj->getFeatureIndex(pMP), pMP->mId, pMP->getKPIndexInKF(pKFj));
                 continue;
             }
 
-            const int octave = pMP->getOctave(pKF);
-            const int ftrIdx = pMP->getKPIndexInKF(pKF);
-            const float Sigma2 = pKF->mvLevelSigma2[octave];
-            const Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
+            const int octave = pMP->getOctave(pKFj);
+            const int ftrIdx = pMP->getKPIndexInKF(pKFj);
+            const float Sigma2 = pKFj->mvLevelSigma2[octave];  // 单层时都是1.0
+            const Eigen::Vector2d uv = toVector2d(pKFj->mvKeyPoints[ftrIdx].pt);
 
+            // 针对当前MPi的某一个观测KFj, 如果KFj在图里(是一个顶点)则给它加上边
             int vertexIdKF = -1;
-            auto it1 = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF);
+            auto it1 = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKFj);
             if (it1 != mvLocalGraphKFs.end()) {
                 vertexIdKF = it1 - mvLocalGraphKFs.begin();
             } else {
-                auto it2 = std::find(mvLocalRefKFs.begin(), mvLocalRefKFs.end(), pKF);
+                auto it2 = std::find(mvLocalRefKFs.begin(), mvLocalRefKFs.end(), pKFj);
                 if (it2 != mvLocalRefKFs.end())
                     vertexIdKF = it2 - mvLocalRefKFs.begin() + nLocalKFs;
             }
@@ -819,7 +842,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
             // compute covariance/information
             const Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * Sigma2;
-            const Vector3d lc = toVector3d(pKF->getMPPoseInCamareFrame(ftrIdx));
+            const Vector3d lc = toVector3d(pKFj->getMPPoseInCamareFrame(ftrIdx));
 
             const double zc = lc(2);
             const double zc_inv = 1. / zc;
@@ -827,8 +850,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
             const float fx = Config::fx;
             Matrix23d J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
-            const Matrix3d Rcw = toMatrix3d(pKF->getPose().rowRange(0, 3).colRange(0, 3));
-            const Se2 Twb = pKF->getTwb();
+            const Matrix3d Rcw = toMatrix3d(pKFj->getPose().rowRange(0, 3).colRange(0, 3));
+            const Se2 Twb = pKFj->getTwb();
             const Vector3d pi(Twb.x, Twb.y, 0);
 
             const Matrix23d J_pi_Rcw = J_pi * Rcw;
@@ -850,16 +873,6 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
     printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的Graph: 节点数为%ld个(LocalKFs=%d, nRefKFs=%d, "
            "nMPs=%d), 边数为%ld条\n",
            mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nLocalKFs, nRefKFs, N, nEdges);
-
-    // check optimizer
-    //    auto edges = optimizer.edges();
-    //    for (size_t i = 0; i < nEdges; ++i) {
-    //        auto v1 = edges[i]->vertices()[0];  // KF
-    //        auto v2 = edges[i]->vertices()[1];  // MP
-    //        fprintf(stderr, "[TEST] edge %ld vertex1.KFid = %ld, vertex2.MPid = %ld, oberservation
-    //        = %d\n",
-    //                i, v1)
-    //    }
 }
 
 //! 此函数没有被调用!
@@ -953,11 +966,11 @@ void Map::loadLocalGraphOnlyBa(SlamOptimizer& optimizer, vector<vector<EdgeProje
                 continue;
             }
 
-            int ftrIdx = pMP->getKPIndexInKF(pKF);
-            int octave = pMP->getOctave(pKF);
+            const int ftrIdx = pMP->getKPIndexInKF(pKF);
+            const int octave = pMP->getOctave(pKF);
             const float invSigma2 = pKF->mvInvLevelSigma2[octave];
-            Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
-            Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
+            const Eigen::Vector2d uv = toVector2d(pKF->mvKeyPoints[ftrIdx].pt);
+            const Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
 
             int vertexIdKF = -1;
 
@@ -1260,7 +1273,7 @@ bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
 
 void Map::addLocalGraphThroughKdtree(set<PtrKeyFrame>& setLocalKFs, int maxN, float searchRadius)
 {
-    vector<PtrKeyFrame> vKFsAll = getAllKFs();  // lock global
+    const vector<PtrKeyFrame> vKFsAll = getAllKFs();  // lock global
     vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());

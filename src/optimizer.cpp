@@ -18,6 +18,9 @@ using namespace std;
 using namespace Eigen;
 using namespace cv;
 
+G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP_PIROR, EdgeSE3ExpmapPrior);
+G2O_REGISTER_TYPE(EDGE_SE3:XYZ_ONLY, EdgeSE3ProjectXYZOnlyPose);
+
 /**
  * @brief 计算KF之间的残差和信息矩阵, 后端优化用
  * @param dOdo      [Input ]后一帧与前一帧之间的里程计差值
@@ -29,19 +32,21 @@ void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
     const Mat Tbc = Config::Tbc;
     const Mat Tcb = Config::Tcb;
     const Mat Tb1b2 = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
-
     Tc1c2 = Tcb * Tb1b2 * Tbc;
 
     float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
     float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
     float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
-
-
-    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
-    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
+    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();  // 先旋转后平移
+    // float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta *
+    // dtheta)};
+    float data[6] = {1e4, 1e4, 1.f / (dtheta * dtheta), 1.f / (dx * dx), 1.f / (dy * dy), 1};
     for (int i = 0; i < 6; ++i)
         Info_se3_bTb(i, i) = data[i];
-    Info_se3 = Info_se3_bTb;
+    // Info_se3 = Info_se3;
+
+    g2o::Matrix6d J_bTb_cTc = toSE3Quat(Tbc).adj();
+    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
 }
 
 /**
@@ -98,6 +103,7 @@ void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eige
 }
 
 
+//! TODO 信息矩阵存在不对称的情况!
 EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
                           CamPara* campara, const SE3Quat& _Tbc, const Matrix2D& info, double thHuber)
 {
@@ -243,8 +249,9 @@ EdgeSE3ExpmapPrior::EdgeSE3ExpmapPrior() : BaseUnaryEdge<6, SE3Quat, VertexSE3Ex
 
 /**
  * @brief EdgeSE3ExpmapPrior::computeError KF 全局平面运动约束
- * error: e = ln(Tm * T^(-1))^V
- * jacobian: J = -Jr(-e)^(-1)
+ * _error:       e = ln([Tm * T^(-1)])^v, 误差函数
+ * _measurement: Tcw, 相机位姿测量值, 令 $z=0, \alpha=0, \beta=0$ 作为观测
+ * _jacobian:    J = -Jl(-e)^(-1), 左扰动的结果, 如果是右扰动的话还需要乘T.adj()
  */
 void EdgeSE3ExpmapPrior::computeError()
 {
@@ -255,33 +262,118 @@ void EdgeSE3ExpmapPrior::computeError()
 
 void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat& m)
 {
-    _measurement = m;
+    _measurement = m;  // 测量值Tcw
 }
 
 void EdgeSE3ExpmapPrior::linearizeOplus()
 {
     //! NOTE 0917改成和PPT上一致
-    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    Vector6d err = (_measurement * v->estimate().inverse()).log();
-    _jacobianOplusXi = -invJJl(-err);
-    //    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
+//    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
+//    Vector6d err = (_measurement * v->estimate().inverse()).log();
+//    _jacobianOplusXi = -invJJl(-err);  // 右扰动的话还要再乘一个Adj(T)
+    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
 }
 
 bool EdgeSE3ExpmapPrior::read(istream& is)
 {
+    Vector7d meas;
+    for (int i = 0; i < 7; i++)
+        is >> meas[i];
+    SE3Quat cam2world;
+    cam2world.fromVector(meas);
+    setMeasurement(cam2world.inverse());
+    for (int i = 0; i < 6; i++) {
+        for (int j = i; j < 6; j++) {
+            is >> information()(i, j);
+            if (i != j)
+                information()(j, i) = information()(i, j);
+        }
+    }
     return true;
 }
 
 bool EdgeSE3ExpmapPrior::write(ostream& os) const
 {
+    SE3Quat cam2world(measurement().inverse());
+    for (int i = 0; i < 7; i++)
+        os << cam2world[i] << " ";
+    for (int i = 0; i < 6; i++) {
+        for (int j = i; j < 6; j++) {
+            os << " " << information()(i, j);
+        }
+    }
+    return os.good();
+}
+
+void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
+{
+    VertexSE3Expmap* vi = static_cast<VertexSE3Expmap*>(_vertices[0]);
+    Vector3d xyz_trans = vi->estimate().map(Xw);
+
+    double x = xyz_trans[0];
+    double y = xyz_trans[1];
+    double invz = 1.0 / xyz_trans[2];
+    double invz_2 = invz * invz;
+
+    _jacobianOplusXi(0, 0) = x * y * invz_2 * fx;
+    _jacobianOplusXi(0, 1) = -(1 + (x * x * invz_2)) * fx;
+    _jacobianOplusXi(0, 2) = y * invz * fx;
+    _jacobianOplusXi(0, 3) = -invz * fx;
+    _jacobianOplusXi(0, 4) = 0;
+    _jacobianOplusXi(0, 5) = x * invz_2 * fx;
+
+    _jacobianOplusXi(1, 0) = (1 + y * y * invz_2) * fy;
+    _jacobianOplusXi(1, 1) = -x * y * invz_2 * fy;
+    _jacobianOplusXi(1, 2) = -x * invz * fy;
+    _jacobianOplusXi(1, 3) = 0;
+    _jacobianOplusXi(1, 4) = -invz * fy;
+    _jacobianOplusXi(1, 5) = y * invz_2 * fy;
+}
+
+Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
+{
+    Vector2d proj = trans_xyz.head<2>() / trans_xyz[2];
+    Vector2d res;
+    res[0] = proj[0] * fx + cx;
+    res[1] = proj[1] * fy + cy;
+    return res;
+}
+
+bool EdgeSE3ProjectXYZOnlyPose::read(istream& is)
+{
+    Vector2d m;
+    is >> m[0] >> m[1];
+    setMeasurement(m);
+
+    is >> Xw[0] >> Xw[1] >> Xw[2];
+    for (int i = 0; i < 2; i++) {
+        for (int j = i; j < 2; j++) {
+            is >> information()(i, j);
+            if (i != j)
+                information()(j, i) = information()(i, j);
+        }
+    }
     return true;
+}
+
+bool EdgeSE3ProjectXYZOnlyPose::write(ostream& os) const
+{
+    Vector2d m = measurement();
+    os << m[0] << " " << m[1] << " ";
+    os << Xw[0] << " " << Xw[1] << " " << Xw[2] << " ";
+    for (int i = 0; i < 2; i++) {
+        for (int j = i; j < 2; j++) {
+            os << " " << information()(i, j);
+        }
+    }
+    return os.good();
 }
 
 void initOptimizer(SlamOptimizer& opt, bool verbose)
 {
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     opt.setAlgorithm(solver);
     opt.setVerbose(verbose);
 }
@@ -322,10 +414,10 @@ void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bo
     opt.addVertex(v);
 }
 
-/**
+/** TODO pose好像不是由Twb得到的!
  * @brief addPlaneMotionSE3Expmap 给位姿节点添加平面运动约束
  * @param opt       optimizer
- * @param pose      KF's pose，Tcw
+ * @param pose      KF's pose，Tcw, 通过odo测量值
  * @param vId       vertex id
  * @param extPara   Config::bTc
  * @return
@@ -377,17 +469,18 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
     xyz_bw[2] = 0;
     Tbw.setTranslation(xyz_bw);
 
-    g2o::SE3Quat Tcw = Tbc.inverse() * Tbw;
+    g2o::SE3Quat Tcw = Tbc.inverse() * Tbw;  // 扣去三个方向的变换后, 再转回到相机坐标系下
 
     //! Vector order: [rot, trans]
-    // 确定信息矩阵，XY轴旋转为小量, Info_bw已经平方了
+    // 确定信息矩阵，XY轴旋转和Z平移的值大, 表示这三个分量的值在优化过程中不应该出现大的变动.
+    // Info_bw已经平方了
     g2o::Matrix6d Info_bw = g2o::Matrix6d::Zero();
     Info_bw(0, 0) = Config::PlaneMotionInfoXrot;  // 1e6
     Info_bw(1, 1) = Config::PlaneMotionInfoYrot;
     Info_bw(2, 2) = 1e-4;
     Info_bw(3, 3) = 1e-4;
     Info_bw(4, 4) = 1e-4;
-    Info_bw(5, 5) = Config::PlaneMotionInfoZ;
+    Info_bw(5, 5) = Config::PlaneMotionInfoZ;  // 1
     g2o::Matrix6d J_bb_cc = Tbc.adj();
     g2o::Matrix6d Info_cw = J_bb_cc.transpose() * Info_bw * J_bb_cc;
 #endif
@@ -415,7 +508,7 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
  * @param opt       优化器
  * @param xyz       MP的三维坐标
  * @param id        节点对应的id
- * @param marginal  节点是否边缘化
+ * @param marginal  节点是否边缘化, default = true
  * @param fixed     节点是否固定, default = false
  */
 void addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal, bool fixed)
@@ -439,8 +532,8 @@ void addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool 
     opt.addVertex(v);
 }
 
-g2o::EdgeSE3Prior* addVertexSE3PlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
-                                           const cv::Mat& extPara, int paraSE3OffsetId, bool fixed)
+g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
+                                                  const cv::Mat& extPara, int paraSE3OffsetId, bool fixed)
 {
     //#define USE_OLD_SE3_PRIOR_JACOB
 
@@ -573,28 +666,29 @@ void addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool mar
  * measure = Tc1c2 = Tcb * Tb1b2 * Tbc, C = SE3Quat(measure), _error = (T2.inv() * C * T1).log()
  *
  * @param opt       优化器
- * @param measure   两KF间相机的位姿变换Tc1c2
+ * @param measure   两KF间相机的位姿变换测量值Tc1c2，　由Tb1b2计算而来
  * @param id0       T1的id
  * @param id1       T2的id
  * @param info      信息矩阵
  */
-void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, int id1, const g2o::Matrix6d& info)
+void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id2, int id1, const g2o::Matrix6d& info)
 {
-    assert(verifyInfo(info));
+    assert(verifyInfo(info));  // 保证信息矩阵是正定的!
 
     g2o::EdgeSE3Expmap* e = new g2o::EdgeSE3Expmap();
     e->setMeasurement(measure);
-    e->vertices()[0] = opt.vertex(id0);  // from
-    e->vertices()[1] = opt.vertex(id1);  // to
+    e->vertices()[0] = opt.vertex(id2);  // from. 后一帧, Tj
+    e->vertices()[1] = opt.vertex(id1);  // to. 前一帧, Ti
 
     // The input info is [trans rot] order, but EdgeSE3Expmap requires [rot trans]
-    g2o::Matrix6d infoNew;
+    g2o::Matrix6d infoNew;  // 注意旋转平移的顺序不一样
     infoNew.block(0, 0, 3, 3) = info.block(3, 3, 3, 3);
     infoNew.block(3, 0, 3, 3) = info.block(0, 3, 3, 3);
     infoNew.block(0, 3, 3, 3) = info.block(3, 0, 3, 3);
     infoNew.block(3, 3, 3, 3) = info.block(0, 0, 3, 3);
 
-    e->setInformation(infoNew);
+    // e->setInformation(infoNew);
+    e->setInformation(info);  // 旋转平移顺序在计算info时应该已经调整好了
     opt.addEdge(e);
 }
 
@@ -602,8 +696,8 @@ void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, 
  * @brief addEdgeXYZ2UV 添加重投影误差边, 连接路标节点VertexSBAPointXYZ和相机位姿节点VertexSE3Expmap
  * @param opt       优化器
  * @param measure   KP的像素坐标
- * @param id0       该MP的节点id
- * @param id1       和那个有观测关联的KF的节点id
+ * @param id0       该MP的顶点编号
+ * @param id1       和那个有观测关联的KF的顶点id
  * @param paraId    相机id，这里为0
  * @param info      信息矩阵
  * @param thHuber   鲁棒核
@@ -613,6 +707,7 @@ g2o::EdgeProjectXYZ2UV* addEdgeXYZ2UV(SlamOptimizer& opt, const Eigen::Vector2d&
                                       int id1, int paraId, const Eigen::Matrix2d& info, double thHuber)
 {
     g2o::EdgeProjectXYZ2UV* e = new g2o::EdgeProjectXYZ2UV();
+    e->setId(id0);
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(measure);
@@ -700,40 +795,6 @@ bool verifyInfo(const Eigen::Matrix3d& info)
 }
 
 
-void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
-{
-    VertexSE3Expmap* vi = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    Vector3d xyz_trans = vi->estimate().map(Xw);
-
-    double x = xyz_trans[0];
-    double y = xyz_trans[1];
-    double invz = 1.0 / xyz_trans[2];
-    double invz_2 = invz * invz;
-
-    _jacobianOplusXi(0, 0) = x * y * invz_2 * fx;
-    _jacobianOplusXi(0, 1) = -(1 + (x * x * invz_2)) * fx;
-    _jacobianOplusXi(0, 2) = y * invz * fx;
-    _jacobianOplusXi(0, 3) = -invz * fx;
-    _jacobianOplusXi(0, 4) = 0;
-    _jacobianOplusXi(0, 5) = x * invz_2 * fx;
-
-    _jacobianOplusXi(1, 0) = (1 + y * y * invz_2) * fy;
-    _jacobianOplusXi(1, 1) = -x * y * invz_2 * fy;
-    _jacobianOplusXi(1, 2) = -x * invz * fy;
-    _jacobianOplusXi(1, 3) = 0;
-    _jacobianOplusXi(1, 4) = -invz * fy;
-    _jacobianOplusXi(1, 5) = y * invz_2 * fy;
-}
-
-Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
-{
-    Vector2d proj = trans_xyz.head<2>() / trans_xyz[2];
-    Vector2d res;
-    res[0] = proj[0] * fx + cx;
-    res[1] = proj[1] * fy + cy;
-    return res;
-}
-
 /**
  * @brief   根据MP的观测情况进行一次对Frame的位姿优化调整(最小化重投影误差), 迭代最多4次
  *  3D-2D 最小化重投影误差 e = (u,v) - project(Tcw*Pw)
@@ -758,16 +819,16 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     nMPInliers = 0;
     error = 10000.;
 
-//    SlamOptimizer optimizer;
-//    SlamLinearSolver* linearSolver = new SlamLinearSolver();
-//    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-//    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    //    SlamOptimizer optimizer;
+    //    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    //    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    //    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
 
     g2o::SparseOptimizer optimizer;
-    g2o::BlockSolver_6_3::LinearSolverType *linearSolver;
+    g2o::BlockSolver_6_3::LinearSolverType* linearSolver;
     linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
-    g2o::BlockSolver_6_3 *solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
 
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
@@ -788,8 +849,8 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 
     // 设置MP观测约束(边)
     const int N = pFrame->N;
-    vector<se2lam::EdgeSE3ProjectXYZOnlyPose*> vpEdges;
-    vector<size_t> vnIndexEdge; // MP被加入到图中优化, 其对应的KP索引被记录在此
+    vector<EdgeSE3ProjectXYZOnlyPose*> vpEdges;
+    vector<size_t> vnIndexEdge;  // MP被加入到图中优化, 其对应的KP索引被记录在此
     vpEdges.reserve(N);
     vnIndexEdge.reserve(N);
 
@@ -806,7 +867,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
         const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
         const Eigen::Vector2d uv = toVector2d(kpUn.pt);
 
-        se2lam::EdgeSE3ProjectXYZOnlyPose* e = new se2lam::EdgeSE3ProjectXYZOnlyPose();
+        EdgeSE3ProjectXYZOnlyPose* e = new EdgeSE3ProjectXYZOnlyPose();
         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
         e->setMeasurement(uv);
         const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
@@ -831,7 +892,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
         optimizer.optimize(10);
 
         for (size_t i = 0, iend = vpEdges.size(); i < iend; i++) {
-            se2lam::EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
+            EdgeSE3ProjectXYZOnlyPose* e = vpEdges[i];
             const size_t idx = vnIndexEdge[i];  // MP对应的KP索引
 
             if (!pFrame->mvbMPOutlier[idx]) {

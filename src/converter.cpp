@@ -87,6 +87,7 @@ std::vector<cv::Mat> toDescriptorVector(const cv::Mat& Descriptors)
     return vDesc;
 }
 
+// SE3Quat 输入输出的向量是平移(3)在前旋转(4)在后
 g2o::SE3Quat toSE3Quat(const cv::Mat& cvT)
 {
     Eigen::Matrix<double, 3, 3> R;

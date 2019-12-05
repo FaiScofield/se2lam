@@ -336,9 +336,9 @@ void GlobalMapper::globalBA()
     vector<PtrKeyFrame> vecKFs = mpMap->getAllKFs();
 
     SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
 
     int SE3OffsetParaId = 0;
@@ -360,7 +360,7 @@ void GlobalMapper::globalBA()
         bool bIfFix = (pKF->mIdKF == 0);
 
 //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
-        g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(Twc), pKF->mIdKF,
+        g2o::EdgeSE3Prior* pEdge = addVertexSE3AndEdgePlaneMotion(optimizer, toIsometry3D(Twc), pKF->mIdKF,
                                                            Config::Tbc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
 //        pEdge->setLevel(1);
@@ -858,9 +858,9 @@ void GlobalMapper::optKFPair(
         g2o::Isometry3D Iso3_w_kf = toIsometry3D(T3_kf_w.inv());
 
         if (i == 0) {
-            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, true);
+            addVertexSE3AndEdgePlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, true);
         } else {
-            addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, false);
+            addVertexSE3AndEdgePlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, false);
         }
 
         vertexId++;
@@ -935,12 +935,12 @@ void GlobalMapper::optKFPairMatch(
     // Set vertex KF1
     Mat T3_kf1_w = _pKF1->getPose();
     g2o::Isometry3D Iso3_w_kf1 = toIsometry3D(T3_kf1_w.inv());
-    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf1, 0, Config::Tbc, 0, false);
+    addVertexSE3AndEdgePlaneMotion(optimizer, Iso3_w_kf1, 0, Config::Tbc, 0, false);
 
     // Set vertex KF2
     Mat T3_kf2_w = _pKF2->getPose();
     g2o::Isometry3D Iso3_w_kf2 = toIsometry3D(T3_kf2_w.inv());
-    addVertexSE3PlaneMotion(optimizer, Iso3_w_kf2, 1, Config::Tbc, 0, false);
+    addVertexSE3AndEdgePlaneMotion(optimizer, Iso3_w_kf2, 1, Config::Tbc, 0, false);
 
     int vertexId = 2;
 

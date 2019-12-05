@@ -235,9 +235,9 @@ void Localizer::doLocalBA()
     locker lock(mutex mMutexKFLocal);  //!@Vance: 20190729新增,解决MapPub闪烁问题
 
     SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 
@@ -306,9 +306,9 @@ cv::Mat Localizer::doPoseGraphOptimization(int iterNum)
     locker lock(mutex mMutexKFLocal);  // 加锁, 解决MapPub闪烁问题
 
     SlamOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
+    SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 

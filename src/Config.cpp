@@ -91,7 +91,8 @@ float Config::ThDepthFilter;  //! TODO
 bool Config::LocalPrint = false;
 bool Config::GlobalPrint = false;
 bool Config::SaveMatchImage = false;
-std::string Config::MatchImageStorePath = "/home/vance/output/se2/";
+std::string Config::MatchImageStorePath = "/home/vance/output/se2/matches/";
+std::string Config::G2oResultsStorePath = "/home/vance/output/se2/g2o/";
 
 
 void Config::readConfig(const std::string& path)
@@ -207,6 +208,7 @@ void Config::readConfig(const std::string& path)
     settings["global_print"] >> GlobalPrint;
     settings["save_match_image"] >> SaveMatchImage;
     settings["match_image_store_path"] >> MatchImageStorePath;
+    settings["g2o_result_store_path"] >> G2oResultsStorePath;
 
     settings.release();
 
@@ -259,6 +261,10 @@ void Config::checkParamValidity()
               << " - Global print(debug): " << GlobalPrint << std::endl
               << " - Save match images(debug): " << SaveMatchImage << std::endl
               << std::endl;
+    if (SaveMatchImage) {
+        std::cout << " - Match images Store Path(debug): " << MatchImageStorePath << std::endl
+                  << " - G2O results Store Path(debug): " << G2oResultsStorePath << std::endl;
+    }
 
     assert(Kcam.data);
     assert(Kcam.rows == 3 && Kcam.cols == 3);

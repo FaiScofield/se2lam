@@ -41,13 +41,11 @@ public:
     ~EdgeSE2XYZ();
 
     // Useless functions we don't care
-    virtual bool read(std::istream& is);
-    virtual bool write(std::ostream& os) const;
-
+    bool read(std::istream& is);
+    bool write(std::ostream& os) const;
 
     // Note: covariance are set here. Just set information to identity outside.
     void computeError();
-
 
     virtual void linearizeOplus();
 
@@ -67,7 +65,7 @@ private:
 };
 
 //! 2元边
-//! 误差为3维向量, 表示... TODO
+//! 误差为3维向量, 表示se2位姿的差异
 //! 两种顶点的类型都是VertexSE2, 表示SE2位姿点
 class PreEdgeSE2 : public BaseBinaryEdge<3, Vector3D, VertexSE2, VertexSE2>
 {
@@ -106,8 +104,8 @@ public:
         _jacobianOplusXj.setIdentity();
         _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
     }
-    virtual bool read(std::istream& is) { return true; }
-    virtual bool write(std::ostream& os) const { return true; }
+    bool read(std::istream& is);
+    bool write(std::ostream& os) const;
 };
 
 }  // namespace se2lam

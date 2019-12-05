@@ -27,7 +27,7 @@ typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 struct PreSE2 {
 public:
-    double meas[3];
+    double meas[3];  // x, y, theta
     double cov[9];  // 3*3, RowMajor
 };
 

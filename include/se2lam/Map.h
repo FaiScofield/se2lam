@@ -66,7 +66,7 @@ public:
     //! For LocalMapper
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
-    void updateLocalGraph_new();
+    void updateLocalGraph_new(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateCovisibility(const PtrKeyFrame& pNewKF);
     void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
                                     float searchRadius = 5.f);

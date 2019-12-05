@@ -642,7 +642,7 @@ void MapPublish::publishOdomInformation()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    // Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
+//    Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
     Se2 currOdom = mpMap->getCurrentKF()->odom;  // 只显示KF的odo
     if (!mbIsLocalize) {
         //! 这里要对齐到首帧的Odom, 位姿从原点开始

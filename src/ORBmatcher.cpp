@@ -813,7 +813,7 @@ int ORBmatcher::SearchByProjection(PtrKeyFrame pKF, const std::vector<PtrMapPoin
 
     for (int i = 0, iend = localMPs.size(); i < iend; ++i) {
         const PtrMapPoint& pMP = localMPs[i];
-        if (!pMP || pMP->isNull() || !pMP->isGoodPrl())  // NOTE 视差暂时不好的不能投影! 20191022
+        if (!pMP || pMP->isNull()/* || !pMP->isGoodPrl()*/)
             continue;
         if (pMP->hasObservation(pKF))
             continue;
