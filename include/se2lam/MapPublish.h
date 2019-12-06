@@ -7,7 +7,6 @@
 #ifndef MAPPUBLISH_H
 #define MAPPUBLISH_H
 
-#include "FramePublish.h"
 #include "LocalMapper.h"
 #include "Localizer.h"
 #include "Track.h"
@@ -29,7 +28,6 @@ public:
 
     void run();
 
-    void setFramePub(FramePublish* pFP) { mpFramePub = pFP; }
     void setMap(Map* pMap) { mpMap = pMap; }
     void setTracker(Track* pTrack) { mpTracker = pTrack; }
     void setLocalMapper(LocalMapper* pLocal) { mpLocalMapper = pLocal; }
@@ -42,7 +40,7 @@ public:
     void publishGroundTruth();
 
     cv::Mat drawCurrentFrameMatches();
-    cv::Mat drawMatchesInOneImg(){} // TODO    
+    cv::Mat drawLoopCloseMatches();
 
     void requestFinish();
     bool isFinished();
@@ -55,17 +53,23 @@ public:
     Track* mpTracker;
     LocalMapper* mpLocalMapper;
     Localizer* mpLocalizer;
-    FramePublish* mpFramePub;
 
     // for visulization
-    bool mbDataUpdated;
+    bool mbFrontUpdated;
     unsigned long mnCurrentFrameID;
     cv::Mat mCurrentFramePose;
     cv::Mat mCurrentImage, mReferenceImage;
+
     cv::Mat mAffineMatrix, mHomography;
     std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
     std::vector<int> mvMatchIdx, mvMatchIdxGood;
-    std::string mImageText;
+    std::string mFrontText;
+
+    bool mbBackUpdated;
+    PtrKeyFrame mpKFCurr, mpKFLoop;
+    std::map<int, int> mMatchLoop;
+    cv::Mat mLoopImageMatch;
+    std::string mBackText;
     std::mutex mMutexUpdate;
 
 private:

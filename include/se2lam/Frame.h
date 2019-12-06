@@ -44,14 +44,14 @@ public:
     void computeBoundUn(const cv::Mat &K, const cv::Mat &D);
 
     // Image Info
-    cv::Mat img;
+    cv::Mat mImage;
     static float minXUn;
     static float minYUn;
     static float maxXUn;
     static float maxYUn;
     bool inImgBound(cv::Point2f pt);
     ORBextractor* mpORBExtractor;
-    std::vector<cv::KeyPoint> keyPoints;
+    std::vector<cv::KeyPoint> mvKeyPoints;
     std::vector<cv::KeyPoint> keyPointsUn;
     cv::Mat descriptors;
     int N;

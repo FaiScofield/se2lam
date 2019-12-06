@@ -8,7 +8,6 @@
 #define ODOSLAM_H
 
 #include "Config.h"
-#include "FramePublish.h"
 #include "GlobalMapper.h"
 #include "LocalMapper.h"
 #include "Localizer.h"
@@ -66,7 +65,6 @@ private:
     Map* mpMap;
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;
-    FramePublish* mpFramePub;
     MapPublish* mpMapPub;
     Track* mpTrack;
     MapStorage* mpMapStorage;

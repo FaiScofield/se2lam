@@ -34,31 +34,31 @@ int main(int argc, char** argv)
     string fullOdoName = se2lam::Config::DataPath + "/odo_raw.txt";
     ifstream rec(fullOdoName);
     if (!rec.is_open()) {
-        cerr << "[Main ] Please check if the 'odo_raw.txt' file exists!" << endl;
+        cerr << "[Main ][Error] Please check if the 'odo_raw.txt' file exists!" << endl;
         rec.close();
         ros::shutdown();
         exit(-1);
     }
 
     float x, y, theta;
-    string line;    
+    string line;
     size_t m = static_cast<size_t>(se2lam::Config::ImgStartIndex);
     size_t n = static_cast<size_t>(se2lam::Config::ImgCount);
- 
+
     ros::Rate rate(se2lam::Config::FPS);
     for (size_t i = 0; i < n && system.ok(); i++) {
         if (i < m) {
             std::getline(rec, line);
             continue;
         }
-std::getline(rec, line);
+        std::getline(rec, line);
         istringstream iss(line);
         iss >> x >> y >> theta;
 
         string fullImgName = se2lam::Config::DataPath + "/image/" + to_string(i) + ".bmp";
         Mat img = imread(fullImgName, CV_LOAD_IMAGE_GRAYSCALE);
         if (!img.data) {
-            cerr << "[Main ] No image data for image " << fullImgName << endl;
+            cerr << "[Main ][Warni] No image data for image " << fullImgName << endl;
             continue;
         }
 
@@ -67,7 +67,7 @@ std::getline(rec, line);
 
         rate.sleep();
     }
-    cerr << "[Main ] Finish test..." << endl;
+    cerr << "[Main ][Info ] Finish test..." << endl;
 
     rec.close();
     system.requestFinish();
@@ -75,8 +75,8 @@ std::getline(rec, line);
 
     ros::shutdown();
 
-    cerr << "[Main ] Rec close..." << endl;
+    cerr << "[Main ][Info ] Rec close..." << endl;
     rec.close();
-    cerr << "[Main ] Exit test..." << endl;
+    cerr << "[Main ][Info ] Exit test..." << endl;
     return 0;
 }

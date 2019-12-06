@@ -33,17 +33,6 @@ bool Map::empty()
     return isEmpty;
 }
 
-
-void Map::insertKF(const PtrKeyFrame& pkf)
-{
-    locker lock(mMutexGraph);
-    mKFs.insert(pkf);    
-    // pkf->setMap(this);
-    mCurrentKF = pkf;
-    isEmpty = false;
-    mbNewKFInserted = true;
-}
-
 PtrKeyFrame Map::getCurrentKF()
 {
     locker lock(mMutexCurrentKF);
@@ -83,10 +72,32 @@ void Map::clear()
     MapPoint::mNextId = 0;
 }
 
+void Map::insertKF(const PtrKeyFrame& pkf)
+{
+    locker lock(mMutexGraph);
+    mKFs.insert(pkf);
+    // pkf->setMap(this);
+    mCurrentKF = pkf;
+    isEmpty = false;
+    mbNewKFInserted = true;
+}
+
 void Map::insertMP(const PtrMapPoint& pmp)
 {
     locker lock(mMutexGraph);
     mMPs.insert(pmp);
+}
+
+void Map::eraseKF(const PtrKeyFrame& pKF)
+{
+    locker lock(mMutexGraph);
+    mKFs.erase(pKF);
+}
+
+void Map::eraseMP(const PtrMapPoint& pMP)
+{
+    locker lock(mMutexGraph);
+    mMPs.erase(pMP);
 }
 
 Mat Map::getCurrentFramePose()
@@ -114,16 +125,22 @@ size_t Map::countMPs()
     return mMPs.size();
 }
 
-void Map::eraseKF(const PtrKeyFrame& pKF)
+size_t Map::countLocalKFs()
 {
-    locker lock(mMutexGraph);
-    mKFs.erase(pKF);
+    locker lock(mMutexLocalGraph);
+    return mLocalGraphKFs.size();
 }
 
-void Map::eraseMP(const PtrMapPoint& pMP)
+size_t Map::countLocalMPs()
 {
-    locker lock(mMutexGraph);
-    mMPs.erase(pMP);
+    locker lock(mMutexLocalGraph);
+    return mLocalGraphMPs.size();
+}
+
+size_t Map::countLocalRefKFs()
+{
+    locker lock(mMutexLocalGraph);
+    return mRefKFs.size();
 }
 
 
@@ -385,8 +402,8 @@ Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, se
         }
     }
 
-    return Point2f((float)nSameMP / (float)(pKF1->getSizeObsMP()),
-                   (float)nSameMP / (float)(pKF2->getSizeObsMP()));
+    return Point2f((float)nSameMP / (float)(pKF1->countObservations()),
+                   (float)nSameMP / (float)(pKF2->countObservations()));
 }
 
 // Find MPs in pKF which are observed by vpKFs for k times
@@ -420,18 +437,6 @@ double Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& sp
 
     double ratio = spMPsRet.size() * 1.0 / spMPsAll.size();
     return ratio;
-}
-
-int Map::countLocalKFs()
-{
-    locker lock(mMutexLocalGraph);
-    return mLocalGraphKFs.size();
-}
-
-int Map::countLocalMPs()
-{
-    locker lock(mMutexLocalGraph);
-    return mLocalGraphMPs.size();
 }
 
 void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2UV*>>& vpEdgesAll,
@@ -489,7 +494,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         if (it == mLocalGraphKFs.end() || pKF1->isNull())
             continue;
 
-        int id1 = it - mLocalGraphKFs.begin();
+        int id1 = distance(mLocalGraphKFs.begin(), it);
 
         g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
         addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), id1, i, info);
@@ -818,7 +823,7 @@ void Map::updateCovisibility(PtrKeyFrame& pNewKF)
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKFi = *i;
         compareViewMPs(pNewKF, pKFi, spMPs);
-        if (spMPs.size() > 0.3f * pNewKF->getSizeObsMP()) {
+        if (spMPs.size() > 0.3f * pNewKF->countObservations()) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
         }
@@ -922,7 +927,7 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
 
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-
+    WorkTimer timer;
     locker lock(mMutexLocalGraph);
 
     int camParaId = 0;
@@ -930,12 +935,12 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     int maxKFid = -1;
     int minKFid = -1;
-    // If no reference KF, the KF with minId should be fixed
 
+    // If no reference KF, the KF with minId should be fixed
     if (mRefKFs.empty()) {
         minKFid = (*(mLocalGraphKFs.begin()))->id;
         for (auto i = mLocalGraphKFs.begin(), iend = mLocalGraphKFs.end(); i != iend; i++) {
-            PtrKeyFrame pKF = *i;
+            const PtrKeyFrame pKF = *i;
             if (pKF->isNull())
                 continue;
             if (pKF->id < minKFid)
@@ -948,36 +953,30 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     // Add local graph KeyFrames
     for (int i = 0; i < nLocalKFs; i++) {
-
-        PtrKeyFrame pKF = mLocalGraphKFs[i];
-
+        const PtrKeyFrame& pKF = mLocalGraphKFs[i];
         if (pKF->isNull())
             continue;
 
-        int vertexIdKF = i;
+        const int vertexIdKF = i;
+        const bool fixed = (pKF->id == minKFid) || pKF->id == 1;
 
-        bool fixed = (pKF->id == minKFid) || pKF->id == 1;
-
-        g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
+        const g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
     }
 
     // Add odometry based constraints
     for (int i = 0; i < nLocalKFs; i++) {
-
-        PtrKeyFrame pKF = mLocalGraphKFs[i];
-
+        const PtrKeyFrame& pKF = mLocalGraphKFs[i];
         if (pKF->isNull())
             continue;
 
-        PtrKeyFrame pKF1 = pKF->preOdomFromSelf.first;
+        const PtrKeyFrame pKF1 = pKF->preOdomFromSelf.first;
         PreSE2 meas = pKF->preOdomFromSelf.second;
         auto it = std::find(mLocalGraphKFs.begin(), mLocalGraphKFs.end(), pKF1);
         if (it == mLocalGraphKFs.end() || pKF1->isNull())
             continue;
 
-        int id1 = it - mLocalGraphKFs.begin();
-
+        const int id1 = it - mLocalGraphKFs.begin();
         {
             Eigen::Map<Eigen::Matrix3d, RowMajor> info(meas.cov);
             addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
@@ -986,15 +985,13 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     // Add Reference KeyFrames as fixed
     for (int i = 0; i < nRefKFs; i++) {
-
-        PtrKeyFrame pKF = mRefKFs[i];
-
+        const PtrKeyFrame& pKF = mRefKFs[i];
         if (pKF->isNull())
             continue;
 
-        int vertexIdKF = i + nLocalKFs;
+        const int vertexIdKF = i + nLocalKFs;
 
-        g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
+        const g2o::SE2 pose(pKF->Twb.x, pKF->Twb.y, pKF->Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, true);
     }
 
@@ -1007,75 +1004,74 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     // Add local graph MapPoints
     for (int i = 0; i < N; i++) {
-
-        PtrMapPoint pMP = mLocalGraphMPs[i];
+        const PtrMapPoint& pMP = mLocalGraphMPs[i];
         assert(!pMP->isNull());
 
-        int vertexIdMP = maxKFid + i;
-        Vector3d lw = toVector3d(pMP->getPos());
-
+        const int vertexIdMP = maxKFid + i;
+        const Vector3d lw = toVector3d(pMP->getPos());
         addVertexSBAXYZ(optimizer, lw, vertexIdMP);
 
-        std::set<PtrKeyFrame> pKFs = pMP->getObservations();
-
+        const std::set<PtrKeyFrame> pKFs = pMP->getObservations();
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; j++) {
-
-            PtrKeyFrame pKF = (*j);
-            if (pKF->isNull())
+            const PtrKeyFrame pKFj = (*j);
+            if (pKFj->isNull())
                 continue;
 
-            if (checkAssociationErr(pKF, pMP)) {
+            if (checkAssociationErr(pKFj, pMP)) {
                 printf("!! ERR MP: Wrong Association! [LocalGraph loading] \n");
                 continue;
             }
 
-            int ftrIdx = pMP->getFtrIdx(pKF);
-            int octave = pMP->getOctave(pKF);
-            const float Sigma2 = pKF->mvLevelSigma2[octave];
-            Eigen::Vector2d uv = toVector2d(pKF->keyPointsUn[ftrIdx].pt);
-
+            const int ftrIdx = pMP->getFtrIdx(pKFj);
+            const int octave = pMP->getOctave(pKFj);
+            const float Sigma2 = pKFj->mvLevelSigma2[octave];
+            const Eigen::Vector2d uv = toVector2d(pKFj->keyPointsUn[ftrIdx].pt);
 
             int vertexIdKF = -1;
-
-            auto it1 = std::find(mLocalGraphKFs.begin(), mLocalGraphKFs.end(), pKF);
+            auto it1 = std::find(mLocalGraphKFs.begin(), mLocalGraphKFs.end(), pKFj);
             if (it1 != mLocalGraphKFs.end()) {
                 vertexIdKF = it1 - mLocalGraphKFs.begin();
             } else {
-                auto it2 = std::find(mRefKFs.begin(), mRefKFs.end(), pKF);
+                auto it2 = std::find(mRefKFs.begin(), mRefKFs.end(), pKFj);
                 if (it2 != mRefKFs.end())
                     vertexIdKF = it2 - mRefKFs.begin() + nLocalKFs;
             }
-
             if (vertexIdKF == -1)
                 continue;
 
             // compute covariance/information
-            Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * Sigma2;
-            Vector3d lc = toVector3d(pKF->mViewMPs[ftrIdx]);
+            const Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * Sigma2;
+            const Vector3d lc = toVector3d(pKFj->mViewMPs[ftrIdx]);
 
-            double zc = lc(2);
-            double zc_inv = 1. / zc;
-            double zc_inv2 = zc_inv * zc_inv;
+            const double zc = lc(2);
+            const double zc_inv = 1. / zc;
+            const double zc_inv2 = zc_inv * zc_inv;
             const float& fx = Config::fx;
             Matrix23d J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
-            Matrix3d Rcw = toMatrix3d(pKF->Tcw.rowRange(0, 3).colRange(0, 3));
-            Vector3d pi(pKF->Twb.x, pKF->Twb.y, 0);
+            const Matrix3d Rcw = toMatrix3d(pKFj->Tcw.rowRange(0, 3).colRange(0, 3));
+            const Vector3d pi(pKFj->Twb.x, pKFj->Twb.y, 0);
 
+            const Matrix23d J_pi_Rcw = J_pi * Rcw;
 
-            Matrix23d J_pi_Rcw = J_pi * Rcw;
-
-            Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
-            Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);
-            float Sigma_rotxy = 1. / Config::PlaneMotionInfoXrot;
-            float Sigma_z = 1. / Config::PlaneMotionInfoZ;
-            Matrix2d Sigma_all =
+            const Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
+            const Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);
+            const float Sigma_rotxy = 1. / Config::PlaneMotionInfoXrot;
+            const float Sigma_z = 1. / Config::PlaneMotionInfoZ;
+            const Matrix2d Sigma_all =
                 Sigma_rotxy * J_rotxy * J_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
 
             addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, campr, toSE3Quat(Config::Tbc),
                           Sigma_all.inverse(), delta);
         }
     }
+
+    size_t nVertices = optimizer.vertices().size();
+    size_t nEdges = optimizer.edges().size();
+    cout << "[ Map ][Info ] #" << mCurrentKF->id << "(KF#" << mCurrentKF->mIdKF
+         << ") 加载LocalGraph: 边数为" << nEdges << ", 节点数为" << nVertices
+         << ": LocalKFs/nRefKFs/nMPs = " << nLocalKFs << "/" << nRefKFs << "/" << N << ", 耗时"
+         << setiosflags(ios::fixed) << setprecision(2) << timer.count() << "ms" << endl;
 }
 
 }  // namespace se2lam

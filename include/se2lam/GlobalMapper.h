@@ -7,15 +7,8 @@
 #ifndef GLOBALMAPPER_H
 #define GLOBALMAPPER_H
 
-#include "Config.h"
-#include "KeyFrame.h"
-#include "LocalMapper.h"
-#include "Map.h"
 #include "ORBVocabulary.h"
-#include "ORBmatcher.h"
 #include "Sparsifier.h"
-#include "Track.h"
-#include "converter.h"
 #include "optimizer.h"
 #include <condition_variable>
 
@@ -24,18 +17,22 @@ namespace se2lam
 
 class Map;
 class LocalMapper;
+class MapPublish;
 
 class GlobalMapper
 {
 public:
     GlobalMapper();
 
-    void run();
-    void setLocalMapper(LocalMapper* pLocalMapper);
+    void setMap(Map* pMap) { mpMap = pMap; }
+    void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
+    void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
+    void setORBVoc(ORBVocabulary* pORBVoc) { mpORBVoc = pORBVoc; }
     void setUpdated(bool val);
-    void setMap(Map* pMap);
 
     bool CheckGMReady();
+
+    void run();
 
     // Feature Constraint Graph Functions ...
 
@@ -72,20 +69,13 @@ public:
 
 
     // Loop Closing ...
-    ORBVocabulary* mpORBVoc;
-    PtrKeyFrame mpLastKFLoopDetect;
-    void setORBVoc(ORBVocabulary* pORBVoc);
     void ComputeBowVecAll();
     bool DetectLoopClose();
     bool VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchAll, map<int, int>& _mapMatchRaw);
     void GlobalBA();
 
-    void DrawMatch(const map<int, int>& mapiMatch);
-    void DrawMatch(const vector<int>& viMatch);
-
     void RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop, map<int, int>& mapiMatch);
     void RemoveKPMatch(PtrKeyFrame _pKFCurrent, PtrKeyFrame _pKFLoop, map<int, int>& mapiMatch);
-
 
     // DEBUG Functions ...
     // Print SE3Quat
@@ -95,22 +85,30 @@ public:
                       const vector<g2o::EdgeSE3Prior*>& vpEdgePlane, double threshChi2 = 30.0,
                       bool bPrintMatInfo = false);
 
-    // FramePublish Related ...
-    cv::Mat mImgLoop;
-    cv::Mat mImgCurr;
-    cv::Mat mImgMatch;
-
-    bool mbExit;
-
     void setBusy(bool v);
     void waitIfBusy();
 
     void requestFinish();
     bool isFinished();
 
-protected:
+    PtrKeyFrame mpLastKFLoopDetect;
+    bool mbExit;
+
+private:
+    // visulization
+    void DrawMatch(const map<int, int>& mapiMatch);
+    void DrawMatch(const vector<int>& viMatch);
+    void copyForPub(const map<int, int>& mapiMatch, bool closed);
+    cv::Mat mImgLoop;
+    cv::Mat mImgCurr;
+    cv::Mat mImgMatch;
+
     Map* mpMap;
     LocalMapper* mpLocalMapper;
+    MapPublish* mpMapPublisher;
+
+    ORBVocabulary* mpORBVoc;
+
 
     PtrKeyFrame mpKFCurr;
     PtrKeyFrame mpKFLoop;
