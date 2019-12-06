@@ -217,13 +217,13 @@ void MapPublish::run()
             break;
 
         if (mpMap->empty()) {
-            rate.sleep();
+            //rate.sleep();
             continue;
         }
 
         if (!mbUpdated) {  // Tracker/Localizer 更新此标志
-            rate.sleep();
-            ros::spinOnce();
+            //rate.sleep();
+            //ros::spinOnce();
             continue;
         }
         mbUpdated = false;
@@ -250,13 +250,14 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cerr << "[MapPu][Info ] Exiting Mappublish..." << endl;
+    cerr << "[MapPublisher] Exiting Mappublish..." << endl;
 
     nh.shutdown();
 
     setFinish();
 }
 
+//! NOTE 需要转换到Twb坐标系的, 应该根据Tcw来显示.
 void MapPublish::publishKeyFrames()
 {
     mKFsNeg.points.clear();
@@ -291,19 +292,19 @@ void MapPublish::publishKeyFrames()
             continue;
 
         // 按比例缩放地图, mScaleRatio = 300 时显示比例为 1:3.333，数据源单位是[mm]
-        Mat Twc = cvu::inv(pKFi->getPose());
-        Mat Twb = Twc * Config::Tcb;
-        Twc.at<float>(0, 3) = Twc.at<float>(0, 3) / mScaleRatio;
-        Twc.at<float>(1, 3) = Twc.at<float>(1, 3) / mScaleRatio;
-        Twc.at<float>(2, 3) = Twc.at<float>(2, 3) / mScaleRatio;
+        Mat Twci = cvu::inv(pKFi->getPose());
+        Mat Twbi = Twci * Config::Tcb;
+        Twci.at<float>(0, 3) = Twci.at<float>(0, 3) / mScaleRatio;
+        Twci.at<float>(1, 3) = Twci.at<float>(1, 3) / mScaleRatio;
+        Twci.at<float>(2, 3) = Twci.at<float>(2, 3) / mScaleRatio;
 
-        Mat ow = Twc * o;  // 第i帧KF的相机中心位姿
-        Mat p1w = Twc * p1;
-        Mat p2w = Twc * p2;
-        Mat p3w = Twc * p3;
-        Mat p4w = Twc * p4;
+        Mat ow = Twci * o;  // 第i帧KF的相机中心位姿
+        Mat p1w = Twci * p1;
+        Mat p2w = Twci * p2;
+        Mat p3w = Twci * p3;
+        Mat p4w = Twci * p4;
 
-        Mat ob = Twb * o;  // 第i帧KF的Body中心位姿
+        Mat ob = Twbi * o;  // 第i帧KF的Body中心位姿
         geometry_msgs::Point msgs_b;
         msgs_b.x = ob.at<float>(0) / mScaleRatio;
         msgs_b.y = ob.at<float>(1) / mScaleRatio;
@@ -372,7 +373,7 @@ void MapPublish::publishKeyFrames()
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; ++it) {
                 if ((*it)->mIdKF > pKFi->mIdKF)  // 只统计在自己前面的共视KF, 防止重复计入
                     continue;
-                Mat Twc2 = cvu::inv((*it)->getPose()) /** Config::Tcb*/;
+                Mat Twc2 = cvu::inv((*it)->getPose());
                 geometry_msgs::Point msgs_o2;
                 msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
                 msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
@@ -385,7 +386,7 @@ void MapPublish::publishKeyFrames()
         // Feature Graph
         for (auto iter = pKFi->mFtrMeasureFrom.begin(); iter != pKFi->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
-            Mat Twc2 = cvu::inv(pKF2->getPose()) /* * Config::Tcb*/;
+            Mat Twc2 = cvu::inv(pKF2->getPose());
             geometry_msgs::Point msgs_o2;
             msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
             msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
@@ -397,12 +398,12 @@ void MapPublish::publishKeyFrames()
         // Visual Odometry Graph (estimate). VI轨迹转到odo坐标系下, 方便和odo轨迹对比
         PtrKeyFrame pKFOdoChild = pKFi->mOdoMeasureFrom.first;  // 下一帧
         if (pKFOdoChild != nullptr && !mbIsLocalize) {
-            assert(pKFOdoChild->mIdKF - pKFi->mIdKF >= 1);
-            Mat Twb = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
+            assert(pKFOdoChild->mIdKF > pKFi->mIdKF);
+            Mat Twb2 = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
             geometry_msgs::Point msgs_b2;
-            msgs_b2.x = Twb.at<float>(0, 3) / mScaleRatio;
-            msgs_b2.y = Twb.at<float>(1, 3) / mScaleRatio;
-            msgs_b2.z = Twb.at<float>(2, 3) / mScaleRatio;
+            msgs_b2.x = Twb2.at<float>(0, 3) / mScaleRatio;
+            msgs_b2.y = Twb2.at<float>(1, 3) / mScaleRatio;
+            msgs_b2.z = Twb2.at<float>(2, 3) / mScaleRatio;
             mVIGraph.points.push_back(msgs_b);  // 当前帧的位姿(odo坐标系)
             mVIGraph.points.push_back(msgs_b2);  // 下一帧的位姿
         }
@@ -458,19 +459,9 @@ void MapPublish::publishKeyFrames()
     publisher.publish(mVIGraph);
 
     cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF
-         << " 当前Map的组成: Active/Negtive/All = " << mKFsAct.points.size() / 16 << "/"
-         << mKFsNeg.points.size() / 16 << "/" << vKFsAll.size() << ", mVIGraph size = "
+         << " 当前Map的组成: Active/Negtive/All = " << vKFsAct.size() << "/"
+         << vKFsNeg.size() << "/" << vKFsAll.size() << ", mVIGraph size = "
          << mVIGraph.points.size() / 2 << endl;
-
-//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Active KFs: ";
-//    for (size_t i = 0; i < vKFsAct.size(); ++i)
-//        cout << vKFsAct[i]->mIdKF << ", ";
-//    cout << endl;
-
-//    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF << " Negtive KFs: ";
-//    for (size_t i = 0; i < vKFsNeg.size(); ++i)
-//        cout << vKFsNeg[i]->mIdKF << ", ";
-//    cout << endl;
 }
 
 void MapPublish::publishMapPoints()

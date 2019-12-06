@@ -202,7 +202,7 @@ void Localizer::readFrameInfo(const Mat& img, float imgTime, const Se2& odo)
 
     mFrameCurr = Frame(img, odo, mpORBextractor);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
-    mFrameCurr.setPose(Twb);
+    mFrameCurr.setTwb(Twb);
 
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
     mpKFCurr->computeBoW(mpORBVoc);
@@ -293,7 +293,7 @@ void Localizer::doLocalBA()
     timer.stop();
 
     Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, mpKFCurr->mIdKF));
-    mpKFCurr->setPose(Tcw);  // 更新Tcw和Twb
+    mpKFCurr->setPose(Tcw);  // 更新Tcw
 
     Se2 Twb = mpKFCurr->getTwb();
     printf("[Localizer] #%ld localBA Time = %.2fms, set pose to [%.4f, %.4f]\n", mpKFCurr->mIdKF,

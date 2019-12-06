@@ -422,7 +422,7 @@ void Map::updateLocalGraph_new(int maxLevel, int maxN, float searchRadius)
         if (!pKF || pKF->isNull())
             continue;
 
-        const vector<PtrMapPoint> vpMPs = pKF->getObservations(true, false);
+        const vector<PtrMapPoint> vpMPs = pKF->getObservations(true, true);
         setLocalMPs.insert(vpMPs.begin(), vpMPs.end());
     }
     double t2 = timer.count();
@@ -727,41 +727,40 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
  */
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-    printf("[ Map ][Info ] #%ld(KF#%ld) 正在加载LocalGraph以做局部图优化...\n", mCurrentKF->id,
-           mCurrentKF->mIdKF);
-
     locker lock(mMutexLocalGraph);
 
     int camParaId = 0;
     CamPara* campr = addCamPara(optimizer, Config::Kcam, camParaId);
 
-    unsigned long maxKFid = 0;
-    unsigned long minKFid = 0;  // LocalKFs里最小的KFid
-
-    // If no reference KF, the KF with minId should be fixed
-    if (mvLocalRefKFs.empty()) {
-        minKFid = (*(mvLocalGraphKFs.begin()))->mIdKF;
-        for (auto i = mvLocalGraphKFs.begin(), iend = mvLocalGraphKFs.end(); i != iend; ++i) {
-            PtrKeyFrame pKF = *i;
-            if (!pKF && pKF->isNull())
-                continue;
-            if (pKF->mIdKF < minKFid)
-                minKFid = pKF->mIdKF;
-        }
-    }
-
     const int nLocalKFs = mvLocalGraphKFs.size();
     const int nRefKFs = mvLocalRefKFs.size();
 
+    const int maxVertexIdKF = nLocalKFs + nRefKFs;
+    unsigned long minKFid = 0;  // LocalKFs里最小的KFid
+
+    // If no reference KF, the KF with minId should be fixed
+    if (nRefKFs == 0) {
+//        minKFid = (*(mvLocalGraphKFs.begin()))->mIdKF;  //! FIXME? 原作为id
+//        for (auto i = mvLocalGraphKFs.begin(), iend = mvLocalGraphKFs.end(); i != iend; ++i) {
+//            PtrKeyFrame pKF = *i;
+//            if (!pKF && pKF->isNull())
+//                continue;
+//            if (pKF->mIdKF < minKFid)
+//                minKFid = pKF->mIdKF;
+//        }
+        // 目前Local容器都是有序的
+        minKFid = mvLocalGraphKFs[0]->mIdKF;
+    }
+
     // Add local graph KeyFrames
     for (int i = 0; i < nLocalKFs; ++i) {
-        const PtrKeyFrame& pKF = mvLocalGraphKFs[i];
-        assert(!pKF->isNull());
+        const PtrKeyFrame& pKFi = mvLocalGraphKFs[i];
+        assert(!pKFi->isNull());
 
         const int vertexIdKF = i;
-        const bool fixed = (pKF->mIdKF == minKFid) || (pKF->mIdKF == 0);
+        const bool fixed = (pKFi->mIdKF == minKFid) || (pKFi->mIdKF == 0);
 
-        const Se2 Twb = pKF->getTwb();
+        const Se2 Twb = pKFi->getTwb();
         const g2o::SE2 pose(Twb.x, Twb.y, Twb.theta);
         addVertexSE2(optimizer, pose, vertexIdKF, fixed);
     }
@@ -774,14 +773,14 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         const PtrKeyFrame pKFj = pKFi->preOdomFromSelf.first;
         if (!pKFj || pKFj->isNull())
             continue;
-
         assert(pKFj->mIdKF > pKFi->mIdKF); // from是指自己的下一KF
+
         PreSE2 meas = pKFi->preOdomFromSelf.second;
         auto it = std::find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKFj);
         if (it == mvLocalGraphKFs.end())
             continue;
 
-        const int id1 = it - mvLocalGraphKFs.begin();
+        const int id1 = distance(mvLocalGraphKFs.begin(), it);
         Eigen::Map<Eigen::Matrix3d, RowMajor> info(meas.cov);
         addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
     }
@@ -798,18 +797,17 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         addVertexSE2(optimizer, pose, vertexIdKF, true);
     }
 
-    maxKFid = nLocalKFs + nRefKFs;  //! 这里不应该+1
 
     // Store xyz2uv edges
-    const int N = mvLocalGraphMPs.size();
+    const int nMPs = mvLocalGraphMPs.size();
     const float delta = Config::ThHuber;
 
     // Add local graph MapPoints
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < nMPs; ++i) {
         const PtrMapPoint& pMP = mvLocalGraphMPs[i];
         assert(!pMP->isNull());
 
-        const int vertexIdMP = i + maxKFid;
+        const int vertexIdMP = i + maxVertexIdKF;
         const Eigen::Vector3d lw = toVector3d(pMP->getPos());
         addVertexSBAXYZ(optimizer, lw, vertexIdMP);
 
@@ -870,9 +868,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     size_t nVertices = optimizer.vertices().size();
     size_t nEdges = optimizer.edges().size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) LocalMap的Graph: 节点数为%ld个(LocalKFs=%d, nRefKFs=%d, "
-           "nMPs=%d), 边数为%ld条\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, nVertices, nLocalKFs, nRefKFs, N, nEdges);
+    printf("[ Map ][Info ] #%ld(KF#%ld) 加载LocalGraph: 边数为%ld, 节点数为%ld: LocalKFs/nRefKFs/nMPs = %d/%d/%d\n",
+           mCurrentKF->id, mCurrentKF->mIdKF, nEdges, nVertices, nLocalKFs, nRefKFs, nMPs);
 }
 
 //! 此函数没有被调用!
@@ -1145,7 +1142,7 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
         if (pKF->isNull())
             continue;
         Eigen::Vector3d vp = estimateVertexSE2(optimizer, i).toVector();
-        pKF->setPose(Se2(vp(0), vp(1), vp(2)));
+        pKF->setTwb(Se2(vp(0), vp(1), vp(2)));
     }
 
     for (int i = 0; i != N; ++i) {

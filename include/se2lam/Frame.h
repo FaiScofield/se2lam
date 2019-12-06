@@ -53,7 +53,7 @@ public:
 
     //! Pose Operations
     void setPose(const cv::Mat& _Tcw);
-    void setPose(const Se2& _Twb);
+    void setTwb(const Se2& _Twb);
     void setTcr(const cv::Mat& _Tcr);
     void setTrb(const Se2& _Trb);
     Se2 getTwb();
@@ -127,11 +127,12 @@ public:
 protected:
     bool mbNull;
 
-    //! 位姿信息需要加锁访问/修改
+    //! 位姿信息需要加锁访问/修改. 实际应该只有Tcw才要修改, 其他几个值不会变动! TODO
+    //! NOTE Tcw和Twb不可以绑定修改! 一个是预测值, 一个是测量值, Tcw需要根据Twb来优化.
     cv::Mat Tcr;  // Current Camera frame to Reference Camera frame, 三角化和此有关
-    cv::Mat Tcw;  // Current Camera frame to World frame
+    cv::Mat Tcw;  // Current Camera frame to World frame. 预测值
     Se2 Trb;      // reference KF body to current frame body
-    Se2 Twb;      // world to body
+    Se2 Twb;      // world to body. 测量值
     std::mutex mMutexPose;
 
     std::vector<PtrMapPoint> mvpMapPoints;  // KP对应的MP

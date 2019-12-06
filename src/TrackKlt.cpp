@@ -180,7 +180,8 @@ void TrackKlt::createFrameFirstKlt(const Mat& img, const Se2& odo)
              << "And the start odom is: " << odo << endl;
         cout << "========================================================" << endl;
 
-        mCurrentFrame.setPose(Se2(0.f, 0.f, 0.f));
+        mCurrentFrame.setPose(Config::Tcb);
+        mCurrentFrame.setTwb(Se2(0.f, 0.f, 0.f));
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map,没有给LocalMapper
         mpMap->updateLocalGraph();       // 首帧添加到LocalMap里

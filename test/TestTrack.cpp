@@ -33,7 +33,7 @@ TestTrack::TestTrack()
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
-    mMaxAngle = static_cast<float>(g2o::deg2rad(88.));
+    mMaxAngle = static_cast<float>(g2o::deg2rad(50.));
     mMaxDistance = 0.3f * Config::UpperDepth;
 
     mCurrRatioGoodDepth = mCurrRatioGoodParl = 0;
@@ -118,7 +118,8 @@ void TestTrack::processFirstFrame()
              << "And the start odom is: " << mCurrentFrame.odom << endl;
         cout << "========================================================" << endl;
 
-        mCurrentFrame.setPose(Se2(0, 0, 0));
+        mCurrentFrame.setPose(Config::Tcb);
+        mCurrentFrame.setTwb(Se2(0, 0, 0));
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map, 没有给LocalMapper
 
@@ -225,7 +226,8 @@ void TestTrack::updateFramePoseFromRef()
     const Mat Tc2c1 = Config::Tcb * Tb1b2.inv().toCvSE3() * Config::Tbc;
     mCurrentFrame.setTrb(Tb1b2);
     mCurrentFrame.setTcr(Tc2c1);
-    mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
+    mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose()); // 测量值, 优化后是预测值
+    mCurrentFrame.setTwb(mpReferenceKF->getTwb() + Tb1b2);
 
     // Eigen::Map 是一个引用, 这里更新了到当前帧的积分
     Eigen::Map<Vector3d> meas(preSE2.meas);
@@ -566,8 +568,8 @@ bool TestTrack::needNewKF()
     bool c0 = deltaFrames >= nMinFrames;  // 下限
 
     // 充分条件
-    bool c1 = mnKPMatches < 50 && (mnKPsInline < 20 || mnKPMatchesGood < 15); // 和参考帧匹配的内点数太少. 这里顺序很重要!
-    bool c2 = mnMPsCandidate > 80;  // 候选MP多且新增MP少(远)已经新增的MP数够多
+    bool c1 = mnKPMatches < 50 && (mnKPsInline < 30 || mnKPMatchesGood < 20); // 和参考帧匹配的内点数太少. 这里顺序很重要! 30/20/15
+    bool c2 = mnMPsCandidate > 50;  // 候选MP多且新增MP少(远)已经新增的MP数够多
     bool c3 = (mCurrRatioGoodDepth < mLastRatioGoodDepth) && (mCurrRatioGoodParl < mLastRatioGoodParl);
     bool bNeedKFByVO = c0 && (c1 || c2 || c3);
 
@@ -585,7 +587,7 @@ bool TestTrack::needNewKF()
     cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     cv::Mat xy = cTc.rowRange(0, 2).col(3);
     bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
-    bool bNeedKFByOdo = c4 && (c5 || c6);  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+    bool bNeedKFByOdo = c4 || (c5 || c6);  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
 
     //! 2.如果跟踪效果还可以, 就看旋转平移条件
     if (bNeedKFByOdo) {
@@ -910,7 +912,6 @@ void TestTrack::startNewTrack()
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
 }
 
-
 //! LocalMap 的工作
 void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCandidates)
 {
@@ -978,7 +979,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
     localBA();
 //    doLocalBA(*mpNewKF);
     double t8 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) L8.局部图优化耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
+    printf("[TIME] #%ld(KF#%ld) L8.局部BA耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
 
 
 }
@@ -1171,11 +1172,11 @@ void TestTrack::localBA()
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(true);
+    optimizer.setVerbose(false);
 
     mpMap->loadLocalGraph(optimizer);
     if (optimizer.edges().empty()) {
-        fprintf(stderr, "[ERRO] #%ld(KF#%ld) No MPs in graph, leave localBA().\n",
+        fprintf(stderr, "[ERRO] #%ld(KF#%ld) No MPs in graph, leaving localBA().\n",
                 mpNewKF->id, mpNewKF->mIdKF);
         return;
     }

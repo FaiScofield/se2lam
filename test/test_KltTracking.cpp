@@ -109,7 +109,7 @@ public:
                 vKPs[i].octave = 0;
             }
             frameCurr = Frame(imgForw, odo, vKPs, pExtractor);
-            frameCurr.setPose(Se2(0.f, 0.f, 0.f));
+            frameCurr.setTwb(Se2(0.f, 0.f, 0.f));
 
             KFRef = make_shared<KeyFrame>(frameCurr);
             resetKltData();
@@ -240,7 +240,7 @@ public:
             vector<KeyPoint> vKPsCurFrame(ptsForw.size());
             cv::KeyPoint::convert(ptsForw, vKPsCurFrame);
             frameCurr = Frame(imgForw, odo, vKPsCurFrame, pExtractor);
-            frameCurr.setPose(Se2(0.f, 0.f, 0.f));
+            frameCurr.setTwb(Se2(0.f, 0.f, 0.f));
 
             KFRef = make_shared<KeyFrame>(frameCurr);
             resetKltData();
@@ -363,7 +363,7 @@ public:
             vector<KeyPoint> vKPsCurFrame(ptsForw.size());
             cv::KeyPoint::convert(ptsForw, vKPsCurFrame);
             frameCurr = Frame(imgForw, odo, vKPsCurFrame, pExtractor);
-            frameCurr.setPose(Se2(0.f, 0.f, 0.f));
+            frameCurr.setTwb(Se2(0.f, 0.f, 0.f));
 
             KFRef = make_shared<KeyFrame>(frameCurr);
 

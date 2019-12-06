@@ -145,6 +145,8 @@ void MapStorage::saveKeyFrames()
 
         file << "Pose" << pKF->getPose();
 
+        file << "Twb" << pKF->getTwb().toCvSE3();
+
         file << "Odometry" << Point3f(pKF->odom.x, pKF->odom.y, pKF->odom.theta);
 
         file << "ScaleFactor" << pKF->mfScaleFactor;
@@ -361,9 +363,13 @@ void MapStorage::loadKeyFrames()
         pKF->N = (int)nodeKF["N"];
         pKF->id = pKF->mIdKF;
 
-        Mat pose;
+        Mat pose, Twb;
         nodeKF["Pose"] >> pose;
         pKF->setPose(pose);
+
+        nodeKF["Twb"] >> Twb;
+        Se2 twb;
+        pKF->setTwb(twb.fromCvSE3(Twb));
 
         Point3f odo;
         nodeKF["Odometry"] >> odo;

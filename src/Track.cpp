@@ -183,7 +183,8 @@ void Track::processFirstFrame()
              << "And the start odom is: " << mCurrentFrame.odom << endl;
         cout << "========================================================" << endl;
 
-        mCurrentFrame.setPose(Se2(0, 0, 0));
+        mCurrentFrame.setPose(Config::Tcb);
+        mCurrentFrame.setTwb(Se2(0, 0, 0));
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map, 没有给LocalMapper
 
@@ -196,51 +197,6 @@ void Track::processFirstFrame()
         Frame::nextId = 0;
         mState = cvu::FIRST_FRAME;
     }
-}
-
-bool Track::trackLastFrame()
-{
-    if (mCurrentFrame.isNull())  // 图像挂掉的时候Frame会变成null.
-        return false;
-    if (mCurrentFrame.mTimeStamp < mLastFrame.mTimeStamp) {
-        fprintf(stderr,
-                "[Track][Warni] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
-                mCurrentFrame.id, mLastFrame.id, mLastFrame.mTimeStamp, mCurrentFrame.mTimeStamp);
-        return false;
-    }
-
-    updateFramePoseFromLast();
-
-    int nMatches = mpORBmatcher->SearchByProjection(mLastFrame, mCurrentFrame, 7);
-    if (nMatches < 20) {
-        printf("[Track][Warni] #%ld-#%ld 与上一帧的MP匹配点数过少, 扩大搜索半径重新搜索.\n",
-               mCurrentFrame.id, mLastFrame.id);
-        mCurrentFrame.clearObservations();
-        nMatches = mpORBmatcher->SearchByProjection(mLastFrame, mCurrentFrame, 15);
-    }
-    if (nMatches < 20) {
-        printf("[Track][Warni] #%ld-#%ld 与上一帧的MP匹配点数仍然过少, 即将转为与参考帧匹配!\n",
-               mCurrentFrame.id, mLastFrame.id);
-        return false;
-    }
-    int nCorres = 0;
-    double projError = 10000.;
-    Se2 Twb = mCurrentFrame.getTwb();
-    printf("[Track][Warni] #%ld-#%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f]\n", mCurrentFrame.id,
-           mLastFrame.id, Twb.x, Twb.y, Twb.theta);
-    poseOptimization(&mCurrentFrame, nCorres, projError);  // 更新 mPose, mvbOutlier
-    mCurrentFrame.updateObservationsAfterOpt();
-    Twb = mCurrentFrame.getTwb();
-    printf("[Track][Warni] #%ld-#%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f]\n", mCurrentFrame.id,
-           mLastFrame.id, Twb.x, Twb.y, Twb.theta);
-    bool lost = detectIfLost(nCorres, projError);
-    if (lost) {
-        printf("[Track][Warni] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, "
-               "即将转为重定位!\n",
-               mCurrentFrame.id, mLastFrame.id, nCorres, projError);
-        return false;
-    }
-    return true;
 }
 
 bool Track::trackReferenceKF()
@@ -335,38 +291,22 @@ bool Track::trackLocalMap()
     }
 }
 
-void Track::updateFramePoseFromLast()
-{
-    Se2 Tb1b2 = mCurrentFrame.odom - mLastFrame.odom;
-    mCurrentFrame.setPose(mLastFrame.getTwb() + Tb1b2);
-}
-
 //! 根据RefKF和当前帧的里程计更新先验位姿和变换关系, odom是se2绝对位姿而非增量
 //! 如果当前帧不是KF，则当前帧位姿由RefK叠加上里程计数据计算得到
 //! 这里默认场景是工业级里程计，精度比较准
 void Track::updateFramePoseFromRef()
 {
-    // Tb1b2, 参考帧Body->当前帧Body, se2形式
-    // mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;
-    // Tb2b1, 当前帧Body->参考帧Body, se2形式
-    Se2 Tb1b2 = mCurrentFrame.odom - mpReferenceKF->odom;
-    Se2 Tb2b1 = mpReferenceKF->odom - mCurrentFrame.odom;
-    // Tc2c1, 当前帧Camera->参考帧Camera, Tc2c1 = Tcb * Tb2b1 * Tbc
-    // mCurrentFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
-    // Tc2w, 当前帧Camera->World, Tc2w = Tc2c1 * Tc1w
-    // mCurrentFrame.Tcw = mCurrentFrame.Tcr * mpReferenceKF->Tcw;
-    // Twb2, 当前帧World->Body，se2形式，故相加， Twb2 = Twb1 * Tb1b2
-    // mCurrentFrame.Twb = mpReferenceKF->Twb + mCurrentFrame.Trb;
+    const Se2 Tb1b2 = mCurrentFrame.odom - mpReferenceKF->odom;
+    const Mat Tc2c1 = Config::Tcb * Tb1b2.inv().toCvSE3() * Config::Tbc;
 
-    Mat Tc2c1 = Config::Tcb * Tb2b1.toCvSE3() * Config::Tbc;
-    //    Mat Tc1w = mpReferenceKF->getPose();
-    //    mCurrentFrame.setTrb(Tb1b2);
-    //    mCurrentFrame.setTcr(Tc2c1);
-    //    mCurrentFrame.setPose(Tc2c1 * Tc1w);  // TODO  用这种方式算出来初始位姿不对!
-
+    // Tb1b2, 当前帧Body->参考帧Body, se2形式
     mCurrentFrame.setTrb(Tb1b2);
+    // Tc2c1, 参考帧Camera->当前帧Camera, Tc2c1 = Tcb * Tb2b1 * Tbc
     mCurrentFrame.setTcr(Tc2c1);
-    mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
+    // Tc2w, World->当前帧Camera, Tc2w = Tc2c1 * Tc1w
+    mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose());
+    // Twb2, Body->当前帧World，se2形式，故相加， Twb2 = Twb1 * Tb1b2
+    mCurrentFrame.setTwb(mpReferenceKF->getTwb() + Tb1b2);
 
     // preintegration 预积分
     Eigen::Map<Vector3d> meas(preSE2.meas);
@@ -1262,7 +1202,7 @@ void Track::doLocalBA(Frame& frame)
     optimizer.optimize(Config::LocalIterNum);
 
     Mat Tcw = toCvMat(estimateVertexSE3Expmap(optimizer, 0));
-    frame.setPose(Tcw);  // 更新Tcw和Twb
+    frame.setPose(Tcw);  // 更新Tcw
 
     Se2 Twb = frame.getTwb();
     fprintf(stderr, "[Track][Info ] #%ld-#%ld 局部地图投影优化成功, 参与优化的MP观测数 = %d, 耗时 "

@@ -65,11 +65,8 @@ public:
 
 private:
     void processFirstFrame();
-    bool trackLastFrame();
     bool trackReferenceKF();
     bool trackLocalMap();
-
-    void updateFramePoseFromLast();
     void updateFramePoseFromRef();
 
     void doTriangulate(PtrKeyFrame& pKF);
