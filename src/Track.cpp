@@ -162,7 +162,7 @@ void Track::UpdateFramePose()
     Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
     mCurrentFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     mCurrentFrame.Tcw = mCurrentFrame.Tcr * mpReferenceKF->Tcw;
-    mCurrentFrame.Twb = mpReferenceKF->Twb + (mCurrentFrame.odom - mpReferenceKF->odom);
+    mCurrentFrame.Twb = mpReferenceKF->Twb + mCurrentFrame.Trb;
 
     // preintegration
     Eigen::Map<Vector3d> meas(preSE2.meas);

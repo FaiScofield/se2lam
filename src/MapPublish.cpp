@@ -334,12 +334,11 @@ void MapPublish::publishKeyFrames()
     if (vKFsAll.empty())
         return;
 
-    vector<PtrKeyFrame> vKFsAct;
+    vector<PtrKeyFrame> vKFsAct, vKFsNeg;
     if (mbIsLocalize)
         vKFsAct = mpLocalizer->GetLocalKFs();
     else
         vKFsAct = mpMap->getLocalKFs();
-
 
     for (int i = 0, iend = vKFsAll.size(); i < iend; i++) {
         const PtrKeyFrame& pKFi = vKFsAll[i];
@@ -385,6 +384,7 @@ void MapPublish::publishKeyFrames()
         // 判断第i帧KF是Active/Active
         int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
         if (count == 0) {  // Negtive
+            vKFsNeg.push_back(pKFi);
             mKFsNeg.points.push_back(msgs_o);
             mKFsNeg.points.push_back(msgs_p1);
             mKFsNeg.points.push_back(msgs_o);
@@ -475,6 +475,11 @@ void MapPublish::publishKeyFrames()
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
+
+    PtrKeyFrame pKF0 = mpMap->getCurrentKF();
+    cout << "[MapPublisher] #" << pKF0->id << "(KF#" << pKF0->mIdKF
+         << ") 当前可视化输出 Local/Negtive/Global KFs =  " << vKFsAct.size() << "/"
+         << vKFsNeg.size() << "/" << vKFsAll.size() << endl;
 }
 
 void MapPublish::publishMapPoints()
