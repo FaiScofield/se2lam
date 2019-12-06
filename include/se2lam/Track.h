@@ -6,6 +6,7 @@
 
 #ifndef TRACK_H
 #define TRACK_H
+
 #include "Config.h"
 #include "Frame.h"
 #include "ORBmatcher.h"
@@ -16,19 +17,19 @@ namespace se2lam
 {
 
 class KeyFrame;
-
 class Map;
 class LocalMapper;
 class GlobalMapper;
 class MapPublish;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
+
 class Track
 {
 public:
     Track();
     ~Track();
 
-    void run();
+    void Run();
 
     void setMap(Map* pMap) { mpMap = pMap; }
     void setLocalMapper(LocalMapper* pLocalMapper) { mpLocalMapper = pLocalMapper; }
@@ -36,43 +37,44 @@ public:
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
     void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
-    void requestFinish();
-    bool isFinished();
+    void RequestFinish();
+    bool IsFinished();
 
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
 
     static void calcSE3toXYZInfo(cv::Point3f xyz1, const cv::Mat& Tcw1, const cv::Mat& Tcw2,
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
+    static bool mbUseOdometry;
+    bool mbNeedVisualization;
     int nMinFrames;
     int nMaxFrames;
 
     double trackTimeTatal = 0.;
 
 private:
-    void mCreateFrame(const cv::Mat& img, const Se2& odo);
-    void mTrack(const cv::Mat& img, const Se2& odo);
-    void resetLocalTrack();
-    void updateFramePose();
-    int removeOutliers(const std::vector<cv::KeyPoint>& kp1, const std::vector<cv::KeyPoint>& kp2,
-                       std::vector<int>& matches);
-    bool needNewKF(int nTrackedOldMP, int nMatched);
-    int doTriangulate();
-    void checkReady();
+    void CheckReady();
+    void ProcessFirstFrame(const cv::Mat& img, const Se2& odo);
+    void TrackReferenceKF(const cv::Mat& img, const Se2& odo);
+    void UpdateFramePose();
 
-    void copyForPub();
+    int RemoveOutliers(const std::vector<cv::KeyPoint>& kp1, const std::vector<cv::KeyPoint>& kp2,
+                       std::vector<int>& matches);
+    int DoTriangulate();
+    bool NeedNewKF(int nTrackedOldMP, int nMatched);
+
+    void ResetLocalTrack();
+
+    void CopyForPub();
     std::mutex mMutexForPub;
 
-    bool checkFinish();
-    void setFinish();
+    bool CheckFinish();
+    void SetFinish();
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;
 
 private:
-    static bool mbUseOdometry;
-    bool mbNeedVisualization;
-
     Map* mpMap;
     Sensors* mpSensors;
     LocalMapper* mpLocalMapper;
@@ -85,7 +87,6 @@ private:
     std::vector<cv::Point3f> mLocalMPs;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
     std::vector<bool> mvbGoodPrl;
-
 
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF, mpLoopKF;

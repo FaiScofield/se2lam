@@ -32,7 +32,6 @@ OdoSLAM::~OdoSLAM()
     delete mpGlobalMapper;
     delete mpMap;
     delete mpMapStorage;
-    delete mpFramePub;
     delete mpSensors;
     delete mpVocabulary;
 }
@@ -95,7 +94,6 @@ void OdoSLAM::start()
     mpTrack = new Track;
     mpLocalMapper = new LocalMapper;
     mpGlobalMapper = new GlobalMapper;
-    mpFramePub = new FramePublish(mpTrack, mpGlobalMapper);
     mpMapStorage = new MapStorage();
     mpMapPub = new MapPublish(mpMap);
     mpLocalizer = new Localizer();
@@ -114,17 +112,12 @@ void OdoSLAM::start()
     mpGlobalMapper->setMapPublisher(mpMapPub);
     mpGlobalMapper->setORBVoc(mpVocabulary);
 
-    mpMapStorage->setMap(mpMap);
-
-    mpMapPub->setFramePub(mpFramePub);
-
     mpLocalizer->setMap(mpMap);
     mpLocalizer->setORBVoc(mpVocabulary);
     mpLocalizer->setSensors(mpSensors);
 
-    mpFramePub->setLocalizer(mpLocalizer);
     mpMapPub->setLocalizer(mpLocalizer);
-
+    mpMapStorage->setMap(mpMap);
 
     if (Config::UsePrevMap) {
         mpMapStorage->setFilePath(Config::MapFileStorePath, Config::ReadMapFileName);
@@ -138,7 +131,6 @@ void OdoSLAM::start()
         cout << "[Syste][Info ] =====>> Localization-Only Mode <<=====" << endl;
 
         //! 注意标志位在这里设置的
-        mpFramePub->mbIsLocalize = true;
         mpMapPub->mbIsLocalize = true;
 
         thread threadLocalizer(&Localizer::run, mpLocalizer);
@@ -150,9 +142,8 @@ void OdoSLAM::start()
         cout << "[Syste][Info ] =====>> Running SLAM <<=====" << endl;
 
         mpMapPub->mbIsLocalize = false;
-        mpFramePub->mbIsLocalize = false;
 
-        thread threadTracker(&Track::run, mpTrack);
+        thread threadTracker(&Track::Run, mpTrack);
         thread threadLocalMapper(&LocalMapper::run, mpLocalMapper);
         thread threadGlobalMapper(&GlobalMapper::run, mpGlobalMapper);
         thread threadMapPub(&MapPublish::run, mpMapPub);
@@ -236,7 +227,7 @@ bool OdoSLAM::checkFinish()
             return true;
         }
     } else {
-        if (mpTrack->isFinished() || mpLocalMapper->isFinished() || mpGlobalMapper->isFinished() ||
+        if (mpTrack->IsFinished() || mpLocalMapper->isFinished() || mpGlobalMapper->isFinished() ||
             mpMapPub->isFinished()) {
             mbFinishRequested = true;
             return true;
@@ -252,7 +243,7 @@ void OdoSLAM::sendRequestFinish()
         mpLocalizer->requestFinish();
         mpMapPub->requestFinish();
     } else {
-        mpTrack->requestFinish();
+        mpTrack->RequestFinish();
         mpLocalMapper->requestFinish();
         mpGlobalMapper->requestFinish();
         mpMapPub->requestFinish();
@@ -272,7 +263,7 @@ void OdoSLAM::checkAllExit()
         }
     } else {
         while (1) {
-            if (mpTrack->isFinished() && mpLocalMapper->isFinished() && mpGlobalMapper->isFinished())
+            if (mpTrack->IsFinished() && mpLocalMapper->isFinished() && mpGlobalMapper->isFinished())
                 break;
             else
                 std::this_thread::sleep_for(std::chrono::microseconds(2));

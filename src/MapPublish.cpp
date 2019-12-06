@@ -5,7 +5,6 @@
  */
 
 #include "MapPublish.h"
-#include "FramePublish.h"
 #include "Map.h"
 #include "converter.h"
 #include <cv_bridge/cv_bridge.h>
@@ -22,7 +21,7 @@ typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
     : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mpTracker(nullptr), mpLocalMapper(nullptr),
-      mpLocalizer(nullptr), mpFramePub(nullptr), mbFrontUpdated(false), mPointSize(0.2f),
+      mpLocalizer(nullptr), mbFrontUpdated(false), mbBackUpdated(false), mPointSize(0.2f),
       mCameraSize(0.5f), mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
@@ -222,7 +221,8 @@ MapPublish::MapPublish(Map* pMap)
 }
 
 MapPublish::~MapPublish()
-{}
+{
+}
 
 
 void MapPublish::run()
@@ -277,13 +277,13 @@ void MapPublish::run()
 
         Mat imgShow;
         Mat imgUp = drawCurrentFrameMatches();
-        if (mbBackUpdated) {
+        if (mbBackUpdated && mpKFLoop != nullptr && !mpKFLoop->isNull() && !mpKFCurr->isNull()) {
             mLoopImageMatch = drawLoopCloseMatches();
             mbBackUpdated = false;
+            mpKFLoop = nullptr;
         }
         vconcat(imgUp, mLoopImageMatch, imgShow);
-        sensor_msgs::ImagePtr msgShow =
-            cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
+        sensor_msgs::ImagePtr msgShow = cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
         pub.publish(msgShow);
 
         // debug 存下match图片
@@ -319,44 +319,52 @@ void MapPublish::publishKeyFrames()
 
     mCovisGraph.points.clear();
     mFeatGraph.points.clear();
-    mVIGraph.points.clear();
+    if (!mbIsLocalize)
+        mVIGraph.points.clear();
 
     // Camera is a pyramid. Define in camera coordinate system
-    float d = mCameraSize;
-    Mat o = (Mat_<float>(4, 1) << 0, 0, 0, 1);
-    Mat p1 = (Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
-    Mat p2 = (Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
-    Mat p3 = (Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
-    Mat p4 = (Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
+    const float d = mCameraSize;
+    const Mat o = (Mat_<float>(4, 1) << 0, 0, 0, 1);
+    const Mat p1 = (Mat_<float>(4, 1) << d, d * 0.8, d * 0.5, 1);
+    const Mat p2 = (Mat_<float>(4, 1) << d, -d * 0.8, d * 0.5, 1);
+    const Mat p3 = (Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
+    const Mat p4 = (Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
-    vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
-    if (vKFsAll.empty()) {
+    const vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    if (vKFsAll.empty())
         return;
-    }
 
     vector<PtrKeyFrame> vKFsAct;
-    if (mbIsLocalize) {
+    if (mbIsLocalize)
         vKFsAct = mpLocalizer->GetLocalKFs();
-    } else {
+    else
         vKFsAct = mpMap->getLocalKFs();
-    }
+
 
     for (int i = 0, iend = vKFsAll.size(); i < iend; i++) {
-        if (vKFsAll[i]->isNull())
+        const PtrKeyFrame& pKFi = vKFsAll[i];
+        if (!pKFi || pKFi->isNull())
             continue;
 
-        Mat Twc = vKFsAll[i]->getPose().inv();
-
+        // 按比例缩放地图, mScaleRatio = 300 时显示比例为 1:3.333，数据源单位是[mm]
+        Mat Twc = cvu::inv(pKFi->getPose());
+        Mat Twb = Twc * Config::Tcb;
         Twc.at<float>(0, 3) = Twc.at<float>(0, 3) / mScaleRatio;
         Twc.at<float>(1, 3) = Twc.at<float>(1, 3) / mScaleRatio;
         Twc.at<float>(2, 3) = Twc.at<float>(2, 3) / mScaleRatio;
 
-        Mat ow = Twc * o;
+        Mat ow = Twc * o;  // 第i帧KF的相机中心位姿
         Mat p1w = Twc * p1;
         Mat p2w = Twc * p2;
         Mat p3w = Twc * p3;
         Mat p4w = Twc * p4;
 
+        Mat ob = Twb * o;  // 第i帧KF的Body中心位姿
+        geometry_msgs::Point msgs_b;
+        msgs_b.x = ob.at<float>(0) / mScaleRatio;
+        msgs_b.y = ob.at<float>(1) / mScaleRatio;
+        msgs_b.z = ob.at<float>(2) / mScaleRatio;
+        // 相机的中心和4周围个点，可视化用
         geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
         msgs_o.x = ow.at<float>(0);
         msgs_o.y = ow.at<float>(1);
@@ -374,10 +382,9 @@ void MapPublish::publishKeyFrames()
         msgs_p4.y = p4w.at<float>(1);
         msgs_p4.z = p4w.at<float>(2);
 
-
-        PtrKeyFrame pKFtmp = vKFsAll[i];
-        int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFtmp);
-        if (count == 0) {
+        // 判断第i帧KF是Active/Active
+        int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
+        if (count == 0) {  // Negtive
             mKFsNeg.points.push_back(msgs_o);
             mKFsNeg.points.push_back(msgs_p1);
             mKFsNeg.points.push_back(msgs_o);
@@ -394,7 +401,7 @@ void MapPublish::publishKeyFrames()
             mKFsNeg.points.push_back(msgs_p4);
             mKFsNeg.points.push_back(msgs_p4);
             mKFsNeg.points.push_back(msgs_p1);
-        } else {
+        } else {  // Active
             mKFsAct.points.push_back(msgs_o);
             mKFsAct.points.push_back(msgs_p1);
             mKFsAct.points.push_back(msgs_o);
@@ -414,13 +421,13 @@ void MapPublish::publishKeyFrames()
         }
 
         // Covisibility Graph
-        std::set<PtrKeyFrame> covKFs = vKFsAll[i]->getAllCovisibleKFs();
+        const set<PtrKeyFrame> covKFs = pKFi->getAllCovisibleKFs();
 
         if (!covKFs.empty()) {
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++) {
-                if ((*it)->mIdKF > vKFsAll[i]->mIdKF)
+                if ((*it)->mIdKF > pKFi->mIdKF)  // 只统计在自己前面的共视KF, 防止重复计入
                     continue;
-                Mat Twc2 = (*it)->getPose().inv();
+                Mat Twc2 = cvu::inv((*it)->getPose());
                 geometry_msgs::Point msgs_o2;
                 msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
                 msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
@@ -434,7 +441,7 @@ void MapPublish::publishKeyFrames()
         PtrKeyFrame pKF = vKFsAll[i];
         for (auto iter = pKF->mFtrMeasureFrom.begin(); iter != pKF->mFtrMeasureFrom.end(); iter++) {
             PtrKeyFrame pKF2 = iter->first;
-            Mat Twc2 = pKF2->getPose().inv();
+            Mat Twc2 = cvu::inv(pKF2->getPose());
             geometry_msgs::Point msgs_o2;
             msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
             msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
@@ -445,14 +452,15 @@ void MapPublish::publishKeyFrames()
 
         // Odometry Graph
         PtrKeyFrame pKFOdoChild = pKF->mOdoMeasureFrom.first;
-        if (pKFOdoChild != NULL) {
-            Mat Twc2 = pKFOdoChild->getPose().inv();
-            geometry_msgs::Point msgs_o2;
-            msgs_o2.x = Twc2.at<float>(0, 3) / mScaleRatio;
-            msgs_o2.y = Twc2.at<float>(1, 3) / mScaleRatio;
-            msgs_o2.z = Twc2.at<float>(2, 3) / mScaleRatio;
-            mVIGraph.points.push_back(msgs_o);
-            mVIGraph.points.push_back(msgs_o2);
+        if (pKFOdoChild != nullptr) {
+            assert(pKFOdoChild->mIdKF - pKFi->mIdKF >= 1);
+            Mat Twb2 = cvu::inv(pKFOdoChild->getPose()) * Config::Tcb;
+            geometry_msgs::Point msgs_b2;
+            msgs_b2.x = Twb2.at<float>(0, 3) / mScaleRatio;
+            msgs_b2.y = Twb2.at<float>(1, 3) / mScaleRatio;
+            msgs_b2.z = Twb2.at<float>(2, 3) / mScaleRatio;
+            mVIGraph.points.push_back(msgs_b);
+            mVIGraph.points.push_back(msgs_b2);
         }
     }
 
@@ -776,7 +784,7 @@ Mat MapPublish::drawCurrentFrameMatches()
     } else {  // 说明定位丢失且找不到回环帧
         hconcat(imgCur, imgRef, imgOutUp);
     }
-    putText(imgOutUp, mFrontText, Point(100, 20), 1, 5, Scalar(0, 0, 255), 2);
+    putText(imgOutUp, mFrontText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
 
     return imgOutUp.clone();
 }
@@ -784,6 +792,8 @@ Mat MapPublish::drawCurrentFrameMatches()
 Mat MapPublish::drawLoopCloseMatches()
 {
     locker lock(mMutexUpdate);
+
+    assert(mpKFLoop != nullptr);
 
     Mat imgCurr, imgLoop, imgOut;
     cvtColor(mpKFCurr->mImage, imgCurr, CV_GRAY2BGR);
@@ -849,7 +859,7 @@ Mat MapPublish::drawLoopCloseMatches()
             line(imgOut, ptCurr, ptLoopMatch, colorCurr, 1);
         }
     }
-    putText(imgOut, mBackText, Point(100, 20), 1, 5, Scalar(0, 0, 255), 2);
+    putText(imgOut, mBackText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
 
     return imgOut.clone();
 }

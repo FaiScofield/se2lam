@@ -27,7 +27,6 @@ public:
 
     void insertKF(const PtrKeyFrame& pkf);
     void insertMP(const PtrMapPoint& pmp);
-
     void eraseKF(const PtrKeyFrame& pKF);
     void eraseMP(const PtrMapPoint& pMP);
 
@@ -35,6 +34,9 @@ public:
     std::vector<PtrMapPoint> getAllMP();
     size_t countKFs();
     size_t countMPs();
+    size_t countLocalKFs();
+    size_t countLocalMPs();
+    size_t countLocalRefKFs();
 
     void clear();
     bool empty();
@@ -89,8 +91,6 @@ public:
     std::vector<PtrMapPoint> getLocalMPs();
     std::vector<PtrKeyFrame> getRefKFs();
 
-    int countLocalKFs();
-    int countLocalMPs();
 
 
     //! For GlobalMapper

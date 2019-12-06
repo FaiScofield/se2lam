@@ -10,6 +10,7 @@
 
 #include "Map.h"
 #include "optimizer.h"
+
 namespace se2lam{
 
 //#define TIME_TO_LOG_LOCAL_BA
@@ -57,7 +58,7 @@ public:
 protected:
     Map* mpMap;
     GlobalMapper* mpGlobalMapper;
-    PtrKeyFrame mNewKF;
+    PtrKeyFrame mpNewKF;
 
     bool mbUpdated;
     bool mbAbortBA;

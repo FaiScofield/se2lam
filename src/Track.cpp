@@ -7,8 +7,8 @@
 #include "Track.h"
 #include "LocalMapper.h"
 #include "Map.h"
-#include "ORBmatcher.h"
 #include "MapPublish.h"
+#include "ORBmatcher.h"
 #include "converter.h"
 #include "cvutil.h"
 #include "optimizer.h"
@@ -30,7 +30,7 @@ Track::Track()
 {
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = min(8, cvCeil(0.25 * Config::FPS));  // 上溢
-    nMaxFrames = cvFloor(1 * Config::FPS);    // 下溢
+    nMaxFrames = cvFloor(1 * Config::FPS);  // 下溢
     mnGoodPrl = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
@@ -49,17 +49,16 @@ Track::~Track()
     delete mpORBmatcher;
 }
 
-void Track::run()
+void Track::Run()
 {
-    checkReady();
+    CheckReady();
 
     if (Config::LocalizationOnly)
         return;
 
-
     ros::Rate rate(Config::FPS * 5);
     while (ros::ok()) {
-        if (checkFinish())
+        if (CheckFinish())
             break;
 
         if (!mpSensors->update()) {
@@ -72,75 +71,84 @@ void Track::run()
         cv::Mat img;
         Se2 odo;
         mpSensors->readData(odo, img);
+        double t1 = timer.count(), t2 = 0, t3 = 0;
 
+        timer.start();
         {
             locker lock(mMutexForPub);
             bool noFrame = !(Frame::nextId);
             if (noFrame)
-                mCreateFrame(img, odo);
+                ProcessFirstFrame(img, odo);
             else
-                mTrack(img, odo);
+                TrackReferenceKF(img, odo);
         }
-        double dt = timer.count();
-        trackTimeTatal += dt;
-        cout << "[Track][Timer] #" << mCurrentFrame.id << " 前端总耗时为: " << dt << "ms, 平均耗时: "
-             << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
+        t2 = timer.count();
+        trackTimeTatal += t1 + t2;
+        cout << setiosflags(ios::fixed) << setprecision(2); // 设置浮点数保留2位小数
+        cout << "[Track][Timer] #" << mCurrentFrame.id << " 前端总耗时为: " << t1 + t2
+             << "ms, 平均耗时: " << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
 
         mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
         lastOdom = odo;
-        copyForPub();
+        CopyForPub();
         rate.sleep();
     }
 
     cerr << "[Track][Info ] Exiting tracking .." << endl;
 
-    setFinish();
+    SetFinish();
 }
 
 
-void Track::mCreateFrame(const Mat& img, const Se2& odo)
+void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
 {
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    mCurrentFrame.Twb = Se2(0, 0, 0);
-    mCurrentFrame.Tcw = Config::Tcb.clone();
+    size_t th = Config::MaxFtrNumber;
+    if (mCurrentFrame.N > (th >> 1)) {  // 首帧特征点需要超过最大点数的一半
+        cout << "========================================================" << endl;
+        cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
+             << "And the start odom is: " << mCurrentFrame.odom << endl;
+        cout << "========================================================" << endl;
 
-    if (mCurrentFrame.mvKeyPoints.size() > 100) {
-        cout << "[Track][Info ] #" << mCurrentFrame.id << " Create first frame with " << mCurrentFrame.N << " features." << endl;
+        mCurrentFrame.Twb = Se2(0, 0, 0);
+        mCurrentFrame.Tcw = Config::Tcb.clone();
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);
         mpMap->insertKF(mpReferenceKF);
-        resetLocalTrack();
-    } else
+        mLastFrame = mCurrentFrame;
+        ResetLocalTrack();
+    } else {
+        cerr << "[Track][Warni] Failed to create first frame for too less keyPoints: "
+             << mCurrentFrame.N << endl;
+
         Frame::nextId = 0;
+    }
 }
 
-
-void Track::mTrack(const Mat& img, const Se2& odo)
+void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
 {
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    ORBmatcher matcher(0.9);
-    int nMatched = matcher.MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
+    int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
 
-    nMatched = removeOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
+    nMatched = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
-    updateFramePose();
+    UpdateFramePose();
 
     // Check parallax and do triangulation
-    int nTrackedOld = doTriangulate();
+    int nTrackedOld = DoTriangulate();
 
     // Need new KeyFrame decision
-    if (needNewKF(nTrackedOld, nMatched)) {
+    if (NeedNewKF(nTrackedOld, nMatched)) {
+        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
 
         // Insert KeyFrame
         PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
-
-        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
         mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
         pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
         mpLocalMapper->addNewKF(pKF, mLocalMPs, mvKPMatchIdx, mvbGoodPrl);
 
-        resetLocalTrack();
+        ResetLocalTrack();
 
         mpReferenceKF = pKF;
 
@@ -148,7 +156,7 @@ void Track::mTrack(const Mat& img, const Se2& odo)
     }
 }
 
-void Track::updateFramePose()
+void Track::UpdateFramePose()
 {
     mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;
     Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
@@ -177,16 +185,16 @@ void Track::updateFramePose()
     Sigmak = Sigma_k_1;
 }
 
-
-void Track::resetLocalTrack()
+void Track::ResetLocalTrack()
 {
-    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
-    mCurrentFrame.Trb = Se2(0, 0, 0);
+//    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
+//    mCurrentFrame.Trb = Se2(0, 0, 0);
     KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
     mLastFrame = mCurrentFrame;
     mLocalMPs = mpReferenceKF->mViewMPs;
     mnGoodPrl = 0;
     mvKPMatchIdx.clear();
+    mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
 
     for (int i = 0; i < 3; i++)
         preSE2.meas[i] = 0;
@@ -194,8 +202,7 @@ void Track::resetLocalTrack()
         preSE2.cov[i] = 0;
 }
 
-
-void Track::copyForPub()
+void Track::CopyForPub()
 {
     locker lock1(mMutexForPub);
     locker lock2(mpMapPublisher->mMutexUpdate);
@@ -209,11 +216,13 @@ void Track::copyForPub()
     mpMapPublisher->mvMatchIdxGood = mvKPMatchIdxGood;
     mpMapPublisher->mAffineMatrix = mAffineMatrix.clone();
 
-    //char strMatches[64];
+    char strMatches[64];
     if (1) {  // 正常情况和刚丢失情况
         mpMapPublisher->mReferenceImage = mpReferenceKF->mImage.clone();
-
         mpMapPublisher->mvReferenceKPs = mpReferenceKF->mvKeyPoints;
+        const int d = mCurrentFrame.id - mpReferenceKF->id;
+        std::snprintf(strMatches, 64, "F: %d, KF: %d(%d), D: %d, M: %ld", mCurrentFrame.id,
+                      mpReferenceKF->id, mpReferenceKF->mIdKF, d, mvKPMatchIdx.size());
     } else {  // 丢失情况和刚完成重定位
         if (mpLoopKF != nullptr) {
             mpMapPublisher->mReferenceImage = mpLoopKF->mImage.clone();
@@ -224,7 +233,7 @@ void Track::copyForPub()
         }
     }
 
-    //mpMapPublisher->mImageText = string(strMatches);
+    mpMapPublisher->mFrontText = string(strMatches);
     mpMapPublisher->mbFrontUpdated = true;
 }
 
@@ -294,7 +303,7 @@ void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat& Tcw1, const Mat& Tcw2, Eig
     info2 = toMatrix3d(R2.t() * info_xyz2 * R2);
 }
 
-int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& kp2, vector<int>& matches)
+int Track::RemoveOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& kp2, vector<int>& matches)
 {
     vector<Point2f> pt1, pt2;
     vector<int> idx;
@@ -313,7 +322,8 @@ int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
     vector<unsigned char> mask;
 
     if (pt1.size() != 0)
-        findFundamentalMat(pt1, pt2, mask);
+        // findFundamentalMat(pt1, pt2, mask);
+        mAffineMatrix = estimateAffinePartial2D(pt1, pt2, mask, RANSAC, 2.0);
 
     int nInlier = 0;
     for (int i = 0, iend = mask.size(); i < iend; i++) {
@@ -323,7 +333,8 @@ int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
             nInlier++;
     }
 
-    // If too few match inlier, discard all matches. The enviroment might not be suitable for image tracking.
+    // If too few match inlier, discard all matches. The enviroment might not be suitable for image
+    // tracking.
     if (nInlier < 10) {
         nInlier = 0;
         std::fill(mvKPMatchIdx.begin(), mvKPMatchIdx.end(), -1);
@@ -332,7 +343,7 @@ int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
     return nInlier;
 }
 
-bool Track::needNewKF(int nTrackedOldMP, int nMatched)
+bool Track::NeedNewKF(int nTrackedOldMP, int nMatched)
 {
     int nOldKP = mpReferenceKF->getSizeObsMP();
     bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
@@ -364,7 +375,7 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
     return false;
 }
 
-int Track::doTriangulate()
+int Track::DoTriangulate()
 {
     if (mCurrentFrame.id - mpReferenceKF->id < nMinFrames) {
         return 0;
@@ -377,7 +388,6 @@ int Track::doTriangulate()
     mnGoodPrl = 0;
 
     for (int i = 0; i < mLastFrame.N; i++) {
-
         if (mvKPMatchIdx[i] < 0)
             continue;
 
@@ -407,31 +417,31 @@ int Track::doTriangulate()
     return nTrackedOld;
 }
 
-void Track::requestFinish()
+void Track::RequestFinish()
 {
     unique_lock<mutex> lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
-bool Track::checkFinish()
+bool Track::CheckFinish()
 {
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinishRequested;
 }
 
-bool Track::isFinished()
+bool Track::IsFinished()
 {
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinished;
 }
 
-void Track::setFinish()
+void Track::SetFinish()
 {
     unique_lock<mutex> lock(mMutexFinish);
     mbFinished = true;
 }
 
-void Track::checkReady()
+void Track::CheckReady()
 {
     assert(mpMap != nullptr);
     assert(mpLocalMapper != nullptr);

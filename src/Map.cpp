@@ -33,17 +33,6 @@ bool Map::empty()
     return isEmpty;
 }
 
-
-void Map::insertKF(const PtrKeyFrame& pkf)
-{
-    locker lock(mMutexGraph);
-    mKFs.insert(pkf);    
-    // pkf->setMap(this);
-    mCurrentKF = pkf;
-    isEmpty = false;
-    mbNewKFInserted = true;
-}
-
 PtrKeyFrame Map::getCurrentKF()
 {
     locker lock(mMutexCurrentKF);
@@ -83,10 +72,32 @@ void Map::clear()
     MapPoint::mNextId = 0;
 }
 
+void Map::insertKF(const PtrKeyFrame& pkf)
+{
+    locker lock(mMutexGraph);
+    mKFs.insert(pkf);
+    // pkf->setMap(this);
+    mCurrentKF = pkf;
+    isEmpty = false;
+    mbNewKFInserted = true;
+}
+
 void Map::insertMP(const PtrMapPoint& pmp)
 {
     locker lock(mMutexGraph);
     mMPs.insert(pmp);
+}
+
+void Map::eraseKF(const PtrKeyFrame& pKF)
+{
+    locker lock(mMutexGraph);
+    mKFs.erase(pKF);
+}
+
+void Map::eraseMP(const PtrMapPoint& pMP)
+{
+    locker lock(mMutexGraph);
+    mMPs.erase(pMP);
 }
 
 Mat Map::getCurrentFramePose()
@@ -114,17 +125,24 @@ size_t Map::countMPs()
     return mMPs.size();
 }
 
-void Map::eraseKF(const PtrKeyFrame& pKF)
+size_t Map::countLocalKFs()
 {
-    locker lock(mMutexGraph);
-    mKFs.erase(pKF);
+    locker lock(mMutexLocalGraph);
+    return mLocalGraphKFs.size();
 }
 
-void Map::eraseMP(const PtrMapPoint& pMP)
+size_t Map::countLocalMPs()
 {
-    locker lock(mMutexGraph);
-    mMPs.erase(pMP);
+    locker lock(mMutexLocalGraph);
+    return mLocalGraphMPs.size();
 }
+
+size_t Map::countLocalRefKFs()
+{
+    locker lock(mMutexLocalGraph);
+    return mRefKFs.size();
+}
+
 
 
 void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
@@ -422,18 +440,6 @@ double Map::compareViewMPs(const PtrKeyFrame& pKFNow, const set<PtrKeyFrame>& sp
     return ratio;
 }
 
-int Map::countLocalKFs()
-{
-    locker lock(mMutexLocalGraph);
-    return mLocalGraphKFs.size();
-}
-
-int Map::countLocalMPs()
-{
-    locker lock(mMutexLocalGraph);
-    return mLocalGraphMPs.size();
-}
-
 void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2UV*>>& vpEdgesAll,
                          vector<vector<int>>& vnAllIdx)
 {
@@ -489,7 +495,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer, vector<vector<EdgeProjectXYZ2
         if (it == mLocalGraphKFs.end() || pKF1->isNull())
             continue;
 
-        int id1 = it - mLocalGraphKFs.begin();
+        int id1 = distance(mLocalGraphKFs.begin(), it);
 
         g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
         addEdgeSE3Expmap(optimizer, toSE3Quat(pKF->mOdoMeasureFrom.second.measure), id1, i, info);

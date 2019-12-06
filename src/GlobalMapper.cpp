@@ -28,7 +28,7 @@ using namespace g2o;
 GlobalMapper::GlobalMapper()
     : mpMap(nullptr), mpLocalMapper(nullptr), mpKFCurr(nullptr), mpKFLoop(nullptr),
       mbUpdated(false), mbNewKF(false), mbGlobalBALastLoop(false), mbIsBusy(false),
-      mbFinished(false), mbFinishRequested(false)
+      mbFinishRequested(false), mbFinished(false)
 {
     mdeqPairKFs.clear();
     mbExit = false;
@@ -78,36 +78,36 @@ void GlobalMapper::run()
         bool bIfLoopCloseVerified = false;
 
         WorkTimer timer;
-        timer.start();
 
         setBusy(true);
 
         //! Update FeatGraph with Covisibility-Graph
         bIfFeatGraphRenewed = mpMap->UpdateFeatGraph(mpKFCurr);
 
+        /* // 原本这里就是注释掉的
+        vector<pair<PtrKeyFrame, PtrKeyFrame>> vKFPairs = SelectKFPairFeat(mpKFCurr);
+        if (!vKFPairs.empty()) {
+            UpdataFeatGraph(vKFPairs);
+            bIfFeatGraphRenewed = true;
+        }
+        */
 
-        //        vector<pair<PtrKeyFrame, PtrKeyFrame>> vKFPairs = SelectKFPairFeat(mpKFCurr);
-        //        if (!vKFPairs.empty()) {
-        //            UpdataFeatGraph(vKFPairs);
-        //            bIfFeatGraphRenewed = true;
-        //        }
-
-        timer.stop();
-        double t1 = timer.time;
+        double t1 = timer.count();
+        printf("[Globa][Timer] #%d(KF#%d) G1.更新特征图耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t1);
         timer.start();
 
         //! Refresh BowVec for all KFs
         ComputeBowVecAll();
 
-        timer.stop();
-        double t2 = timer.time;
+        double t2 = timer.count();
+        printf("[Globa][Timer] #%d(KF#%d) G2.计算词向量耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t2);
         timer.start();
 
         //! Detect loop close
         bIfLoopCloseDetected = DetectLoopClose();
 
-        timer.stop();
-        double t3 = timer.time;
+        double t3 = timer.count();
+        printf("[Globa][Timer] #%d(KF#%d) G3.回环检测耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t3);
         timer.start();
 
         //! Verify loop close
@@ -124,8 +124,10 @@ void GlobalMapper::run()
         // DrawMatch(mapMatchGood);
         copyForPub(mapMatchGood, bIfLoopCloseVerified);
 
-        timer.stop();
-        double t4 = timer.time;
+        double t4 = timer.count();
+        if (bIfLoopCloseVerified)
+            printf("[Globa][Timer] #%d(KF#%d) G4.回环验证通过, 耗时: %.2fms\n", mpKFCurr->id,
+                   mpKFCurr->mIdKF, t4);
         timer.start();
 
         //! Do Global Correction if Needed
@@ -135,21 +137,14 @@ void GlobalMapper::run()
             GlobalBA();
 #endif
             mbGlobalBALastLoop = true;
-            cerr << "## INFO GM: Loop closed!"
-                 << " numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs() << endl;
+            printf("[Globa][Timer] #%d(KF#%d) G5.全局优化耗时: %.2fms, 总KF数: %ld, 总MP数: %ld\n",
+                   mpKFCurr->id, mpKFCurr->mIdKF, timer.count(), mpMap->countKFs(), mpMap->countMPs());
         } else {
             mbGlobalBALastLoop = false;
         }
 
-        timer.stop();
-        double t5 = timer.time;
-
-        //! Return
-        if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: "
-                 << "loopTime = " << t1 + t2 + t3 + t4 + t5 << ", numKFs = " << mpMap->countKFs()
-                 << ", numMPs = " << mpMap->countMPs() << endl;
-        }
+        double t5 = t1 + t2 + t3 + t4 + timer.time;
+        printf("[Globa][Timer] #%d(KF#%d) G6.GM线程本次运行总耗时: %.2fms\n", mpKFCurr->id, mpKFCurr->mIdKF, t5);
 
         mbNewKF = false;
 
@@ -191,13 +186,12 @@ bool GlobalMapper::DetectLoopClose()
     // Loop closure detection with ORB-BOW method
 
     bool bDetected = false;
-    int minKFIdOffset = Config::MinKFidOffset;
-    double minScoreBest = Config::MinScoreBest;
+    const int minKFIdOffset = Config::MinKFidOffset;
+    const double minScoreBest = Config::MinScoreBest;
 
     PtrKeyFrame pKFCurr = mpMap->getCurrentKF();
-    if (pKFCurr == NULL) {
+    if (pKFCurr == nullptr)
         return bDetected;
-    }
     if (mpLastKFLoopDetect == pKFCurr) {
         return bDetected;
     }
@@ -215,7 +209,7 @@ bool GlobalMapper::DetectLoopClose()
         DBoW2::BowVector BowVec = pKF->mBowVec;
 
         int idKF = pKF->mIdKF;
-        //        int id = pKF->id;
+        //  int id = pKF->id;
 
         // Omit neigbor KFs
         if (abs(idKF - idKFCurr) < minKFIdOffset) {
@@ -233,6 +227,9 @@ bool GlobalMapper::DetectLoopClose()
     if (pKFBest != NULL && scoreBest > minScoreBest) {
         mpKFLoop = pKFBest;
         bDetected = true;
+        cout << "[Globa][Info ] #" << pKFCurr->id << "(KF#" << pKFCurr->mIdKF
+             << ") 重定位, 检测到回环(KF#" << mpKFLoop->mIdKF << ")! score = " << scoreBest
+             << ", 等待验证!" << endl;
     } else {
         mpKFLoop.reset();
     }
@@ -243,7 +240,6 @@ bool GlobalMapper::DetectLoopClose()
 bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchGood,
                                    map<int, int>& _mapMatchRaw)
 {
-
     _mapMatchMP.clear();
     _mapMatchGood.clear();
     _mapMatchRaw.clear();
@@ -255,7 +251,7 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     double ratioMinMatchMP = Config::MinMPMatchRatio;
 
     if (mpKFCurr == NULL || mpKFLoop == NULL) {
-        //        cerr << "## DEBUG GM: " << "No good match candidate found!!!" << endl;
+        // cerr << "## DEBUG GM: " << "No good match candidate found!!!" << endl;
         return false;
     }
 
@@ -290,19 +286,16 @@ bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
             mpKFCurr->addFtrMeasureFrom(mpKFLoop, Se3_Curr_Loop.measure, Se3_Curr_Loop.info);
             mpKFLoop->addFtrMeasureTo(mpKFCurr, Se3_Curr_Loop.measure, Se3_Curr_Loop.info);
             bVerified = true;
-        }
-
-        if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: "
-                 << "add feature constraint from " << mpKFCurr->mIdKF << " to " << mpKFLoop->mIdKF
-                 << ", MPGood/KPGood/MPNow/KPNow=" << numGoodMPMatch << "/" << numGoodMatch << "/"
+            cerr << "[Globa][Info ] #" << mpKFCurr->id << "(KF#" << mpKFCurr->mIdKF
+                 << ") 回环验证成功! 与KF#" << mpKFLoop->mIdKF << " 添加了回环约束!"
+                 << " MPGood/KPGood/MPNow/KPNow = " << numGoodMPMatch << "/" << numGoodMatch << "/"
                  << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
     } else {
         if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: "
-                 << "no enough MPs matched, MPGood/KPGood/MPNow/KPNow=" << numGoodMPMatch << "/"
-                 << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
+            cerr << "[Globa][Info ] #" << mpKFCurr->id << "(KF#" << mpKFCurr->mIdKF
+                 << ") 回环验证失败! MP匹配点数不足! MPGood/KPGood/MPNow/KPNow = " << numGoodMPMatch
+                 << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
     }
 
@@ -1088,8 +1081,8 @@ void GlobalMapper::copyForPub(const map<int, int>& mapMatch, bool closed)
     mpMapPublisher->mpKFLoop = mpKFLoop;
     mpMapPublisher->mMatchLoop = mapMatch;
     char str[64];
-    std::snprintf(str, 64, "CurrKF: %d(%d), LoopKF: %d(%d), Succ: %d, M: %ld",
-                  mpKFCurr->id, mpKFCurr->mIdKF, mpKFLoop->id, mpKFLoop->mIdKF, closed, mapMatch.size());
+    std::snprintf(str, 64, "CurrKF: %d(%d), LoopKF: %d(%d), Succ: %d, M: %ld", mpKFCurr->id,
+                  mpKFCurr->mIdKF, mpKFLoop->id, mpKFLoop->mIdKF, closed, mapMatch.size());
     mpMapPublisher->mBackText = str;
     mpMapPublisher->mbBackUpdated = true;
 }
