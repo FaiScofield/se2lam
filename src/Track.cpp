@@ -73,22 +73,23 @@ void Track::run()
         cv::Mat img;
         Se2 odo;
         mpSensors->readData(odo, img);
- 
+
         {
             locker lock(mMutexForPub);
             bool noFrame = !(Frame::nextId);
             if (noFrame)
                 mCreateFrame(img, odo);
             else
-                mTrack(img, odo);
+                mTrack(img, odo);            
+        }        
 
-            mpMap->setCurrentFramePose(mFrame.Tcw);
-        }
         double dt = timer.count();
         trackTimeTatal += dt;
         cout << "[Track][Timer] #" << mFrame.id << " 前端总耗时为: " << dt << "ms, 平均耗时: " << trackTimeTatal / mFrame.id << "ms" << endl;
-
+        
+        mpMap->setCurrentFramePose(mFrame.Tcw);
         lastOdom = odo;
+
         rate.sleep();
     }
 
@@ -228,6 +229,15 @@ void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_
     for (int i = 0; i < 6; i++)
         Info_se3_bTb(i, i) = data[i];
     Info_se3 = Info_se3_bTb;
+
+    // g2o::Matrix6d J_bTb_cTc = toSE3Quat(bTc).adj();
+    // J_bTb_cTc.block(0,3,3,3) = J_bTb_cTc.block(3,0,3,3);
+    // J_bTb_cTc.block(3,0,3,3) = g2o::Matrix3D::Zero();
+    // Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
+    // for(int i = 0; i < 6; i++)
+    //     for(int j = 0; j < i; j++)
+    //         Info_se3(i,j) = Info_se3(j,i);
+    // assert(verifyInfo(Info_se3));
 }
 
 void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat& Tcw1, const Mat& Tcw2, Eigen::Matrix3d& info1,
@@ -419,6 +429,8 @@ void Track::checkReady()
     assert(mpGlobalMapper != nullptr);
     assert(mpSensors != nullptr);
     assert(mpMapPublisher != nullptr);
+    assert(mpORBextractor != nullptr);
+    assert(mpORBmatcher != nullptr);
 }
 
 }  // namespace se2lam

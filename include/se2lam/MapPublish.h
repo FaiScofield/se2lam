@@ -42,7 +42,7 @@ public:
     void publishGroundTruth();
 
     cv::Mat drawCurrentFrameMatches();
-    cv::Mat drawMatchesInOneImg();    
+    cv::Mat drawMatchesInOneImg(){} // TODO    
 
     void requestFinish();
     bool isFinished();

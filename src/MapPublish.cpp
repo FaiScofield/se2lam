@@ -11,6 +11,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/Image.h>
+#include <opencv2/highgui/highgui.hpp>
 
 namespace se2lam
 {
@@ -719,5 +720,61 @@ bool MapPublish::isFinished()
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinished;
 }
+
+Mat MapPublish::drawCurrentFrameMatches()
+{
+    locker lock(mMutexUpdate);
+
+    Mat imgCur, imgRef, imgWarp, imgOut, A21;
+    if (mCurrentImage.channels() == 1)
+        cvtColor(mCurrentImage, imgCur, CV_GRAY2BGR);
+    else
+        imgCur = mCurrentImage;
+    if (mReferenceImage.channels() == 1)
+        cvtColor(mReferenceImage, imgRef, CV_GRAY2BGR);
+    else
+        imgRef = mReferenceImage;
+
+    drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+    if (!mvReferenceKPs.empty()) {
+        drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+        // 取逆得到A21
+        invertAffineTransform(mAffineMatrix, A21);
+        warpAffine(imgCur, imgWarp, A21, imgCur.size());
+        hconcat(imgWarp, imgRef, imgOut);
+
+        for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
+            if (mvMatchIdx[i] < 0) {
+                continue;
+            } else {
+                const Point2f& ptRef = mvReferenceKPs[i].pt;
+                const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
+                const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+                const Mat pt1W = A21 * pt1;
+                const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+                const Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
+
+                if (mvMatchIdxGood[i] < 0) {  // 只有KP匹配对标绿色
+                    circle(imgOut, ptL, 3, Scalar(0, 255, 0), -1);
+                    circle(imgOut, ptR, 3, Scalar(0, 255, 0), -1);
+                } else {  // 有MP的匹配点标黄色并连线
+                    circle(imgOut, ptL, 3, Scalar(0, 255, 255), -1);
+                    circle(imgOut, ptR, 3, Scalar(0, 255, 255), -1);
+                    line(imgOut, ptL, ptR, Scalar(255, 255, 20));
+                }
+            }
+        }
+    } else {  // 说明定位丢失且找不到回环帧
+        hconcat(imgCur, imgRef, imgOut);
+    }
+    putText(imgOut, mImageText, Point(100, 15), 1, 1, Scalar(0, 0, 255), 2);
+    Mat imgScalar;
+    resize(imgOut, imgScalar, Size2i(imgOut.cols * 2, imgOut.rows * 2));
+
+    return imgScalar.clone();
+}
+
 
 }  // namespace se2lam
