@@ -429,10 +429,10 @@ int ORBmatcher::MatchByProjection(PtrKeyFrame &pNewKF, std::vector<PtrMapPoint> 
                 bestDist2 = bestDist;
                 bestDist = dist;
                 bestLevel2 = bestLevel;
-                bestLevel = pNewKF->keyPoints[idx].octave;
+                bestLevel = pNewKF->mvKeyPoints[idx].octave;
                 bestIdx = idx;
             } else if(dist < bestDist2){
-                bestLevel2 = pNewKF->keyPoints[idx].octave;
+                bestLevel2 = pNewKF->mvKeyPoints[idx].octave;
                 bestDist2 = dist;
             }
 

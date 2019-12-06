@@ -20,7 +20,7 @@ using namespace cv;
 OdoSLAM::OdoSLAM()
     : mpMap(nullptr), mpLocalMapper(nullptr), mpGlobalMapper(nullptr), mpMapPub(nullptr),
       mpTrack(nullptr), mpMapStorage(nullptr), mpLocalizer(nullptr), mpSensors(nullptr),
-      mpVocabulary(nullptr), mbFinishRequested(false), mbFinished(false)
+      mpVocabulary(nullptr), mbFinished(false), mbFinishRequested(false)
 {}
 
 OdoSLAM::~OdoSLAM()
@@ -111,6 +111,7 @@ void OdoSLAM::start()
 
     mpGlobalMapper->setMap(mpMap);
     mpGlobalMapper->setLocalMapper(mpLocalMapper);
+    mpGlobalMapper->setMapPublisher(mpMapPub);
     mpGlobalMapper->setORBVoc(mpVocabulary);
 
     mpMapStorage->setMap(mpMap);

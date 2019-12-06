@@ -128,7 +128,7 @@ void LocalMapper::findCorrespd(const vector<int> &vMatched12, const vector<Point
                              Config::Kcam*pMP->mMainKF->Tcw.rowRange(0,3),
                              Config::Kcam*mNewKF->Tcw.rowRange(0,3));
             Point3f posNewKF = cvu::se3map(mNewKF->Tcw, x3d);
-            if(!pMP->acceptNewObserve(posNewKF, mNewKF->keyPoints[i])){
+            if(!pMP->acceptNewObserve(posNewKF, mNewKF->mvKeyPoints[i])){
                 continue;
             }
             if(posNewKF.z > Config::UpperDepth || posNewKF.z < Config::LowerDepth)

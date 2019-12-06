@@ -47,7 +47,7 @@ void FramePublish::run(){
     while(nh.ok() && ros::ok()){
 
         if (!mbIsLocalize) {
-            if( mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches) ){
+            if(1/* mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches) */){
 
                 WorkTimer timer;
                 timer.start();
@@ -55,7 +55,7 @@ void FramePublish::run(){
                 Mat imgCurr = drawMatchesInOneImg(kpRef, mImg, kp, matches);
                 Mat imgRef = drawKeys(kpRef, mImgRef, matches);
                 Mat imgMatch;
-                mpGM->mImgMatch.copyTo(imgMatch);
+                //mpGM->mImgMatch.copyTo(imgMatch);
                 Size sizeImgCurr = imgCurr.size();
                 Size sizeImgMatch = imgMatch.size();
 
@@ -152,12 +152,12 @@ cv::Mat FramePublish::drawKeys(const vector<KeyPoint> keys, const Mat &img, vect
 Mat FramePublish::drawFrame() {
 
     if (!mbIsLocalize) {
-        if (mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)){
+        if (1/*mpTrack->copyForPub(kpRef, kp, mImgRef, mImg, matches)*/){
 
             Mat imgCurr = drawMatchesInOneImg(kpRef, mImg, kp, matches);
             Mat imgRef = drawKeys(kpRef, mImgRef, matches);
             Mat imgMatch;
-            mpGM->mImgMatch.copyTo(imgMatch);
+            //mpGM->mImgMatch.copyTo(imgMatch);
             Size sizeImgCurr = imgCurr.size();
             Size sizeImgMatch = imgMatch.size();
 

@@ -449,9 +449,9 @@ void Localizer::DrawImgCurr() {
     if(mImgCurr.channels() == 1)
         cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
 
-    for (int i=0, iend=mpKFCurr->keyPoints.size(); i<iend; i++) {
+    for (int i=0, iend=mpKFCurr->mvKeyPoints.size(); i<iend; i++) {
 
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
 
         bool ifMPCurr = mpKFCurr->hasObservation(i);
@@ -493,8 +493,8 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
     vconcat(mImgCurr, mImgLoop, mImgMatch);
 
     //! Draw Features
-    for (int i=0, iend=mpKFCurr->keyPoints.size(); i<iend; i++) {
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
+    for (int i=0, iend=mpKFCurr->mvKeyPoints.size(); i<iend; i++) {
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[i];
         Point2f ptCurr = kpCurr.pt;
         bool ifMPCurr = mpKFCurr->hasObservation(i);
         Scalar colorCurr;
@@ -507,8 +507,8 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
         circle(mImgMatch, ptCurr, 5, colorCurr, 1);
     }
 
-    for (int i=0, iend=mpKFLoop->keyPoints.size(); i<iend; i++) {
-        KeyPoint kpLoop = mpKFLoop->keyPoints[i];
+    for (int i=0, iend=mpKFLoop->mvKeyPoints.size(); i<iend; i++) {
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[i];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += 480;
@@ -528,11 +528,11 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
 
         int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->keyPoints[idxCurr];
+        KeyPoint kpCurr = mpKFCurr->mvKeyPoints[idxCurr];
         Point2f ptCurr = kpCurr.pt;
 
         int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->keyPoints[idxLoop];
+        KeyPoint kpLoop = mpKFLoop->mvKeyPoints[idxLoop];
         Point2f ptLoop = kpLoop.pt;
         Point2f ptLoopMatch = ptLoop;
         ptLoopMatch.y += 480;

@@ -36,24 +36,16 @@ public:
     void setSensors(Sensors* pSensors) { mpSensors = pSensors; }
     void setMapPublisher(MapPublish* pMapPublisher) { mpMapPublisher = pMapPublisher; }
 
+    void requestFinish();
+    bool isFinished();
+
     static void calcOdoConstraintCam(const Se2& dOdo, cv::Mat& cTc, g2o::Matrix6d& Info_se3);
 
     static void calcSE3toXYZInfo(cv::Point3f xyz1, const cv::Mat& Tcw1, const cv::Mat& Tcw2,
                                  Eigen::Matrix3d& info1, Eigen::Matrix3d& info2);
 
-    // for frame publisher
-    std::vector<int> mMatchIdx;
-    int copyForPub(std::vector<cv::KeyPoint>& kp1, std::vector<cv::KeyPoint>& kp2, cv::Mat& img1,
-                   cv::Mat& img2, std::vector<int>& vMatches12);
-
-
-    void requestFinish();
-    bool isFinished();
-    bool checkFinish();
-    void setFinish();
-    bool mbFinishRequested;
-    bool mbFinished;
-    std::mutex mMutexFinish;
+    int nMinFrames;
+    int nMaxFrames;
 
     double trackTimeTatal = 0.;
 
@@ -68,7 +60,16 @@ private:
     int doTriangulate();
     void checkReady();
 
+    void copyForPub();
+    std::mutex mMutexForPub;
 
+    bool checkFinish();
+    void setFinish();
+    bool mbFinishRequested;
+    bool mbFinished;
+    std::mutex mMutexFinish;
+
+private:
     static bool mbUseOdometry;
     bool mbNeedVisualization;
 
@@ -77,23 +78,20 @@ private:
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;
     MapPublish* mpMapPublisher;
-
     ORBextractor* mpORBextractor;  // 这里有new
     ORBmatcher* mpORBmatcher;
 
+    std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;
     std::vector<cv::Point3f> mLocalMPs;
     int mnGoodPrl;  // count number of mLocalMPs with good parallax
     std::vector<bool> mvbGoodPrl;
 
-    int nMinFrames;
-    int nMaxFrames;
 
-    Frame mFrame;
-    Frame mRefFrame;
-    PtrKeyFrame mpKF;
+    Frame mCurrentFrame, mLastFrame;
+    PtrKeyFrame mpReferenceKF, mpLoopKF;
     std::vector<cv::Point2f> mPrevMatched;
 
-    std::mutex mMutexForPub;
+    cv::Mat mAffineMatrix;
 
     PreSE2 preSE2;
     Se2 lastOdom;

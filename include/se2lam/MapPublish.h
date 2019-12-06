@@ -42,7 +42,7 @@ public:
     void publishGroundTruth();
 
     cv::Mat drawCurrentFrameMatches();
-    cv::Mat drawMatchesInOneImg();    
+    cv::Mat drawLoopCloseMatches(); // TODO
 
     void requestFinish();
     bool isFinished();
@@ -58,14 +58,21 @@ public:
     FramePublish* mpFramePub;
 
     // for visulization
-    bool mbDataUpdated;
+    bool mbFrontUpdated;
     unsigned long mnCurrentFrameID;
     cv::Mat mCurrentFramePose;
     cv::Mat mCurrentImage, mReferenceImage;
+
     cv::Mat mAffineMatrix, mHomography;
     std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
     std::vector<int> mvMatchIdx, mvMatchIdxGood;
-    std::string mImageText;
+    std::string mFrontText;
+
+    bool mbBackUpdated;
+    PtrKeyFrame mpKFCurr, mpKFLoop;
+    std::map<int, int> mMatchLoop;
+    cv::Mat mLoopImageMatch;
+    std::string mBackText;
     std::mutex mMutexUpdate;
 
 private:

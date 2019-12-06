@@ -189,7 +189,7 @@ float MapPoint::getInvLevelSigma2(const PtrKeyFrame &pKF){
 
 int MapPoint::getOctave(const PtrKeyFrame pKF){
     int index = mObservations[pKF];
-    return pKF->keyPoints[index].octave;
+    return pKF->mvKeyPoints[index].octave;
 }
 
 void MapPoint::setPos(const cv::Point3f &pt3f){
@@ -200,7 +200,7 @@ void MapPoint::setPos(const cv::Point3f &pt3f){
 bool MapPoint::acceptNewObserve(Point3f posKF, const KeyPoint kp){
     float dist = cv::norm(posKF);
     float cosAngle = cv::norm(posKF.dot(mNormalVector)) / ( dist*cv::norm(mNormalVector));
-    bool c1 = std::abs( mMainKF->keyPoints[mObservations[mMainKF]].octave - kp.octave ) <= 2;
+    bool c1 = std::abs( mMainKF->mvKeyPoints[mObservations[mMainKF]].octave - kp.octave ) <= 2;
     bool c2 = cosAngle >= 0.866f; // no larger than 30 degrees
     bool c3 = dist >= mMinDist && dist <= mMaxDist;
     return c1 && c2 && c3;
@@ -280,7 +280,7 @@ void MapPoint::updateMainKFandDescriptor(){
 
     mMainKF = vKFs[bestIdx];
     int idx = mObservations[mMainKF];
-    mMainOctave = mMainKF->keyPoints[idx].octave;
+    mMainOctave = mMainKF->mvKeyPoints[idx].octave;
     mLevelScaleFactor = mMainKF->mvScaleFactors[mMainOctave];
     float dist = cv::norm(mMainKF->mViewMPs[idx]);
     int nlevels = mMainKF->mnScaleLevels;

@@ -10,6 +10,7 @@
 #include "converter.h"
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
+#include <opencv2/highgui/highgui.hpp>
 #include <sensor_msgs/Image.h>
 
 namespace se2lam
@@ -20,7 +21,8 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mbDataUpdated(false), mpMap(pMap), mPointSize(0.2f),
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mpTracker(nullptr), mpLocalMapper(nullptr),
+      mpLocalizer(nullptr), mpFramePub(nullptr), mbFrontUpdated(false), mPointSize(0.2f),
       mCameraSize(0.5f), mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
@@ -192,7 +194,8 @@ MapPublish::MapPublish(Map* pMap)
 
     tf::Transform tfT;
     tfT.setIdentity();
-    tfb.sendTransform(tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
+    tfb.sendTransform(
+        tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
 
     publisher = nh.advertise<visualization_msgs::Marker>("se2lam/Map", 10);
 
@@ -213,9 +216,13 @@ MapPublish::MapPublish(Map* pMap)
 
     if (Config::ShowGroundTruth)
         publisher.publish(mGroundTruthGraph);
+
+    const Size& imgSize = Config::ImgSize;
+    mLoopImageMatch = Mat::zeros(imgSize.height, imgSize.width * 2, CV_8UC3);
 }
 
-MapPublish::~MapPublish() {}
+MapPublish::~MapPublish()
+{}
 
 
 void MapPublish::run()
@@ -257,7 +264,6 @@ void MapPublish::run()
 
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
-    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
     ros::Rate rate(Config::FPS * 2);
     while (nh.ok()) {
@@ -265,24 +271,25 @@ void MapPublish::run()
             break;
         if (mpMap->empty())
             continue;
-        if (!mbDataUpdated)
+        if (!mbFrontUpdated)
             continue;
+        mbFrontUpdated = false;
 
-        mbDataUpdated = false;
-
-        Mat img = mpFramePub->drawFrame();
-        sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-        pub.publish(msg);
-
-        Mat imgMatch = drawCurrentFrameMatches();
-        sensor_msgs::ImagePtr msgMatch =
-            cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
-        pubImgMatches.publish(msgMatch);
+        Mat imgShow;
+        Mat imgUp = drawCurrentFrameMatches();
+        if (mbBackUpdated) {
+            mLoopImageMatch = drawLoopCloseMatches();
+            mbBackUpdated = false;
+        }
+        vconcat(imgUp, mLoopImageMatch, imgShow);
+        sensor_msgs::ImagePtr msgShow =
+            cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
+        pub.publish(msgShow);
 
         // debug 存下match图片
         if (Config::SaveMatchImage) {
             string fileName = Config::MatchImageStorePath + to_string(mnCurrentFrameID) + ".jpg";
-            imwrite(fileName, imgMatch);
+            imwrite(fileName, imgShow);
         }
 
         publishCameraCurr(cvu::inv(mCurrentFramePose));
@@ -561,7 +568,8 @@ void MapPublish::publishCameraCurr(const Mat& Twc)
     tf::Vector3 t(Twc.at<float>(0, 3) / mScaleRatio, Twc.at<float>(1, 3) / mScaleRatio,
                   Twc.at<float>(2, 3) / mScaleRatio);
     tf::Transform tfwTc(R, t);
-    tfb.sendTransform(tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
+    tfb.sendTransform(
+        tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
 
     float d = mCameraSize;
 
@@ -678,7 +686,7 @@ void MapPublish::publishGroundTruth()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-    static int pubId = 0;
+    static size_t pubId = 0;
     if (pubId == 0) {
         msgsLast.x = mvGroundTruth[0].x / mScaleRatio;
         msgsLast.y = mvGroundTruth[0].y / mScaleRatio;
@@ -718,6 +726,132 @@ bool MapPublish::isFinished()
 {
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinished;
+}
+
+Mat MapPublish::drawCurrentFrameMatches()
+{
+    locker lock(mMutexUpdate);
+
+    Mat imgCur, imgRef, imgWarp, imgOutUp, A21;
+    if (mCurrentImage.channels() == 1)
+        cvtColor(mCurrentImage, imgCur, CV_GRAY2BGR);
+    else
+        imgCur = mCurrentImage;
+    if (mReferenceImage.channels() == 1)
+        cvtColor(mReferenceImage, imgRef, CV_GRAY2BGR);
+    else
+        imgRef = mReferenceImage;
+
+    drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+    if (!mvReferenceKPs.empty()) {
+        drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+
+        // 取逆得到A21
+        invertAffineTransform(mAffineMatrix, A21);
+        warpAffine(imgCur, imgWarp, A21, imgCur.size());
+        hconcat(imgWarp, imgRef, imgOutUp);
+
+        for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
+            if (mvMatchIdx[i] < 0) {
+                continue;
+            } else {
+                const Point2f& ptRef = mvReferenceKPs[i].pt;
+                const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
+                const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+                const Mat pt1W = A21 * pt1;
+                const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+                const Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
+
+                if (mvMatchIdxGood[i] < 0) {  // 只有KP匹配对标绿色
+                    circle(imgOutUp, ptL, 3, Scalar(0, 255, 0), -1);
+                    circle(imgOutUp, ptR, 3, Scalar(0, 255, 0), -1);
+                } else {  // KP匹配有MP观测或三角化深度符合的标黄色并连线
+                    circle(imgOutUp, ptL, 3, Scalar(0, 255, 255), -1);
+                    circle(imgOutUp, ptR, 3, Scalar(0, 255, 255), -1);
+                    line(imgOutUp, ptL, ptR, Scalar(255, 255, 20));
+                }
+            }
+        }
+    } else {  // 说明定位丢失且找不到回环帧
+        hconcat(imgCur, imgRef, imgOutUp);
+    }
+    putText(imgOutUp, mFrontText, Point(100, 20), 1, 5, Scalar(0, 0, 255), 2);
+
+    return imgOutUp.clone();
+}
+
+Mat MapPublish::drawLoopCloseMatches()
+{
+    locker lock(mMutexUpdate);
+
+    Mat imgCurr, imgLoop, imgOut;
+    cvtColor(mpKFCurr->mImage, imgCurr, CV_GRAY2BGR);
+    cvtColor(mpKFLoop->mImage, imgLoop, CV_GRAY2BGR);
+    hconcat(imgCurr, imgLoop, imgOut);
+
+    //! Draw Features
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[i].pt;
+        const bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
+        Scalar colorCurr;
+        if (ifMPCurr) {
+            colorCurr = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorCurr = Scalar(255, 0, 0);  // 否则标蓝色
+        }
+        circle(imgOut, ptCurr, 5, colorCurr, 1);
+    }
+
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[i].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(imgCurr.cols, 0);
+
+        const bool ifMPLoop = bool(mpKFLoop->hasObservation(i));
+        Scalar colorLoop;
+        if (ifMPLoop) {
+            colorLoop = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorLoop = Scalar(255, 0, 0);  // 否则标蓝色
+        }
+        circle(imgOut, ptLoopMatch, 5, colorLoop, 1);
+    }
+
+    //! Draw Matches
+    for (auto iter = mMatchLoop.begin(); iter != mMatchLoop.end(); iter++) {
+        const int idxCurr = iter->first;
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[idxCurr].pt;
+
+        const int idxLoop = iter->second;
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[idxLoop].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(imgCurr.cols, 0);
+
+        const bool ifMPCurr = bool(mpKFCurr->hasObservation(idxCurr));
+        const bool ifMPLoop = bool(mpKFLoop->hasObservation(idxLoop));
+
+        Scalar colorCurr, colorLoop;
+        if (ifMPCurr) {
+            colorCurr = Scalar(0, 255, 0);
+        } else {
+            colorCurr = Scalar(255, 0, 0);
+        }
+        if (ifMPLoop) {
+            colorLoop = Scalar(0, 255, 0);
+        } else {
+            colorLoop = Scalar(255, 0, 0);
+        }
+
+        circle(imgOut, ptCurr, 5, colorCurr, 1);
+        circle(imgOut, ptLoopMatch, 5, colorLoop, 1);
+        if (ifMPCurr && ifMPLoop) {
+            line(imgOut, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
+        } else {
+            line(imgOut, ptCurr, ptLoopMatch, colorCurr, 1);
+        }
+    }
+    putText(imgOut, mBackText, Point(100, 20), 1, 5, Scalar(0, 0, 255), 2);
+
+    return imgOut.clone();
 }
 
 }  // namespace se2lam

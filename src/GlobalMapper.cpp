@@ -5,49 +5,43 @@
 */
 
 #include "GlobalMapper.h"
-#include <ros/ros.h>
+#include "Config.h"
+#include "KeyFrame.h"
 #include "LocalMapper.h"
 #include "Map.h"
+#include "MapPublish.h"
+#include "ORBmatcher.h"
+#include "Track.h"
+#include "converter.h"
 #include "cvutil.h"
+#include <ros/ros.h>
 
 #include <g2o/core/optimizable_graph.h>
 #include <opencv2/calib3d/calib3d.hpp>
 
-namespace se2lam {
+namespace se2lam
+{
 using namespace cv;
 using namespace std;
 using namespace g2o;
 
-GlobalMapper::GlobalMapper(){
+GlobalMapper::GlobalMapper()
+    : mpMap(nullptr), mpLocalMapper(nullptr), mpKFCurr(nullptr), mpKFLoop(nullptr),
+      mbUpdated(false), mbNewKF(false), mbGlobalBALastLoop(false), mbIsBusy(false),
+      mbFinished(false), mbFinishRequested(false)
+{
     mdeqPairKFs.clear();
-    mbNewKF = false;
-    mbGlobalBALastLoop = false;
     mbExit = false;
-    mbIsBusy = false;
-
-    mbFinished = false;
-    mbFinishRequested = false;
 }
 
-void GlobalMapper::setUpdated(bool val){
+void GlobalMapper::setUpdated(bool val)
+{
     mbUpdated = val;
     mpKFCurr = mpMap->getCurrentKF();
 }
 
-void GlobalMapper::setLocalMapper(LocalMapper *pLocalMapper){
-    mpLocalMapper = pLocalMapper;
-}
-
-void GlobalMapper::setORBVoc(ORBVocabulary* pORBVoc) {
-    mpORBVoc = pORBVoc;
-}
-
-void GlobalMapper::setMap(Map* pMap) {
-    mpMap = pMap;
-}
-
-bool GlobalMapper::CheckGMReady() {
-
+bool GlobalMapper::CheckGMReady()
+{
     if (mpMap->empty())
         return false;
 
@@ -56,25 +50,21 @@ bool GlobalMapper::CheckGMReady() {
         mbNewKF = true;
         mpKFCurr = pKFCurr;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
 
-void GlobalMapper::run() {
-
+void GlobalMapper::run()
+{
     mbExit = false;
 
-    if(Config::LocalizationOnly)
+    if (Config::LocalizationOnly)
         return;
 
     ros::Rate rate(Config::FPS * 10);
-
-
-    while(ros::ok() && !mbExit){
-
-        if(checkFinish())
+    while (ros::ok() && !mbExit) {
+        if (checkFinish())
             break;
 
         //! Check if everything is ready for global mapping
@@ -96,11 +86,11 @@ void GlobalMapper::run() {
         bIfFeatGraphRenewed = mpMap->UpdateFeatGraph(mpKFCurr);
 
 
-//        vector<pair<PtrKeyFrame, PtrKeyFrame>> vKFPairs = SelectKFPairFeat(mpKFCurr);
-//        if (!vKFPairs.empty()) {
-//            UpdataFeatGraph(vKFPairs);
-//            bIfFeatGraphRenewed = true;
-//        }
+        //        vector<pair<PtrKeyFrame, PtrKeyFrame>> vKFPairs = SelectKFPairFeat(mpKFCurr);
+        //        if (!vKFPairs.empty()) {
+        //            UpdataFeatGraph(vKFPairs);
+        //            bIfFeatGraphRenewed = true;
+        //        }
 
         timer.stop();
         double t1 = timer.time;
@@ -121,7 +111,7 @@ void GlobalMapper::run() {
         timer.start();
 
         //! Verify loop close
-        map<int,int> mapMatchMP, mapMatchGood, mapMatchRaw;
+        map<int, int> mapMatchMP, mapMatchGood, mapMatchRaw;
         if (bIfLoopCloseDetected) {
             std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
             bIfLoopCloseVerified = VerifyLoopClose(mapMatchMP, mapMatchGood, mapMatchRaw);
@@ -131,24 +121,23 @@ void GlobalMapper::run() {
         // TODO...
 
         //! Draw Matches
-        DrawMatch(mapMatchGood);
+        // DrawMatch(mapMatchGood);
+        copyForPub(mapMatchGood, bIfLoopCloseVerified);
 
         timer.stop();
         double t4 = timer.time;
         timer.start();
 
         //! Do Global Correction if Needed
-        if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed) ) {
+        if (!mbGlobalBALastLoop && (bIfLoopCloseVerified || bIfFeatGraphRenewed)) {
             std::unique_lock<std::mutex> lock(mpLocalMapper->mutexMapper);
 #ifndef TIME_TO_LOG_LOCAL_BA
             GlobalBA();
 #endif
             mbGlobalBALastLoop = true;
             cerr << "## INFO GM: Loop closed!"
-                 << " numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs()
-                 << endl;
-        }
-        else {
+                 << " numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs() << endl;
+        } else {
             mbGlobalBALastLoop = false;
         }
 
@@ -157,9 +146,9 @@ void GlobalMapper::run() {
 
         //! Return
         if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: " << "loopTime = " << t1+t2+t3+t4+t5
-                 << ", numKFs = " << mpMap->countKFs() << ", numMPs = " << mpMap->countMPs()
-                 << endl;
+            cerr << "## DEBUG GM: "
+                 << "loopTime = " << t1 + t2 + t3 + t4 + t5 << ", numKFs = " << mpMap->countKFs()
+                 << ", numMPs = " << mpMap->countMPs() << endl;
         }
 
         mbNewKF = false;
@@ -174,9 +163,10 @@ void GlobalMapper::run() {
 }
 
 
-void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>> & _vKFPairs) {
+void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>>& _vKFPairs)
+{
     int numPairKFs = _vKFPairs.size();
-    for (int i=0; i<numPairKFs; i++) {
+    for (int i = 0; i < numPairKFs; i++) {
         pair<PtrKeyFrame, PtrKeyFrame> pairKF = _vKFPairs[i];
         PtrKeyFrame ptKFFrom = pairKF.first;
         PtrKeyFrame ptKFTo = pairKF.second;
@@ -186,11 +176,10 @@ void GlobalMapper::UpdataFeatGraph(vector<pair<PtrKeyFrame, PtrKeyFrame>> & _vKF
             ptKFFrom->addFtrMeasureFrom(ptKFTo, ftrCnstr.measure, ftrCnstr.info);
             ptKFTo->addFtrMeasureTo(ptKFFrom, ftrCnstr.measure, ftrCnstr.info);
             if (Config::GlobalPrint) {
-                cerr << "## DEBUG GM: add feature constraint from " << ptKFFrom->id
-                     << " to " << ptKFTo->id << endl;
+                cerr << "## DEBUG GM: add feature constraint from " << ptKFFrom->id << " to "
+                     << ptKFTo->id << endl;
             }
-        }
-        else {
+        } else {
             if (Config::GlobalPrint)
                 cerr << "## DEBUG GM: add feature constraint failed" << endl;
         }
@@ -221,7 +210,7 @@ bool GlobalMapper::DetectLoopClose()
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
 
-    for(int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame pKF = vpKFsAll[i];
         DBoW2::BowVector BowVec = pKF->mBowVec;
 
@@ -229,7 +218,7 @@ bool GlobalMapper::DetectLoopClose()
         //        int id = pKF->id;
 
         // Omit neigbor KFs
-        if (abs(idKF-idKFCurr) < minKFIdOffset) {
+        if (abs(idKF - idKFCurr) < minKFIdOffset) {
             continue;
         }
 
@@ -244,20 +233,21 @@ bool GlobalMapper::DetectLoopClose()
     if (pKFBest != NULL && scoreBest > minScoreBest) {
         mpKFLoop = pKFBest;
         bDetected = true;
-    }
-    else {
+    } else {
         mpKFLoop.reset();
     }
 
     return bDetected;
 }
 
-bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _mapMatchGood, map<int,int> & _mapMatchRaw) {
+bool GlobalMapper::VerifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _mapMatchGood,
+                                   map<int, int>& _mapMatchRaw)
+{
 
     _mapMatchMP.clear();
     _mapMatchGood.clear();
     _mapMatchRaw.clear();
-    map<int,int> mapMatch;
+    map<int, int> mapMatch;
 
     bool bVerified = false;
     int numMinMatchMP = Config::MinMPMatchNum;
@@ -288,12 +278,11 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _m
     //! Show Match Info
     std::set<PtrMapPoint> spMPsCurrent = mpKFCurr->getAllObsMPs();
     int numMPsCurrent = spMPsCurrent.size();
-    int numKPsCurrent = mpKFCurr->keyPoints.size();
+    int numKPsCurrent = mpKFCurr->mvKeyPoints.size();
 
     //! Create New Feature based Constraint
-    double ratioMPMatched = numGoodMPMatch*1.0/numMPsCurrent;
-    if (numGoodMPMatch >= numMinMatchMP && numGoodMatch >= numMinMatchKP
-            && ratioMPMatched >= ratioMinMatchMP) {
+    double ratioMPMatched = numGoodMPMatch * 1.0 / numMPsCurrent;
+    if (numGoodMPMatch >= numMinMatchMP && numGoodMatch >= numMinMatchKP && ratioMPMatched >= ratioMinMatchMP) {
         // Generate feature based constraint
         SE3Constraint Se3_Curr_Loop;
         bool bFtrCnstrErr = CreateFeatEdge(mpKFCurr, mpKFLoop, _mapMatchMP, Se3_Curr_Loop);
@@ -304,15 +293,16 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _m
         }
 
         if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: " << "add feature constraint from "
-                 << mpKFCurr->mIdKF << " to " << mpKFLoop->mIdKF <<  ", MPGood/KPGood/MPNow/KPNow="
-                 << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
+            cerr << "## DEBUG GM: "
+                 << "add feature constraint from " << mpKFCurr->mIdKF << " to " << mpKFLoop->mIdKF
+                 << ", MPGood/KPGood/MPNow/KPNow=" << numGoodMPMatch << "/" << numGoodMatch << "/"
+                 << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
-    }
-    else {
+    } else {
         if (Config::GlobalPrint) {
-            cerr << "## DEBUG GM: " << "no enough MPs matched, MPGood/KPGood/MPNow/KPNow="
-                 << numGoodMPMatch << "/" << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
+            cerr << "## DEBUG GM: "
+                 << "no enough MPs matched, MPGood/KPGood/MPNow/KPNow=" << numGoodMPMatch << "/"
+                 << numGoodMatch << "/" << numMPsCurrent << "/" << numKPsCurrent << endl;
         }
     }
 
@@ -324,7 +314,8 @@ bool GlobalMapper::VerifyLoopClose(map<int,int> & _mapMatchMP, map<int,int> & _m
     return bVerified;
 }
 
-void GlobalMapper::GlobalBA() {
+void GlobalMapper::GlobalBA()
+{
 
     mpLocalMapper->setGlobalBABegin(true);
 
@@ -336,7 +327,7 @@ void GlobalMapper::GlobalBA() {
     std::vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
 
     SlamOptimizer optimizer;
-    //initOptimizer(optimizer);
+    // initOptimizer(optimizer);
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithm* solver = new SlamAlgorithm(blockSolver);
@@ -354,20 +345,21 @@ void GlobalMapper::GlobalBA() {
     for (auto it = vecKFs.begin(); it != vecKFs.end(); it++) {
         PtrKeyFrame pKF = (*it);
 
-        if(pKF->isNull())
+        if (pKF->isNull())
             continue;
 
         Mat T_w_c = cvu::inv(pKF->Tcw);
         bool bIfFix = (pKF->mIdKF == 0);
 
         //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
-        g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, Config::Tbc, SE3OffsetParaId, bIfFix);
+        g2o::EdgeSE3Prior* pEdge = addVertexSE3PlaneMotion(optimizer, toIsometry3D(T_w_c), pKF->mIdKF,
+                                                           Config::Tbc, SE3OffsetParaId, bIfFix);
         vpEdgePlane.push_back(pEdge);
         //        pEdge->setLevel(1);
 
         mapId2pKF[pKF->mIdKF] = pKF;
 
-        if(pKF->mIdKF > maxKFid)
+        if (pKF->mIdKF > maxKFid)
             maxKFid = pKF->mIdKF;
     }
 
@@ -376,9 +368,9 @@ void GlobalMapper::GlobalBA() {
     vector<g2o::EdgeSE3*> vpEdgeOdo;
     for (auto it = vecKFs.begin(); it != vecKFs.end(); it++) {
         PtrKeyFrame pKF = (*it);
-        if(pKF->isNull())
+        if (pKF->isNull())
             continue;
-        if(pKF->mOdoMeasureFrom.first == NULL)
+        if (pKF->mOdoMeasureFrom.first == NULL)
             continue;
 
         g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
@@ -387,7 +379,7 @@ void GlobalMapper::GlobalBA() {
                                                pKF->mIdKF, pKF->mOdoMeasureFrom.first->mIdKF, info);
         vpEdgeOdo.push_back(pEdgeOdoTmp);
 
-        numOdoCnstr ++;
+        numOdoCnstr++;
     }
 
     // Add feature based constraints
@@ -395,25 +387,23 @@ void GlobalMapper::GlobalBA() {
     vector<g2o::EdgeSE3*> vpEdgeFeat;
     for (auto it = vecKFs.begin(); it != vecKFs.end(); it++) {
         PtrKeyFrame ptrKFFrom = (*it);
-        if(ptrKFFrom->isNull())
+        if (ptrKFFrom->isNull())
             continue;
 
-        for (auto it2 = ptrKFFrom->mFtrMeasureFrom.begin();
-             it2 != ptrKFFrom->mFtrMeasureFrom.end(); it2++) {
+        for (auto it2 = ptrKFFrom->mFtrMeasureFrom.begin(); it2 != ptrKFFrom->mFtrMeasureFrom.end(); it2++) {
 
             PtrKeyFrame ptrKFTo = (*it2).first;
-            if(std::find(vecKFs.begin(), vecKFs.end(), ptrKFTo)
-                    == vecKFs.end())
+            if (std::find(vecKFs.begin(), vecKFs.end(), ptrKFTo) == vecKFs.end())
                 continue;
 
             Mat meas = (*it2).second.measure;
             g2o::Matrix6d info = toMatrix6d((*it2).second.info);
 
-            g2o::EdgeSE3* pEdgeFeatTmp = addEdgeSE3(optimizer, toIsometry3D(meas),
-                                                    ptrKFFrom->mIdKF, ptrKFTo->mIdKF, info);
+            g2o::EdgeSE3* pEdgeFeatTmp =
+                addEdgeSE3(optimizer, toIsometry3D(meas), ptrKFFrom->mIdKF, ptrKFTo->mIdKF, info);
             vpEdgeFeat.push_back(pEdgeFeatTmp);
 
-            numFtrCnstr ++;
+            numFtrCnstr++;
         }
     }
 
@@ -435,8 +425,7 @@ void GlobalMapper::GlobalBA() {
                 pKF1->eraseFtrMeasureTo(pKF0);
                 pKF1->eraseCovisibleKF(pKF0);
                 pEdge->setLevel(1);
-            }
-            else {
+            } else {
                 vpEdgeFeatGood.push_back(pEdge);
             }
         }
@@ -471,8 +460,7 @@ void GlobalMapper::GlobalBA() {
             pKF1->eraseCovisibleKF(pKF0);
             pEdge->setLevel(1);
             bFindOutlier = true;
-        }
-        else {
+        } else {
             vpEdgeFeatGood.push_back(pEdge);
         }
     }
@@ -485,64 +473,61 @@ void GlobalMapper::GlobalBA() {
 #endif
 
 #ifdef REJECT_IF_LARGE_LAMBDA
-    if(solver->currentLambda() > 100) {
+    if (solver->currentLambda() > 100) {
         mpLocalMapper->setGlobalBABegin(false);
         return;
     }
 #endif
 
     // Update local graph KeyFrame poses
-    for(auto it = vecKFs.begin(), iend = vecKFs.end();
-        it != iend; it++){
+    for (auto it = vecKFs.begin(), iend = vecKFs.end(); it != iend; it++) {
         PtrKeyFrame pKF = (*it);
-        if(pKF->isNull()) {
+        if (pKF->isNull()) {
             continue;
         }
         Mat Twc = toCvMat(estimateVertexSE3(optimizer, pKF->mIdKF));
-        pKF->setPose( cvu::inv(Twc) );
+        pKF->setPose(cvu::inv(Twc));
     }
 
     // Update local graph MapPoint positions
-    vector<PtrMapPoint>  vMPsAll = mpMap->getAllMP();
-    for(auto it = vMPsAll.begin(); it != vMPsAll.end(); it++) {
+    vector<PtrMapPoint> vMPsAll = mpMap->getAllMP();
+    for (auto it = vMPsAll.begin(); it != vMPsAll.end(); it++) {
         PtrMapPoint pMP = (*it);
 
-        if(pMP->isNull()){
+        if (pMP->isNull()) {
             continue;
         }
 
         PtrKeyFrame pKF = pMP->mMainKF;
         Mat Twc = pKF->getPose().inv();
-        Mat Rwc = Twc.rowRange(0,3).colRange(0,3);
-        Mat twc = Twc.rowRange(0,3).colRange(3,4);
+        Mat Rwc = Twc.rowRange(0, 3).colRange(0, 3);
+        Mat twc = Twc.rowRange(0, 3).colRange(3, 4);
 
-        if(!pKF->hasObservation(pMP)) {
+        if (!pKF->hasObservation(pMP)) {
             continue;
         }
 
         int idx = pKF->getFtrIdx(pMP);
 
         Point3f Pt3_MP_KF = pKF->mViewMPs[idx];
-        Mat t3_MP_KF = (Mat_<float>(3,1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
+        Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
         Mat t3_MP_w = Rwc * t3_MP_KF + twc;
         Point3f Pt3_MP_w(t3_MP_w);
         pMP->setPos(Pt3_MP_w);
     }
 
     mpLocalMapper->setGlobalBABegin(false);
-
 }
 
-void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
-                                const vector<g2o::EdgeSE3*> & vpEdgeFeat,
-                                const vector<g2o::EdgeSE3Prior*> & vpEdgePlane,
-                                double threshChi2, bool bPrintMatInfo) {
+void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*>& vpEdgeOdo, const vector<g2o::EdgeSE3*>& vpEdgeFeat,
+                                const vector<g2o::EdgeSE3Prior*>& vpEdgePlane, double threshChi2, bool bPrintMatInfo)
+{
 
 
     cerr << "Edges with large chi2: " << endl;
     // print odometry edges
-    for (auto it = vpEdgeOdo.begin(); it != vpEdgeOdo.end(); it ++) {
-        g2o::EdgeSE3 *pEdge = *it;
+    for (auto it = vpEdgeOdo.begin(); it != vpEdgeOdo.end(); it++) {
+        g2o::EdgeSE3* pEdge = *it;
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
 
         int id0 = vVertices[0]->id();
@@ -555,17 +540,17 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
             cerr << "chi2 = " << pEdge->chi2() << "; ";
 
             Matrix6d info = pEdge->information();
-            Matrix3D infoTrans = info.block<3,3>(0,0);
-            Matrix3D infoRot = info.block<3,3>(3,3);
+            Matrix3D infoTrans = info.block<3, 3>(0, 0);
+            Matrix3D infoRot = info.block<3, 3>(3, 3);
             Vector6d err = pEdge->error();
-            Vector3D errTrans = err.block<3,1>(0,0);
-            Vector3D errRot = err.block<3,1>(3,0);
+            Vector3D errTrans = err.block<3, 1>(0, 0);
+            Vector3D errRot = err.block<3, 1>(3, 0);
 
             cerr << "chi2Trans = " << errTrans.dot(infoTrans * errTrans) << "; ";
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i=0; i<6; i++) {
+            for (int i = 0; i < 6; i++) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
@@ -578,8 +563,8 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
     }
 
     // print loop closing edge
-    for (auto it = vpEdgeFeat.begin(); it != vpEdgeFeat.end(); it ++) {
-        g2o::EdgeSE3 *pEdge = *it;
+    for (auto it = vpEdgeFeat.begin(); it != vpEdgeFeat.end(); it++) {
+        g2o::EdgeSE3* pEdge = *it;
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
 
         int id0 = vVertices[0]->id();
@@ -592,31 +577,31 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
             cerr << "chi2 = " << pEdge->chi2() << "; ";
 
             Matrix6d info = pEdge->information();
-            Matrix3D infoTrans = info.block<3,3>(0,0);
-            Matrix3D infoRot = info.block<3,3>(3,3);
+            Matrix3D infoTrans = info.block<3, 3>(0, 0);
+            Matrix3D infoRot = info.block<3, 3>(3, 3);
             Vector6d err = pEdge->error();
-            Vector3D errTrans = err.block<3,1>(0,0);
-            Vector3D errRot = err.block<3,1>(3,0);
+            Vector3D errTrans = err.block<3, 1>(0, 0);
+            Vector3D errRot = err.block<3, 1>(3, 0);
 
             cerr << "chi2Trans = " << errTrans.dot(infoTrans * errTrans) << "; ";
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i=0; i<6; i++) {
+            for (int i = 0; i < 6; i++) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
             if (bPrintMatInfo) {
                 cerr << endl;
-                cerr << "info = "<< endl << pEdge->information();
+                cerr << "info = " << endl << pEdge->information();
             }
             cerr << endl;
         }
     }
 
     // print plane motion edge
-    for (auto it = vpEdgePlane.begin(); it != vpEdgePlane.end(); it ++) {
-        g2o::EdgeSE3Prior *pEdge = *it;
+    for (auto it = vpEdgePlane.begin(); it != vpEdgePlane.end(); it++) {
+        g2o::EdgeSE3Prior* pEdge = *it;
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
 
         int id0 = vVertices[0]->id();
@@ -629,17 +614,17 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
             cerr << "chi2 = " << pEdge->chi2() << "; ";
 
             Matrix6d info = pEdge->information();
-            Matrix3D infoTrans = info.block<3,3>(0,0);
-            Matrix3D infoRot = info.block<3,3>(3,3);
+            Matrix3D infoTrans = info.block<3, 3>(0, 0);
+            Matrix3D infoRot = info.block<3, 3>(3, 3);
             Vector6d err = pEdge->error();
-            Vector3D errTrans = err.block<3,1>(0,0);
-            Vector3D errRot = err.block<3,1>(3,0);
+            Vector3D errTrans = err.block<3, 1>(0, 0);
+            Vector3D errRot = err.block<3, 1>(3, 0);
 
             cerr << "chi2Trans = " << errTrans.dot(infoTrans * errTrans) << "; ";
             cerr << "chi2Rot = " << errRot.dot(infoRot * errRot) << "; ";
 
             cerr << "err = ";
-            for (int i=0; i<6; i++) {
+            for (int i = 0; i < 6; i++) {
                 cerr << pEdge->error()(i) << "; ";
             }
 
@@ -652,25 +637,26 @@ void GlobalMapper::PrintOptInfo(const vector<g2o::EdgeSE3*> & vpEdgeOdo,
     }
 }
 
-void GlobalMapper::PrintOptInfo(const SlamOptimizer & _optimizer) {
+void GlobalMapper::PrintOptInfo(const SlamOptimizer& _optimizer)
+{
 
     double threshChi2 = 5.0;
 
     // print odometry edges
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it ++) {
-        g2o::EdgeSE3 *pEdge = static_cast<g2o::EdgeSE3*>(*it);
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
+        g2o::EdgeSE3* pEdge = static_cast<g2o::EdgeSE3*>(*it);
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (abs(id1-id0) < 5) {
+            if (abs(id1 - id0) < 5) {
                 if (pEdge->chi2() > threshChi2) {
                     cerr << "odometry edge: ";
                     cerr << "id0 = " << id0 << "; ";
                     cerr << "id1 = " << id1 << "; ";
                     cerr << "chi2 = " << pEdge->chi2() << "; ";
                     cerr << "err = ";
-                    for (int i=0; i<6; i++) {
+                    for (int i = 0; i < 6; i++) {
                         cerr << pEdge->error()(i) << "; ";
                     }
                     cerr << endl;
@@ -680,20 +666,20 @@ void GlobalMapper::PrintOptInfo(const SlamOptimizer & _optimizer) {
     }
 
     // print loop closing edge
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it ++) {
-        g2o::EdgeSE3 *pEdge = static_cast<g2o::EdgeSE3*>(*it);
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
+        g2o::EdgeSE3* pEdge = static_cast<g2o::EdgeSE3*>(*it);
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
         if (vVertices.size() == 2) {
             int id0 = vVertices[0]->id();
             int id1 = vVertices[1]->id();
-            if (abs(id1-id0) >= 5) {
+            if (abs(id1 - id0) >= 5) {
                 if (pEdge->chi2() > threshChi2) {
                     cerr << "loop close edge: ";
                     cerr << "id0 = " << id0 << "; ";
                     cerr << "id1 = " << id1 << "; ";
                     cerr << "chi2 = " << pEdge->chi2() << "; ";
                     cerr << "err = ";
-                    for (int i=0; i<6; i++) {
+                    for (int i = 0; i < 6; i++) {
                         cerr << pEdge->error()(i) << "; ";
                     }
                     cerr << endl;
@@ -703,8 +689,8 @@ void GlobalMapper::PrintOptInfo(const SlamOptimizer & _optimizer) {
     }
 
     // print plane motion edge
-    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it ++) {
-        g2o::EdgeSE3 *pEdge = static_cast<g2o::EdgeSE3*>(*it);
+    for (auto it = _optimizer.edges().begin(); it != _optimizer.edges().end(); it++) {
+        g2o::EdgeSE3* pEdge = static_cast<g2o::EdgeSE3*>(*it);
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
         if (vVertices.size() == 1) {
             if (pEdge->chi2() > threshChi2) {
@@ -713,7 +699,7 @@ void GlobalMapper::PrintOptInfo(const SlamOptimizer & _optimizer) {
                 cerr << "id0 = " << id0 << "; ";
                 cerr << "chi2 = " << pEdge->chi2() << "; ";
                 cerr << "err = ";
-                for (int i=0; i<6; i++) {
+                for (int i = 0; i < 6; i++) {
                     cerr << pEdge->error()(i) << "; ";
                 }
                 cerr << endl;
@@ -724,7 +710,8 @@ void GlobalMapper::PrintOptInfo(const SlamOptimizer & _optimizer) {
 
 // Interface function:
 // Called by LocalMapper when feature constraint generation is needed
-void GlobalMapper::SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo) {
+void GlobalMapper::SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo)
+{
 
     std::pair<PtrKeyFrame, PtrKeyFrame> pairKF;
     pairKF.first = _pKFFrom;
@@ -733,18 +720,17 @@ void GlobalMapper::SetKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo) {
 }
 
 // Generate feature constraint between 2 KFs
-int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
-                                 SE3Constraint & SE3CnstrOutput)
+int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, SE3Constraint& SE3CnstrOutput)
 {
     // Find co-observed MPs
     std::set<PtrMapPoint> spMPs;
     Map::compareViewMPs(_pKFFrom, _pKFTo, spMPs);
 
-    //FindCoObsMPs(_pKFFrom, _pKFTo, setMPs);
+    // FindCoObsMPs(_pKFFrom, _pKFTo, setMPs);
 
     // Return when lack of co-observed MPs
     unsigned int numMinMPs = 10;
-    if(spMPs.size() < numMinMPs) {
+    if (spMPs.size() < numMinMPs) {
         return 1;
     }
 
@@ -758,18 +744,17 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
         vPtrMPs.push_back(*iter);
     }
 
-    vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat> > vSe3KFs;
-    vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D> > vPt3MPs;
+    vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>> vSe3KFs;
+    vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>> vPt3MPs;
     OptKFPair(vPtrKFs, vPtrMPs, vSe3KFs, vPt3MPs);
 
     // Generate feature based constraint between 2 KFs
-    vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ> > vMeasSE3XYZ;
+    vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>> vMeasSE3XYZ;
     g2o::SE3Quat meas_out;
     g2o::Matrix6d info_out;
 
     CreateVecMeasSE3XYZ(vPtrKFs, vPtrMPs, vMeasSE3XYZ);
-    Sparsifier::DoMarginalizeSE3XYZ(
-                vSe3KFs, vPt3MPs, vMeasSE3XYZ, meas_out, info_out);
+    Sparsifier::DoMarginalizeSE3XYZ(vSe3KFs, vPt3MPs, vMeasSE3XYZ, meas_out, info_out);
 
     // Return
     SE3CnstrOutput.measure = toCvMat(meas_out);
@@ -777,11 +762,11 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
     return 0;
 }
 
-int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int,int> & mapMatch,
-                                 SE3Constraint & SE3CnstrOutput)
+int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<int, int>& mapMatch,
+                                 SE3Constraint& SE3CnstrOutput)
 {
-    vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat> > vSe3KFs;
-    vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D> > vPt3MPs;
+    vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>> vSe3KFs;
+    vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>> vPt3MPs;
 
     //! Optimize Local Graph with Only 2 KFs and MPs matched, and remove outlier by 3D measurements
     OptKFPairMatch(_pKFFrom, _pKFTo, mapMatch, vSe3KFs, vPt3MPs);
@@ -790,7 +775,7 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
     }
 
     // Generate feature based constraint between 2 KFs
-    vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ> > vMeasSE3XYZ;
+    vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>> vMeasSE3XYZ;
 
     int count = 0;
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
@@ -813,19 +798,19 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
 
 
         // DEBUG ON NAN
-        double d = Meas1.info(0,0);
-        if(std::isnan(d)) {
+        double d = Meas1.info(0, 0);
+        if (std::isnan(d)) {
             cerr << "ERROR!!!" << endl;
         }
-        d = Meas2.info(0,0);
-        if(std::isnan(d)) {
+        d = Meas2.info(0, 0);
+        if (std::isnan(d)) {
             cerr << "ERROR!!!" << endl;
         }
 
         vMeasSE3XYZ.push_back(Meas1);
         vMeasSE3XYZ.push_back(Meas2);
 
-        count ++;
+        count++;
     }
 
     g2o::SE3Quat meas_out;
@@ -840,8 +825,9 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
 
 
 // Do localBA
-void GlobalMapper::OptKFPair(const vector<PtrKeyFrame> & _vPtrKFs, const vector<PtrMapPoint> & _vPtrMPs,
-                             vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat> > & _vSe3KFs, vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D> > & _vPt3MPs)
+void GlobalMapper::OptKFPair(const vector<PtrKeyFrame>& _vPtrKFs, const vector<PtrMapPoint>& _vPtrMPs,
+                             vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
+                             vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs)
 {
     // Init optimizer
     SlamOptimizer optimizer;
@@ -851,24 +837,23 @@ void GlobalMapper::OptKFPair(const vector<PtrKeyFrame> & _vPtrKFs, const vector<
     // Init KF vertex
     int vertexId = 0;
     int numKFs = _vPtrKFs.size();
-    for(int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame PtrKFi = _vPtrKFs[i];
         Mat T3_kf_w = PtrKFi->getPose();
         g2o::Isometry3D Iso3_w_kf = toIsometry3D(T3_kf_w.inv());
 
         if (i == 0) {
             addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, true);
-        }
-        else {
+        } else {
             addVertexSE3PlaneMotion(optimizer, Iso3_w_kf, vertexId, Config::Tbc, 0, false);
         }
 
-        vertexId ++;
+        vertexId++;
     }
 
     // Init MP vertex
     int numMPs = _vPtrMPs.size();
-    for (int i=0; i<numMPs; i++) {
+    for (int i = 0; i < numMPs; i++) {
         PtrMapPoint PtrMPi = _vPtrMPs[i];
         g2o::Vector3D Pt3MPi = toVector3d(PtrMPi->getPos());
 
@@ -877,15 +862,15 @@ void GlobalMapper::OptKFPair(const vector<PtrKeyFrame> & _vPtrKFs, const vector<
     }
 
     // Set SE3XYZ edges
-    for (int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         int vertexIdKF = i;
         PtrKeyFrame PtrKFi = _vPtrKFs[i];
 
-        for (int j=0; j<numMPs; j++) {
-            int vertexIdMP = j+numKFs;
+        for (int j = 0; j < numMPs; j++) {
+            int vertexIdMP = j + numKFs;
             PtrMapPoint PtrMPj = _vPtrMPs[j];
 
-            if(!PtrKFi->hasObservation(PtrMPj)) {
+            if (!PtrKFi->hasObservation(PtrMPj)) {
                 continue;
             }
 
@@ -910,20 +895,21 @@ void GlobalMapper::OptKFPair(const vector<PtrKeyFrame> & _vPtrKFs, const vector<
 
     // Return optimize results
     _vSe3KFs.clear();
-    for (int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         g2o::SE3Quat Se3KFi = toSE3Quat(estimateVertexSE3(optimizer, i));
         _vSe3KFs.push_back(Se3KFi);
     }
 
     _vPt3MPs.clear();
-    for (int j=0; j<numMPs; j++) {
-        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j+numKFs);
+    for (int j = 0; j < numMPs; j++) {
+        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j + numKFs);
         _vPt3MPs.push_back(Pt3MPj);
     }
 }
 
-void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,int> & mapMatch,
-                                  vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat> > & _vSe3KFs, vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D> > & _vPt3MPs)
+void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
+                                  vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
+                                  vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs)
 {
     // Init optimizer
     SlamOptimizer optimizer;
@@ -952,11 +938,15 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
         int idMPin2 = iter->second;
 
         PtrMapPoint pMPin1 = _pKF1->getObservation(idMPin1);
-        if(!pMPin1) cerr << "This is NULL /in GM::OptKFPairMatch 1\n";
-        if(!pMPin1) continue;
+        if (!pMPin1)
+            cerr << "This is NULL /in GM::OptKFPairMatch 1\n";
+        if (!pMPin1)
+            continue;
         PtrMapPoint pMPin2 = _pKF2->getObservation(idMPin2);
-        if(!pMPin2) cerr << "This is NULL /in GM::OptKFPairMatch 2\n";
-        if(!pMPin2) continue;
+        if (!pMPin2)
+            cerr << "This is NULL /in GM::OptKFPairMatch 2\n";
+        if (!pMPin2)
+            continue;
 
 
         g2o::Vector3D Pt3MP = toVector3d(pMPin1->getPos());
@@ -983,26 +973,25 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
     double dThreshChi2 = 5.0;
     set<int> sIdMPin1Outlier;
 
-    for (auto it = optimizer.edges().begin(); it != optimizer.edges().end(); it ++) {
-        g2o::EdgeSE3PointXYZ *pEdge = static_cast<g2o::EdgeSE3PointXYZ*>(*it);
+    for (auto it = optimizer.edges().begin(); it != optimizer.edges().end(); it++) {
+        g2o::EdgeSE3PointXYZ* pEdge = static_cast<g2o::EdgeSE3PointXYZ*>(*it);
         vector<g2o::HyperGraph::Vertex*> vVertices = pEdge->vertices();
 
         if (vVertices.size() == 2) {
             int id1 = vVertices[1]->id();
             double chi2 = pEdge->chi2();
             if (chi2 > dThreshChi2) {
-                sIdMPin1Outlier.insert(vIdMPin1[id1-2]);
+                sIdMPin1Outlier.insert(vIdMPin1[id1 - 2]);
             }
         }
     }
 
     if (Config::GlobalPrint) {
-        cerr << "## DEBUG GM: " << "Find " << sIdMPin1Outlier.size()
-             << " outliers by 3D MP to KF measurements." << endl;
+        cerr << "## DEBUG GM: "
+             << "Find " << sIdMPin1Outlier.size() << " outliers by 3D MP to KF measurements." << endl;
     }
 
-    for (auto it = sIdMPin1Outlier.begin();
-         it != sIdMPin1Outlier.end(); it++) {
+    for (auto it = sIdMPin1Outlier.begin(); it != sIdMPin1Outlier.end(); it++) {
         int idMatch = *it;
         mapMatch.erase(idMatch);
     }
@@ -1010,52 +999,53 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
 
     // Return optimize results
     _vSe3KFs.clear();
-    for (int i=0; i<2; i++) {
+    for (int i = 0; i < 2; i++) {
         g2o::SE3Quat Se3KFi = toSE3Quat(estimateVertexSE3(optimizer, i));
         _vSe3KFs.push_back(Se3KFi);
     }
 
     _vPt3MPs.clear();
-    for (int j=0; j<numMatch; j++) {
-        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j+2);
+    for (int j = 0; j < numMatch; j++) {
+        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j + 2);
         _vPt3MPs.push_back(Pt3MPj);
     }
 }
 
-void GlobalMapper::PrintSE3(const g2o::SE3Quat se3) {
+void GlobalMapper::PrintSE3(const g2o::SE3Quat se3)
+{
 
     Eigen::Vector3d _t = se3.translation();
     Eigen::Quaterniond _r = se3.rotation();
 
     cerr << "t = ";
-    cerr << _t[0] << " " ;
-    cerr << _t[1] << " " ;
-    cerr << _t[2] << "; " ;
+    cerr << _t[0] << " ";
+    cerr << _t[1] << " ";
+    cerr << _t[2] << "; ";
     cerr << "q = ";
-    cerr << _r.w() << " " ;
-    cerr << _r.x() << " " ;
-    cerr << _r.y() << " " ;
-    cerr << _r.z() << "; " ;
+    cerr << _r.w() << " ";
+    cerr << _r.x() << " ";
+    cerr << _r.y() << " ";
+    cerr << _r.z() << "; ";
     cerr << endl;
 }
 
 void GlobalMapper::CreateVecMeasSE3XYZ(const vector<PtrKeyFrame> _vpKFs, const vector<PtrMapPoint> _vpMPs,
-                                       vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ> > & vMeas)
+                                       vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas)
 {
     int numKFs = _vpKFs.size();
     int numMPs = _vpMPs.size();
     vMeas.clear();
 
-    for (int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame PtrKFi = _vpKFs[i];
-        for (int j=0; j<numMPs; j++) {
+        for (int j = 0; j < numMPs; j++) {
             PtrMapPoint PtrMPj = _vpMPs[j];
 
             MeasSE3XYZ Meas_ij;
             Meas_ij.idKF = i;
             Meas_ij.idMP = j;
 
-            if(!PtrKFi->hasObservation(PtrMPj)){
+            if (!PtrKFi->hasObservation(PtrMPj)) {
                 continue;
             }
 
@@ -1075,7 +1065,7 @@ void GlobalMapper::ComputeBowVecAll()
     vector<PtrKeyFrame> vpKFs;
     vpKFs = mpMap->getAllKF();
     int numKFs = vpKFs.size();
-    for(int i=0; i<numKFs; i++) {
+    for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame pKF = vpKFs[i];
         if (pKF->mbBowVecExist) {
             continue;
@@ -1084,10 +1074,29 @@ void GlobalMapper::ComputeBowVecAll()
     }
 }
 
-void GlobalMapper::DrawMatch(const map<int, int> & mapMatch) {
-
+void GlobalMapper::copyForPub(const map<int, int>& mapMatch, bool closed)
+{
     //! Renew images
+    if (mpKFCurr == nullptr || mpKFCurr->isNull())
+        return;
+    if (mpKFLoop == nullptr || mpKFLoop->isNull())
+        return;
 
+    unique_lock<mutex> lock(mpMapPublisher->mMutexUpdate);
+
+    mpMapPublisher->mpKFCurr = mpKFCurr;
+    mpMapPublisher->mpKFLoop = mpKFLoop;
+    mpMapPublisher->mMatchLoop = mapMatch;
+    char str[64];
+    std::snprintf(str, 64, "CurrKF: %d(%d), LoopKF: %d(%d), Succ: %d, M: %ld",
+                  mpKFCurr->id, mpKFCurr->mIdKF, mpKFLoop->id, mpKFLoop->mIdKF, closed, mapMatch.size());
+    mpMapPublisher->mBackText = str;
+    mpMapPublisher->mbBackUpdated = true;
+}
+
+void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
+{
+    //! Renew images
     if (mpKFCurr == NULL || mpKFCurr->isNull()) {
         return;
     }
@@ -1097,106 +1106,85 @@ void GlobalMapper::DrawMatch(const map<int, int> & mapMatch) {
     if (mpKFLoop == NULL || mpKFLoop->isNull()) {
         mImgLoop.setTo(cv::Scalar(0));
         return;
-    }
-    else {
+    } else {
         mpKFLoop->copyImgTo(mImgLoop);
     }
 
-    if(mImgCurr.channels() == 1) {
+    if (mImgCurr.channels() == 1) {
         Mat imgTemp = mImgCurr.clone();
         cvtColor(mImgCurr, imgTemp, CV_GRAY2BGR);
         imgTemp.copyTo(mImgCurr);
     }
-    if(mImgLoop.channels() == 1) {
+    if (mImgLoop.channels() == 1) {
         Mat imgTemp = mImgLoop.clone();
         cvtColor(mImgLoop, imgTemp, CV_GRAY2BGR);
         imgTemp.copyTo(mImgLoop);
     }
-    Size sizeImgCurr = mImgCurr.size();
-    Size sizeImgLoop = mImgLoop.size();
-
-    Mat imgMatch(sizeImgCurr.height*2, sizeImgCurr.width, mImgCurr.type());
-    mImgCurr.copyTo(imgMatch(cv::Rect(0,0,sizeImgCurr.width,sizeImgCurr.height)));
-    mImgLoop.copyTo(imgMatch(cv::Rect(0,sizeImgCurr.height,sizeImgLoop.width,sizeImgLoop.height)));
-    imgMatch.copyTo(mImgMatch);
+    hconcat(mImgCurr, mImgLoop, mImgMatch);
 
     //! Draw Features
-    for (int i=0, iend=mpKFCurr->keyPoints.size(); i<iend; i++) {
-        KeyPoint kpCurr = mpKFCurr->keyPoints[i];
-        Point2f ptCurr = kpCurr.pt;
-        bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
+    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[i].pt;
+        const bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
         Scalar colorCurr;
         if (ifMPCurr) {
-            colorCurr = Scalar(0,255,0);
-        }
-        else {
-            colorCurr = Scalar(255,0,0);
+            colorCurr = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorCurr = Scalar(255, 0, 0);  // 否则标蓝色
         }
         circle(mImgMatch, ptCurr, 5, colorCurr, 1);
     }
 
-    for (int i=0, iend=mpKFLoop->keyPoints.size(); i<iend; i++) {
-        KeyPoint kpLoop = mpKFLoop->keyPoints[i];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += 480;
+    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[i].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(mImgCurr.cols, 0);
 
-        bool ifMPLoop = bool(mpKFLoop->hasObservation(i));
+        const bool ifMPLoop = bool(mpKFLoop->hasObservation(i));
         Scalar colorLoop;
         if (ifMPLoop) {
-            colorLoop = Scalar(0,255,0);
-        }
-        else {
-            colorLoop = Scalar(255,0,0);
+            colorLoop = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorLoop = Scalar(255, 0, 0);  // 否则标蓝色
         }
         circle(mImgMatch, ptLoopMatch, 5, colorLoop, 1);
     }
 
     //! Draw Matches
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+        const int idxCurr = iter->first;
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[idxCurr].pt;
 
-        int idxCurr = iter->first;
-        KeyPoint kpCurr = mpKFCurr->keyPoints[idxCurr];
-        Point2f ptCurr = kpCurr.pt;
+        const int idxLoop = iter->second;
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[idxLoop].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(mImgCurr.cols, 0);
 
-        int idxLoop = iter->second;
-        KeyPoint kpLoop = mpKFLoop->keyPoints[idxLoop];
-        Point2f ptLoop = kpLoop.pt;
-        Point2f ptLoopMatch = ptLoop;
-        ptLoopMatch.y += 480;
-
-        bool ifMPCurr = bool(mpKFCurr->hasObservation(idxCurr));
-        bool ifMPLoop = bool(mpKFLoop->hasObservation(idxLoop));
+        const bool ifMPCurr = bool(mpKFCurr->hasObservation(idxCurr));
+        const bool ifMPLoop = bool(mpKFLoop->hasObservation(idxLoop));
 
         Scalar colorCurr, colorLoop;
         if (ifMPCurr) {
-            colorCurr = Scalar(0,255,0);
-        }
-        else {
-            colorCurr = Scalar(255,0,0);
+            colorCurr = Scalar(0, 255, 0);
+        } else {
+            colorCurr = Scalar(255, 0, 0);
         }
         if (ifMPLoop) {
-            colorLoop = Scalar(0,255,0);
-        }
-        else {
-            colorLoop = Scalar(255,0,0);
+            colorLoop = Scalar(0, 255, 0);
+        } else {
+            colorLoop = Scalar(255, 0, 0);
         }
 
         circle(mImgMatch, ptCurr, 5, colorCurr, 1);
         circle(mImgMatch, ptLoopMatch, 5, colorLoop, 1);
         if (ifMPCurr && ifMPLoop) {
-            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0,97,255), 2);
-        }
-        else {
+            line(mImgMatch, ptCurr, ptLoopMatch, Scalar(0, 97, 255), 2);
+        } else {
             line(mImgMatch, ptCurr, ptLoopMatch, colorCurr, 1);
         }
-
     }
-
 }
 
-void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
-                                            map<int, int> & mapMatch)
+
+void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop, map<int, int>& mapMatch)
 {
     int numMinMatch = 10;
 
@@ -1204,7 +1192,7 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
     int numMatch = mapMatch.size();
     if (numMatch < numMinMatch) {
         mapMatch.clear();
-        return; // return when small number of matches
+        return;  // return when small number of matches
     }
 
     map<int, int> mapMatchGood;
@@ -1224,12 +1212,12 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
     }
 
     // RANSAC with fundemantal matrix
-    vector<uchar> vInlier; // 1 when inliers, 0 when outliers
+    vector<uchar> vInlier;  // 1 when inliers, 0 when outliers
     findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
-    for (unsigned int i=0; i<vInlier.size(); i++) {
+    for (unsigned int i = 0; i < vInlier.size(); i++) {
         int idxCurr = vIdxCurr[i];
         int idxLoop = vIdxLoop[i];
-        if(vInlier[i] == true) {
+        if (vInlier[i] == true) {
             mapMatchGood[idxCurr] = idxLoop;
         }
     }
@@ -1239,8 +1227,7 @@ void GlobalMapper::RemoveMatchOutlierRansac(PtrKeyFrame _pKFCurr, PtrKeyFrame _p
 }
 
 // Remove match pair with KP
-void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
-                                 map<int, int> & mapMatch)
+void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop, map<int, int>& mapMatch)
 {
     vector<int> vIdxToErase;
 
@@ -1252,22 +1239,22 @@ void GlobalMapper::RemoveKPMatch(PtrKeyFrame _pKFCurr, PtrKeyFrame _pKFLoop,
         bool ifMPCurr = _pKFCurr->hasObservation(idxCurr);
         bool ifMPLoop = _pKFLoop->hasObservation(idxLoop);
 
-        if(ifMPCurr && ifMPLoop) {
+        if (ifMPCurr && ifMPLoop) {
             continue;
-        }
-        else {
+        } else {
             vIdxToErase.push_back(idxCurr);
         }
     }
 
     int numToErase = vIdxToErase.size();
-    for (int i=0; i<numToErase; i++) {
+    for (int i = 0; i < numToErase; i++) {
         mapMatch.erase(vIdxToErase[i]);
     }
 }
 
 // Return all connected KFs from a given KF
-set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF, set<PtrKeyFrame> _sKFSelected) {
+set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF, set<PtrKeyFrame> _sKFSelected)
+{
     set<PtrKeyFrame> sKFConnected;
 
     PtrKeyFrame pKFOdoChild = _pKF->mOdoMeasureFrom.first;
@@ -1280,38 +1267,37 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs(const PtrKeyFrame _pKF, set<Pt
         sKFConnected.insert(pKFOdoParent);
     }
 
-    for (auto iter = _pKF->mFtrMeasureFrom.begin();
-         iter != _pKF->mFtrMeasureFrom.end(); iter ++) {
+    for (auto iter = _pKF->mFtrMeasureFrom.begin(); iter != _pKF->mFtrMeasureFrom.end(); iter++) {
         sKFConnected.insert(iter->first);
     }
 
-    for (auto iter = _pKF->mFtrMeasureTo.begin();
-         iter != _pKF->mFtrMeasureTo.end(); iter ++) {
+    for (auto iter = _pKF->mFtrMeasureTo.begin(); iter != _pKF->mFtrMeasureTo.end(); iter++) {
         sKFConnected.insert(iter->first);
     }
 
-    for (auto iter = _sKFSelected.begin();
-         iter != _sKFSelected.end(); iter ++) {
+    for (auto iter = _sKFSelected.begin(); iter != _sKFSelected.end(); iter++) {
         sKFConnected.insert(*iter);
     }
 
     return sKFConnected;
 }
 
-set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers, set<PtrKeyFrame> _sKFSelected) {
+set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF, int numLayers,
+                                                          set<PtrKeyFrame> _sKFSelected)
+{
 
-    set<PtrKeyFrame> sKFLocal;      // Set of KFs whose distance from _pKF smaller than maxDist
-    set<PtrKeyFrame> sKFActive;     // Set of KFs who are active for next loop;
+    set<PtrKeyFrame> sKFLocal;  // Set of KFs whose distance from _pKF smaller than maxDist
+    set<PtrKeyFrame> sKFActive;  // Set of KFs who are active for next loop;
     sKFActive.insert(_pKF);
 
-    for (int i=0; i<numLayers; i++) {
+    for (int i = 0; i < numLayers; i++) {
 
         set<PtrKeyFrame> sKFNew;
 
         for (auto iter = sKFActive.begin(); iter != sKFActive.end(); iter++) {
             PtrKeyFrame pKFTmp = *iter;
             set<PtrKeyFrame> sKFAdjTmp = GetAllConnectedKFs(pKFTmp, _sKFSelected);
-            for (auto iter2 = sKFAdjTmp.begin(); iter2 != sKFAdjTmp.end(); iter2 ++) {
+            for (auto iter2 = sKFAdjTmp.begin(); iter2 != sKFAdjTmp.end(); iter2++) {
                 if (sKFLocal.count(*iter2) == 0) {
                     sKFNew.insert(*iter2);
                 }
@@ -1326,11 +1312,11 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF
 }
 
 
-
 // Select KF pairs to creat feature constraint between which
-vector <pair <PtrKeyFrame, PtrKeyFrame> > GlobalMapper::SelectKFPairFeat(const PtrKeyFrame _pKF) {
+vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::SelectKFPairFeat(const PtrKeyFrame _pKF)
+{
 
-    vector<pair <PtrKeyFrame, PtrKeyFrame> > _vKFPairs;
+    vector<pair<PtrKeyFrame, PtrKeyFrame>> _vKFPairs;
 
     // Smallest distance between KFs in covis-graph to create a new feature edge
     int threshCovisGraphDist = 5;
@@ -1345,8 +1331,7 @@ vector <pair <PtrKeyFrame, PtrKeyFrame> > GlobalMapper::SelectKFPairFeat(const P
         if (sKFLocal.count(_pKFCand) == 0) {
             sKFSelected.insert(*iter);
             sKFLocal = GetAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
-        }
-        else {
+        } else {
             continue;
         }
     }
@@ -1359,41 +1344,47 @@ vector <pair <PtrKeyFrame, PtrKeyFrame> > GlobalMapper::SelectKFPairFeat(const P
     return _vKFPairs;
 }
 
-void GlobalMapper::setBusy(bool v){
+void GlobalMapper::setBusy(bool v)
+{
     std::unique_lock<std::mutex> lock(mMutexBusy);
     mbIsBusy = v;
-    if(!v) {
+    if (!v) {
         mcIsBusy.notify_one();
     }
 }
 
 
-void GlobalMapper::waitIfBusy(){
+void GlobalMapper::waitIfBusy()
+{
     std::unique_lock<std::mutex> lock(mMutexBusy);
-    while(mbIsBusy){
+    while (mbIsBusy) {
         mcIsBusy.wait(lock);
     }
 }
 
-void GlobalMapper::requestFinish() {
+void GlobalMapper::requestFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     mbFinishRequested = true;
 }
 
-bool GlobalMapper::checkFinish() {
+bool GlobalMapper::checkFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinishRequested;
 }
 
-bool GlobalMapper::isFinished() {
+bool GlobalMapper::isFinished()
+{
     unique_lock<mutex> lock(mMutexFinish);
     return mbFinished;
 }
 
-void GlobalMapper::setFinish() {
+void GlobalMapper::setFinish()
+{
     unique_lock<mutex> lock(mMutexFinish);
     mbFinished = true;
 }
 
 
-} // namespace se2lam
+}  // namespace se2lam

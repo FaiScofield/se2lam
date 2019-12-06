@@ -36,8 +36,7 @@ Track::Track()
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
     mpORBmatcher = new ORBmatcher(0.9, true);
 
-    mMatchIdx.clear();
-    mvbGoodPrl.clear();
+    mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
 
     mbNeedVisualization = Config::NeedVisualization;
     mbFinished = false;
@@ -73,7 +72,7 @@ void Track::run()
         cv::Mat img;
         Se2 odo;
         mpSensors->readData(odo, img);
- 
+
         {
             locker lock(mMutexForPub);
             bool noFrame = !(Frame::nextId);
@@ -81,14 +80,15 @@ void Track::run()
                 mCreateFrame(img, odo);
             else
                 mTrack(img, odo);
-
-            mpMap->setCurrentFramePose(mFrame.Tcw);
         }
         double dt = timer.count();
         trackTimeTatal += dt;
-        cout << "[Track][Timer] #" << mFrame.id << " 前端总耗时为: " << dt << "ms, 平均耗时: " << trackTimeTatal / mFrame.id << "ms" << endl;
+        cout << "[Track][Timer] #" << mCurrentFrame.id << " 前端总耗时为: " << dt << "ms, 平均耗时: "
+             << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
 
+        mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
         lastOdom = odo;
+        copyForPub();
         rate.sleep();
     }
 
@@ -100,15 +100,15 @@ void Track::run()
 
 void Track::mCreateFrame(const Mat& img, const Se2& odo)
 {
-    mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    mFrame.Twb = Se2(0, 0, 0);
-    mFrame.Tcw = Config::Tcb.clone();
+    mCurrentFrame.Twb = Se2(0, 0, 0);
+    mCurrentFrame.Tcw = Config::Tcb.clone();
 
-    if (mFrame.keyPoints.size() > 100) {
-        cout << "[Track][Info ] #" << mFrame.id << " Create first frame with " << mFrame.N << " features." << endl;
-        mpKF = make_shared<KeyFrame>(mFrame);
-        mpMap->insertKF(mpKF);
+    if (mCurrentFrame.mvKeyPoints.size() > 100) {
+        cout << "[Track][Info ] #" << mCurrentFrame.id << " Create first frame with " << mCurrentFrame.N << " features." << endl;
+        mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);
+        mpMap->insertKF(mpReferenceKF);
         resetLocalTrack();
     } else
         Frame::nextId = 0;
@@ -117,12 +117,12 @@ void Track::mCreateFrame(const Mat& img, const Se2& odo)
 
 void Track::mTrack(const Mat& img, const Se2& odo)
 {
-    mFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
     ORBmatcher matcher(0.9);
-    int nMatched = matcher.MatchByWindow(mRefFrame, mFrame, mPrevMatched, 20, mMatchIdx);
+    int nMatched = matcher.MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
 
-    nMatched = removeOutliers(mRefFrame.keyPointsUn, mFrame.keyPointsUn, mMatchIdx);
+    nMatched = removeOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
     updateFramePose();
 
@@ -133,32 +133,32 @@ void Track::mTrack(const Mat& img, const Se2& odo)
     if (needNewKF(nTrackedOld, nMatched)) {
 
         // Insert KeyFrame
-        PtrKeyFrame pKF = make_shared<KeyFrame>(mFrame);
+        PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
 
-        assert(mpMap->getCurrentKF()->mIdKF == mpKF->mIdKF);
-        mpKF->preOdomFromSelf = make_pair(pKF, preSE2);
-        pKF->preOdomToSelf = make_pair(mpKF, preSE2);
-        mpLocalMapper->addNewKF(pKF, mLocalMPs, mMatchIdx, mvbGoodPrl);
+        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
+        mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
+        pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
+        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvKPMatchIdx, mvbGoodPrl);
 
         resetLocalTrack();
 
-        mpKF = pKF;
+        mpReferenceKF = pKF;
 
-        cout << "[Track][Info ] #" << mFrame.id << " 成为了新的KF." << endl;
+        cout << "[Track][Info ] #" << mCurrentFrame.id << " 成为了新的KF." << endl;
     }
 }
 
 void Track::updateFramePose()
 {
-    mFrame.Trb = mFrame.odom - mpKF->odom;
-    Se2 dOdo = mpKF->odom - mFrame.odom;
-    mFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
-    mFrame.Tcw = mFrame.Tcr * mpKF->Tcw;
-    mFrame.Twb = mpKF->Twb + (mFrame.odom - mpKF->odom);
+    mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;
+    Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
+    mCurrentFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
+    mCurrentFrame.Tcw = mCurrentFrame.Tcr * mpReferenceKF->Tcw;
+    mCurrentFrame.Twb = mpReferenceKF->Twb + (mCurrentFrame.odom - mpReferenceKF->odom);
 
     // preintegration
     Eigen::Map<Vector3d> meas(preSE2.meas);
-    Se2 odok = mFrame.odom - lastOdom;
+    Se2 odok = mCurrentFrame.odom - lastOdom;
     Vector2d odork(odok.x, odok.y);
     Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
     meas.head<2>() += Phi_ik * odork;
@@ -180,13 +180,13 @@ void Track::updateFramePose()
 
 void Track::resetLocalTrack()
 {
-    mFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
-    mFrame.Trb = Se2(0, 0, 0);
-    KeyPoint::convert(mFrame.keyPoints, mPrevMatched);
-    mRefFrame = mFrame;
-    mLocalMPs = mpKF->mViewMPs;
+    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
+    mCurrentFrame.Trb = Se2(0, 0, 0);
+    KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
+    mLastFrame = mCurrentFrame;
+    mLocalMPs = mpReferenceKF->mViewMPs;
     mnGoodPrl = 0;
-    mMatchIdx.clear();
+    mvKPMatchIdx.clear();
 
     for (int i = 0; i < 3; i++)
         preSE2.meas[i] = 0;
@@ -195,19 +195,38 @@ void Track::resetLocalTrack()
 }
 
 
-int Track::copyForPub(vector<KeyPoint>& kp1, vector<KeyPoint>& kp2, Mat& img1, Mat& img2, vector<int>& vMatches12)
+void Track::copyForPub()
 {
-    locker lock(mMutexForPub);
-    mRefFrame.copyImgTo(img1);
-    mFrame.copyImgTo(img2);
+    locker lock1(mMutexForPub);
+    locker lock2(mpMapPublisher->mMutexUpdate);
 
-    kp1 = mRefFrame.keyPoints;
-    kp2 = mFrame.keyPoints;
-    vMatches12 = mMatchIdx;
+    mvKPMatchIdxGood = mvKPMatchIdx;
+    mpMapPublisher->mnCurrentFrameID = mCurrentFrame.id;
+    mpMapPublisher->mCurrentFramePose = mCurrentFrame.Tcw;
+    mpMapPublisher->mCurrentImage = mCurrentFrame.mImage.clone();
+    mpMapPublisher->mvCurrentKPs = mCurrentFrame.mvKeyPoints;
+    mpMapPublisher->mvMatchIdx = mvKPMatchIdx;
+    mpMapPublisher->mvMatchIdxGood = mvKPMatchIdxGood;
+    mpMapPublisher->mAffineMatrix = mAffineMatrix.clone();
 
-    return !mMatchIdx.empty();
+    //char strMatches[64];
+    if (1) {  // 正常情况和刚丢失情况
+        mpMapPublisher->mReferenceImage = mpReferenceKF->mImage.clone();
+
+        mpMapPublisher->mvReferenceKPs = mpReferenceKF->mvKeyPoints;
+    } else {  // 丢失情况和刚完成重定位
+        if (mpLoopKF != nullptr) {
+            mpMapPublisher->mReferenceImage = mpLoopKF->mImage.clone();
+            mpMapPublisher->mvReferenceKPs = mpLoopKF->mvKeyPoints;
+        } else {
+            mpMapPublisher->mReferenceImage = Mat::zeros(mCurrentFrame.mImage.size(), CV_8UC1);
+            mpMapPublisher->mvReferenceKPs.clear();
+        }
+    }
+
+    //mpMapPublisher->mImageText = string(strMatches);
+    mpMapPublisher->mbFrontUpdated = true;
 }
-
 
 void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_se3)
 {
@@ -307,7 +326,7 @@ int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
     // If too few match inlier, discard all matches. The enviroment might not be suitable for image tracking.
     if (nInlier < 10) {
         nInlier = 0;
-        std::fill(mMatchIdx.begin(), mMatchIdx.end(), -1);
+        std::fill(mvKPMatchIdx.begin(), mvKPMatchIdx.end(), -1);
     }
 
     return nInlier;
@@ -315,17 +334,17 @@ int Track::removeOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
 
 bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 {
-    int nOldKP = mpKF->getSizeObsMP();
-    bool c0 = mFrame.id - mpKF->id > nMinFrames;
+    int nOldKP = mpReferenceKF->getSizeObsMP();
+    bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;
-    bool c3 = mFrame.id - mpKF->id > nMaxFrames;
+    bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
     bool c4 = nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
     bool bNeedKFByOdo = true;
     if (mbUseOdometry) {
-        Se2 dOdo = mFrame.odom - mpKF->odom;
+        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
         bool c5 = dOdo.theta >= 0.0349f;  // Larger than 2 degree
         // cv::Mat cTc = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
@@ -347,31 +366,31 @@ bool Track::needNewKF(int nTrackedOldMP, int nMatched)
 
 int Track::doTriangulate()
 {
-    if (mFrame.id - mpKF->id < nMinFrames) {
+    if (mCurrentFrame.id - mpReferenceKF->id < nMinFrames) {
         return 0;
     }
 
-    Mat TfromRefKF = cvu::inv(mFrame.Tcr);
+    Mat TfromRefKF = cvu::inv(mCurrentFrame.Tcr);
     Point3f Ocam = Point3f(TfromRefKF.rowRange(0, 3).col(3));
     int nTrackedOld = 0;
-    mvbGoodPrl = vector<bool>(mRefFrame.N, false);
+    mvbGoodPrl = vector<bool>(mLastFrame.N, false);
     mnGoodPrl = 0;
 
-    for (int i = 0; i < mRefFrame.N; i++) {
+    for (int i = 0; i < mLastFrame.N; i++) {
 
-        if (mMatchIdx[i] < 0)
+        if (mvKPMatchIdx[i] < 0)
             continue;
 
-        if (mpKF->hasObservation(i)) {
-            mLocalMPs[i] = mpKF->mViewMPs[i];
+        if (mpReferenceKF->hasObservation(i)) {
+            mLocalMPs[i] = mpReferenceKF->mViewMPs[i];
             nTrackedOld++;
             continue;
         }
 
-        Point2f pt_KF = mpKF->keyPointsUn[i].pt;
-        Point2f pt = mFrame.keyPointsUn[mMatchIdx[i]].pt;
+        Point2f pt_KF = mpReferenceKF->keyPointsUn[i].pt;
+        Point2f pt = mCurrentFrame.keyPointsUn[mvKPMatchIdx[i]].pt;
         cv::Mat P_KF = Config::PrjMtrxEye;
-        cv::Mat P = Config::Kcam * mFrame.Tcr.rowRange(0, 3);
+        cv::Mat P = Config::Kcam * mCurrentFrame.Tcr.rowRange(0, 3);
         Point3f pos = cvu::triangulate(pt_KF, pt, P_KF, P);
 
         if (Config::acceptDepth(pos.z)) {
@@ -381,7 +400,7 @@ int Track::doTriangulate()
                 mvbGoodPrl[i] = true;
             }
         } else {
-            mMatchIdx[i] = -1;
+            mvKPMatchIdx[i] = -1;
         }
     }
 

@@ -53,7 +53,7 @@ KeyFrame::KeyFrame(const Frame& frame):
     mbBowVecExist(false),
     mbNull(false)
 {
-    size_t sz = frame.keyPoints.size();
+    size_t sz = frame.mvKeyPoints.size();
     mViewMPs = vector<Point3f>(sz, Point3f(-1,-1,-1));
     mViewMPsInfo = vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d> >(sz, Eigen::Matrix3d::Identity()*-1);
     mNextIdKF++;
@@ -79,8 +79,8 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame>& pThis){
 
     mbNull = true;
     descriptors.release();
-    img.release();
-    keyPoints.clear();
+    mImage.release();
+    mvKeyPoints.clear();
     keyPointsUn.clear();
 
 
