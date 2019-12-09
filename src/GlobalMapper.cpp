@@ -152,7 +152,7 @@ void GlobalMapper::run()
 
         rate.sleep();
     }
-    cerr << "Exiting globalmapper .." << endl;
+    cerr << "[Globa][Info] Exiting globalmapper .." << endl;
 
     setFinish();
 }
@@ -199,7 +199,7 @@ bool GlobalMapper::DetectLoopClose()
     DBoW2::BowVector BowVecCurr = pKFCurr->mBowVec;
     int idKFCurr = pKFCurr->mIdKF;
 
-    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
     int numKFs = vpKFsAll.size();
     PtrKeyFrame pKFBest;
     double scoreBest = 0;
@@ -317,7 +317,7 @@ void GlobalMapper::GlobalBA()
     double threshFeatEdgeChi2Pre = 1000.0;
 #endif
 
-    std::vector<PtrKeyFrame> vecKFs = mpMap->getAllKF();
+    std::vector<PtrKeyFrame> vecKFs = mpMap->getAllKFs();
 
     SlamOptimizer optimizer;
     // initOptimizer(optimizer);
@@ -483,7 +483,7 @@ void GlobalMapper::GlobalBA()
     }
 
     // Update local graph MapPoint positions
-    vector<PtrMapPoint> vMPsAll = mpMap->getAllMP();
+    vector<PtrMapPoint> vMPsAll = mpMap->getAllMPs();
     for (auto it = vMPsAll.begin(); it != vMPsAll.end(); it++) {
         PtrMapPoint pMP = (*it);
 
@@ -1056,7 +1056,7 @@ void GlobalMapper::ComputeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
-    vpKFs = mpMap->getAllKF();
+    vpKFs = mpMap->getAllKFs();
     int numKFs = vpKFs.size();
     for (int i = 0; i < numKFs; i++) {
         PtrKeyFrame pKF = vpKFs[i];

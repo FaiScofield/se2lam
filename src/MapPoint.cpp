@@ -106,7 +106,7 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, int idx){
 
     int oldObsSize = mObservations.size();
     mObservations.insert(make_pair(pKF, idx));
-    assert(idx < pKF->descriptors.rows);
+    assert(idx < pKF->mDescriptors.rows);
 
     updateMainKFandDescriptor();
 
@@ -239,7 +239,7 @@ void MapPoint::updateMainKFandDescriptor(){
 
         if(!pKF->isNull()){
             vKFs.push_back(pKF);
-            vDes.push_back(pKF->descriptors.row(i->second));
+            vDes.push_back(pKF->mDescriptors.row(i->second));
         }
     }
 

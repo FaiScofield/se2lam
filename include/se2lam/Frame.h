@@ -53,7 +53,7 @@ public:
     ORBextractor* mpORBExtractor;
     std::vector<cv::KeyPoint> mvKeyPoints;
     std::vector<cv::KeyPoint> keyPointsUn;
-    cv::Mat descriptors;
+    cv::Mat mDescriptors;
     int N;
     std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int minLevel=-1, const int maxLevel=-1) const;
 

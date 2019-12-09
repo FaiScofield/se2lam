@@ -331,7 +331,7 @@ void MapPublish::publishKeyFrames()
     const Mat p3 = (Mat_<float>(4, 1) << -d, -d * 0.8, d * 0.5, 1);
     const Mat p4 = (Mat_<float>(4, 1) << -d, d * 0.8, d * 0.5, 1);
 
-    const vector<PtrKeyFrame> vKFsAll = mpMap->getAllKF();
+    const vector<PtrKeyFrame> vKFsAll = mpMap->getAllKFs();
     if (vKFsAll.empty())
         return;
 
@@ -501,7 +501,7 @@ void MapPublish::publishMapPoints()
         spMPNow = mpMap->getCurrentKF()->getAllObsMPs();
     }
 
-    vector<PtrMapPoint> vpMPNeg = mpMap->getAllMP();
+    vector<PtrMapPoint> vpMPNeg = mpMap->getAllMPs();
 
     vector<PtrMapPoint> vpMPNegGood;
     for (auto iter = vpMPNeg.begin(); iter != vpMPNeg.end(); iter++) {
@@ -745,6 +745,7 @@ bool MapPublish::isFinished()
 Mat MapPublish::drawCurrentFrameMatches()
 {
     locker lock(mMutexUpdate);
+    assert(!mAffineMatrix.empty());
 
     Mat imgCur, imgRef, imgWarp, imgOutUp, A21;
     if (mCurrentImage.channels() == 1)

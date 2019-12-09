@@ -321,7 +321,7 @@ void Localizer::setORBVoc(ORBVocabulary* pORBVoc) {
 void Localizer::ComputeBowVecAll() {
     // Compute BowVector for all KFs, when BowVec does not exist
     vector<PtrKeyFrame> vpKFs;
-    vpKFs = mpMap->getAllKF();
+    vpKFs = mpMap->getAllKFs();
     int numKFs = vpKFs.size();
     for(int i=0; i<numKFs; i++) {
         PtrKeyFrame pKF = vpKFs[i];
@@ -345,7 +345,7 @@ bool Localizer::DetectLoopClose() {
 
     DBoW2::BowVector BowVecCurr = pKFCurr->mBowVec;
 
-    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKF();
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
     int numKFs = vpKFsAll.size();
     PtrKeyFrame pKFBest;
     double scoreBest = 0;

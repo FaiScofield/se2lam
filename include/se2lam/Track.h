@@ -61,7 +61,7 @@ private:
     int RemoveOutliers(const std::vector<cv::KeyPoint>& kp1, const std::vector<cv::KeyPoint>& kp2,
                        std::vector<int>& matches);
     int DoTriangulate();
-    bool NeedNewKF(int nTrackedOldMP, int nMatched);
+    bool NeedNewKF();
 
     void ResetLocalTrack();
 
@@ -92,6 +92,8 @@ private:
     PtrKeyFrame mpReferenceKF, mpLoopKF;
     std::vector<cv::Point2f> mPrevMatched;
 
+    int mnKPMatches, mnKPsInline, mnKPMatchesGood;
+    int mnMPsTracked;
     cv::Mat mAffineMatrix;
 
     PreSE2 preSE2;

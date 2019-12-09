@@ -249,6 +249,8 @@ void LocalMapper::localBA()
     optimizer.setForceStopFlag(&mbAbortBA);
 #endif
     mpMap->loadLocalGraph(optimizer);
+    double t1 = timer.count();
+    timer.start();
 
 #ifdef TIME_TO_LOG_LOCAL_BA
     int numKf = mpMap->countLocalKFs();
@@ -282,8 +284,8 @@ void LocalMapper::localBA()
 
     cout << "[Local][Info ] #" << mpNewKF->id << "(KF#" << mpNewKF->mIdKF
          << ") L6.局部BA涉及的KF/RefKF/MP数量为: " << mpMap->countLocalKFs() << "/"
-         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << ", 耗时: "
-         << timer.count() << ", 是否被强制中断: " << optimizer.terminate() << endl;
+         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << ", 加载/优化耗时: "
+         << t1 << "/" << timer.count() << ", 是否被强制中断: " << optimizer.terminate() << endl;
 
 
 #ifdef REJECT_IF_LARGE_LAMBDA
@@ -465,6 +467,8 @@ void LocalMapper::pruneRedundantKfInMap()
         bPruned = mpMap->pruneRedundantKF();
         countPrune++;
     } while (bPruned && countPrune < 5);
+    cout << "[Local][Info ] #" << mpNewKF->id << "(KF#" << mpNewKF->mIdKF << ") "
+         << "L5.修剪冗余KF帧数 = " << countPrune << endl;
 }
 
 void LocalMapper::setGlobalBABegin(bool value)

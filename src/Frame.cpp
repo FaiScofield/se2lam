@@ -51,7 +51,7 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
     clahe->apply(imgUn, mImage);
 
     mpORBExtractor = extractor;
-    (*mpORBExtractor)(mImage, cv::Mat(), mvKeyPoints, descriptors);
+    (*mpORBExtractor)(mImage, cv::Mat(), mvKeyPoints, mDescriptors);
 
     N = mvKeyPoints.size();
     if (mvKeyPoints.empty())
@@ -101,7 +101,7 @@ Frame::Frame(const Frame& f)
     f.mImage.copyTo(mImage);
     mvKeyPoints = f.mvKeyPoints;
     keyPointsUn = f.keyPointsUn;
-    f.descriptors.copyTo(descriptors);
+    f.mDescriptors.copyTo(mDescriptors);
     N = f.N;
 
     minXUn = f.minXUn;
@@ -134,7 +134,7 @@ Frame& Frame::operator=(const Frame& f)
     f.mImage.copyTo(mImage);
     mvKeyPoints = f.mvKeyPoints;
     keyPointsUn = f.keyPointsUn;
-    f.descriptors.copyTo(descriptors);
+    f.mDescriptors.copyTo(mDescriptors);
     N = f.N;
 
     minXUn = f.minXUn;
@@ -300,7 +300,7 @@ void Frame::copyImgTo(cv::Mat& imgRet)
 void Frame::copyDesTo(cv::Mat& desRet)
 {
     lock_guard<mutex> lock(mMutexDes);
-    descriptors.copyTo(desRet);
+    mDescriptors.copyTo(desRet);
 }
 
 Frame::~Frame()

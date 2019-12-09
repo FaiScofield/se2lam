@@ -51,8 +51,8 @@ void MapStorage::loadMap(){
 
 void MapStorage::saveMap(){
 
-    mvKFs = mpMap->getAllKF();
-    mvMPs = mpMap->getAllMP();
+    mvKFs = mpMap->getAllKFs();
+    mvMPs = mpMap->getAllMPs();
 
     sortKeyFrames();
 
@@ -160,7 +160,7 @@ void MapStorage::saveKeyFrames(){
         }
         file << "]";
 
-        file << "Descriptor" << pKF->descriptors;
+        file << "Descriptor" << pKF->mDescriptors;
 
         if (pKF->mViewMPs.size() != pKF->mvKeyPoints.size())
             cout << "Wrong size of KP in saving" << endl;
@@ -381,7 +381,7 @@ void MapStorage::loadKeyFrames(){
             pKF->keyPointsUn = vKPs;
         }
 
-        nodeKF["Descriptor"] >> pKF->descriptors;
+        nodeKF["Descriptor"] >> pKF->mDescriptors;
 
         pKF->mViewMPs.clear();
         FileNode nodeViewMP = nodeKF["ViewMPs"];

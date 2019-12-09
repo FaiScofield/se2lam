@@ -76,7 +76,7 @@ void KeyFrame::setNull(const shared_ptr<KeyFrame>& pThis)
     lock_guard<mutex> lckDes(mMutexDes);
 
     mbNull = true;
-    descriptors.release();
+    mDescriptors.release();
     mImage.release();
     mvKeyPoints.clear();
     keyPointsUn.clear();
@@ -257,7 +257,7 @@ void KeyFrame::ComputeBoW(ORBVocabulary* _pVoc)
 {
     lock_guard<mutex> lck(mMutexDes);
     if (mBowVec.empty() || mFeatVec.empty()) {
-        vector<cv::Mat> vCurrentDesc = toDescriptorVector(descriptors);
+        vector<cv::Mat> vCurrentDesc = toDescriptorVector(mDescriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)
         // We assume the vocabulary tree has 6 levels, change the 4 otherwise
         _pVoc->transform(vCurrentDesc, mBowVec, mFeatVec, 4);

@@ -30,8 +30,12 @@ Track::Track()
 {
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = min(8, cvCeil(0.25 * Config::FPS));  // 上溢
-    nMaxFrames = cvFloor(1 * Config::FPS);            // 下溢
+    nMaxFrames = cvFloor(1 * Config::FPS);  // 下溢
     mnGoodPrl = 0;
+    mnKPMatches = 0;
+    mnKPsInline = 0;
+    mnKPMatchesGood = 0;
+    mnMPsTracked = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
     mpORBmatcher = new ORBmatcher(0.9, true);
@@ -85,13 +89,15 @@ void Track::Run()
         t2 = timer.count();
         trackTimeTatal += t1 + t2;
         cout << setiosflags(ios::fixed) << setprecision(2);  // 设置浮点数保留2位小数
-        cout << "[Track][Timer] #" << mCurrentFrame.id << " 前端总耗时为: " << t1 + t2
+        cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
+             << " 前端总耗时为: " << t1 + t2
              << "ms, 平均耗时: " << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
 
         mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
         lastOdom = odo;
         CopyForPub();
 
+        ResetLocalTrack();
         rate.sleep();
     }
 
@@ -116,8 +122,20 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
         mCurrentFrame.Tcw = Config::Tcb.clone();
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);
         mpMap->insertKF(mpReferenceKF);
+
+
+        // reset
+        KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
         mLastFrame = mCurrentFrame;
-        ResetLocalTrack();
+        mLocalMPs = mpReferenceKF->mViewMPs;
+        mvKPMatchIdx.clear();
+        mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
+        mnGoodPrl = mnKPMatches = mnKPsInline = mnKPMatchesGood = mnMPsTracked = 0;
+        for (int i = 0; i < 3; i++)
+            preSE2.meas[i] = 0;
+        for (int i = 0; i < 9; i++)
+            preSE2.cov[i] = 0;
+
     } else {
         cerr << "[Track][Warni] Failed to create first frame for too less keyPoints: "
              << mCurrentFrame.N << endl;
@@ -131,32 +149,16 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
     UpdateFramePose();
 
-    int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
-    int nInliers = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
+    //int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
+    mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
+    mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
     // Check parallax and do triangulation
-    int nTrackedOld = DoTriangulate();
+    mnMPsTracked = DoTriangulate();
 
     cout << "[Track][Info ] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
-         << ", 追踪匹配情况: 关联/内点数/总匹配数/潜在好视差数 = " << nTrackedOld << "/" << nInliers
-         << "/" << nMatched << "/" << mnGoodPrl << endl;
-
-    // Need new KeyFrame decision
-    if (NeedNewKF(nTrackedOld, nInliers)) {
-        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
-
-        // Insert KeyFrame
-        PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
-        mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
-        pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
-        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvKPMatchIdx, mvbGoodPrl);
-
-        ResetLocalTrack();
-
-        mpReferenceKF = pKF;
-
-        cout << "[Track][Info ] #" << mCurrentFrame.id << " 成为了新的KF#" << pKF->mIdKF << endl;
-    }
+         << " 追踪匹配情况: 关联/内点数/总匹配数/潜在好视差数 = " << mnMPsTracked << "/" << mnKPsInline
+         << "/" << mnKPMatches << "/" << mnGoodPrl << endl;
 }
 
 void Track::UpdateFramePose()
@@ -190,19 +192,31 @@ void Track::UpdateFramePose()
 
 void Track::ResetLocalTrack()
 {
-    //    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
-    //    mCurrentFrame.Trb = Se2(0, 0, 0);
-    KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
-    mLastFrame = mCurrentFrame;
-    mLocalMPs = mpReferenceKF->mViewMPs;
-    mnGoodPrl = 0;
-    mvKPMatchIdx.clear();
-    mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
+    // Need new KeyFrame decision
+    if (NeedNewKF()) {
+        assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
 
-    for (int i = 0; i < 3; i++)
-        preSE2.meas[i] = 0;
-    for (int i = 0; i < 9; i++)
-        preSE2.cov[i] = 0;
+        // Insert KeyFrame
+        PtrKeyFrame pKF = make_shared<KeyFrame>(mCurrentFrame);
+        mpReferenceKF->preOdomFromSelf = make_pair(pKF, preSE2);
+        pKF->preOdomToSelf = make_pair(mpReferenceKF, preSE2);
+        mpLocalMapper->addNewKF(pKF, mLocalMPs, mvKPMatchIdx, mvbGoodPrl);
+        mpReferenceKF = pKF;
+
+        cout << "[Track][Info ] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
+             << " 成为了新的KF#" << pKF->mIdKF << endl;
+
+        KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
+        mLastFrame = mCurrentFrame;
+        mLocalMPs = mpReferenceKF->mViewMPs;
+        mvKPMatchIdx.clear();
+        mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
+        mnGoodPrl = mnKPMatches = mnKPsInline = mnKPMatchesGood = mnMPsTracked = 0;
+        for (int i = 0; i < 3; i++)
+            preSE2.meas[i] = 0;
+        for (int i = 0; i < 9; i++)
+            preSE2.cov[i] = 0;
+    }
 }
 
 void Track::CopyForPub()
@@ -218,6 +232,7 @@ void Track::CopyForPub()
     mpMapPublisher->mvMatchIdx = mvKPMatchIdx;
     mpMapPublisher->mvMatchIdxGood = mvKPMatchIdxGood;
     mpMapPublisher->mAffineMatrix = mAffineMatrix.clone();
+    assert(!mAffineMatrix.empty());
 
     char strMatches[64];
     if (1) {  // 正常情况和刚丢失情况
@@ -355,21 +370,21 @@ int Track::RemoveOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
     return nInlier;
 }
 
-bool Track::NeedNewKF(int nTrackedOldMP, int nMatched)
+bool Track::NeedNewKF()
 {
     size_t nOldKP = mpReferenceKF->countObservations();
     bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
-    bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;
+    bool c1 = mnMPsTracked <= (float)nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;
     bool c3 = mCurrentFrame.id - mpReferenceKF->id > nMaxFrames;
-    bool c4 = nMatched < 0.1f * Config::MaxFtrNumber || nMatched < 20;
+    bool c4 = mnKPMatches < 0.1f * Config::MaxFtrNumber || mnKPMatches < 20;
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
     bool bNeedKFByOdo = true;
     bool c5 = false, c6 = false;
     if (mbUseOdometry) {
         Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        c5 = abs(dOdo.theta) >= 0.8727f;  // 0.8727(50deg). orig: 0.0349(2deg)
+        c5 = abs(dOdo.theta) >= 0.8727;  // 0.8727(50deg). orig: 0.0349(2deg)
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
         //c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
@@ -380,15 +395,17 @@ bool Track::NeedNewKF(int nTrackedOldMP, int nMatched)
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;
 
     if (mpLocalMapper->acceptNewKF()) {
-        cout << "[Track][Timer] #" << mCurrentFrame.id << " 当前帧即将成为新的KF, 其KF条件满足情况: "
-             << "(跟踪+视差(" << c1 << "+" << mnGoodPrl << ")/上限(" << c3 << ")/匹配(" << c4
-             << "))&&(旋转(" << c5 << ")/平移(" << c6 << "))" << endl;
+        cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
+             << " 当前帧即将成为新的KF, 其KF条件满足情况: "
+             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少(" << c4
+             << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-        cout << "[Track][Timer] #" << mCurrentFrame.id << " 强制中断LM的BA过程, 当前帧KF条件满足情况: "
-             << "(跟踪+视差(" << c1 << "+" << mnGoodPrl << ")/上限(" << c3 << ")/匹配(" << c4
-             << "))&&(旋转(" << c5 << ")/平移(" << c6 << "))" << endl;
-//        mpLocalMapper->setAbortBA();
+        cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
+             << " 强制中断LM的BA过程, 当前帧KF条件满足情况: "
+             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少(" << c4
+             << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
+        //mpLocalMapper->setAbortBA();
     }
 
     return false;
