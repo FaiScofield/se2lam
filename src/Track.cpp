@@ -128,18 +128,20 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
 void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
 {
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
+    UpdateFramePose();
 
     int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
-
-    nMatched = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
-
-    UpdateFramePose();
+    int nInliers = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
     // Check parallax and do triangulation
     int nTrackedOld = DoTriangulate();
 
+    cout << "[Track][Info ] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
+         << ", 追踪匹配情况: 关联/内点数/总匹配数/潜在好视差数 = " << nTrackedOld << "/" << nInliers
+         << "/" << nMatched << "/" << mnGoodPrl << endl;
+
     // Need new KeyFrame decision
-    if (NeedNewKF(nTrackedOld, nMatched)) {
+    if (NeedNewKF(nTrackedOld, nInliers)) {
         assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
 
         // Insert KeyFrame
