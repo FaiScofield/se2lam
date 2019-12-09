@@ -144,7 +144,6 @@ size_t Map::countLocalRefKFs()
 }
 
 
-
 void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
 {
 
@@ -403,8 +402,8 @@ Point2f Map::compareViewMPs(const PtrKeyFrame& pKF1, const PtrKeyFrame& pKF2, se
         }
     }
 
-    return Point2f((float)nSameMP / (float)(pKF1->getSizeObsMP()),
-                   (float)nSameMP / (float)(pKF2->getSizeObsMP()));
+    return Point2f((float)nSameMP / (float)(pKF1->countObservations()),
+                   (float)nSameMP / (float)(pKF2->countObservations()));
 }
 
 // Find MPs in pKF which are observed by vpKFs for k times
@@ -824,7 +823,7 @@ void Map::updateCovisibility(PtrKeyFrame& pNewKF)
         set<PtrMapPoint> spMPs;
         PtrKeyFrame pKFi = *i;
         compareViewMPs(pNewKF, pKFi, spMPs);
-        if (spMPs.size() > 0.3f * pNewKF->getSizeObsMP()) {
+        if (spMPs.size() > 0.3f * pNewKF->countObservations()) {
             pNewKF->addCovisibleKF(pKFi);
             pKFi->addCovisibleKF(pNewKF);
         }
@@ -928,7 +927,7 @@ bool Map::UpdateFeatGraph(const PtrKeyFrame& _pKF)
 
 void Map::loadLocalGraph(SlamOptimizer& optimizer)
 {
-
+    WorkTimer timer;
     locker lock(mMutexLocalGraph);
 
     int camParaId = 0;
@@ -1069,8 +1068,10 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 
     size_t nVertices = optimizer.vertices().size();
     size_t nEdges = optimizer.edges().size();
-    printf("[ Map ][Info ] #%ld(KF#%ld) 加载LocalGraph: 边数为%ld, 节点数为%ld: LocalKFs/nRefKFs/nMPs = %d/%d/%d\n",
-           mCurrentKF->id, mCurrentKF->mIdKF, nEdges, nVertices, nLocalKFs, nRefKFs, N);
+    cout << "[ Map ][Info ] #" << mCurrentKF->id << "(KF#" << mCurrentKF->mIdKF
+         << ") 加载LocalGraph: 边数为" << nEdges << ", 节点数为" << nVertices
+         << ": LocalKFs/nRefKFs/nMPs = " << nLocalKFs << "/" << nRefKFs << "/" << N << ", 耗时"
+         << setiosflags(ios::fixed) << setprecision(2) << timer.count() << "ms" << endl;
 }
 
 }  // namespace se2lam

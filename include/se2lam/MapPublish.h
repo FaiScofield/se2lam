@@ -40,7 +40,7 @@ public:
     void publishGroundTruth();
 
     cv::Mat drawCurrentFrameMatches();
-    cv::Mat drawLoopCloseMatches(); // TODO
+    cv::Mat drawLoopCloseMatches();
 
     void requestFinish();
     bool isFinished();

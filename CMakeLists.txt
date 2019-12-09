@@ -18,7 +18,7 @@ if(CMAKE_COMPILER_IS_GNUCXX )
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -ggdb") # -g
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")
 endif()
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-deprecated-declarations -Wno-unused-variable")
 
 ################################################################################
 # 设置相关依赖包
@@ -138,7 +138,7 @@ add_library(se2lam
 )
 
 target_link_libraries(se2lam
-    ${LINK_LIBS}    
+    ${LINK_LIBS}
     ${CSPARSE_LIBRARY}
     ${CHOLMOD_LIBRARIES}
     ${G2O_LIBS}

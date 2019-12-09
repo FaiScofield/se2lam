@@ -90,7 +90,7 @@ void Localizer::run() {
 
                 MatchLocalMap();
 
-                int numMPCurr = mpKFCurr->getSizeObsMP();
+                int numMPCurr = mpKFCurr->countObservations();
                 if (numMPCurr > 30) {
                     DoLocalBA();
                 }
@@ -678,7 +678,7 @@ void Localizer::UpdateCovisKFCurr() {
 
         FindCommonMPs(mpKFCurr, pKF, spMPs);
 
-        if(spMPs.size() > 0.1 * mpKFCurr->getSizeObsMP()){
+        if(spMPs.size() > 0.1 * mpKFCurr->countObservations()){
             mpKFCurr->addCovisibleKF(pKF);
         }
     }

@@ -30,7 +30,7 @@ Track::Track()
 {
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = min(8, cvCeil(0.25 * Config::FPS));  // 上溢
-    nMaxFrames = cvFloor(1 * Config::FPS);  // 下溢
+    nMaxFrames = cvFloor(1 * Config::FPS);            // 下溢
     mnGoodPrl = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
@@ -84,13 +84,14 @@ void Track::Run()
         }
         t2 = timer.count();
         trackTimeTatal += t1 + t2;
-        cout << setiosflags(ios::fixed) << setprecision(2); // 设置浮点数保留2位小数
+        cout << setiosflags(ios::fixed) << setprecision(2);  // 设置浮点数保留2位小数
         cout << "[Track][Timer] #" << mCurrentFrame.id << " 前端总耗时为: " << t1 + t2
              << "ms, 平均耗时: " << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
 
         mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
         lastOdom = odo;
         CopyForPub();
+
         rate.sleep();
     }
 
@@ -154,7 +155,7 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
 
         mpReferenceKF = pKF;
 
-        cout << "[Track][Info ] #" << mCurrentFrame.id << " 成为了新的KF." << endl;
+        cout << "[Track][Info ] #" << mCurrentFrame.id << " 成为了新的KF#" << pKF->mIdKF << endl;
     }
 }
 
@@ -189,8 +190,8 @@ void Track::UpdateFramePose()
 
 void Track::ResetLocalTrack()
 {
-//    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
-//    mCurrentFrame.Trb = Se2(0, 0, 0);
+    //    mCurrentFrame.Tcr = cv::Mat::eye(4, 4, CV_32FC1);
+    //    mCurrentFrame.Trb = Se2(0, 0, 0);
     KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
     mLastFrame = mCurrentFrame;
     mLocalMPs = mpReferenceKF->mViewMPs;
@@ -258,6 +259,15 @@ void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_
     for (int i = 0; i < 6; i++)
         Info_se3_bTb(i, i) = data[i];
     Info_se3 = Info_se3_bTb;
+
+    // g2o::Matrix6d J_bTb_cTc = toSE3Quat(bTc).adj();
+    // J_bTb_cTc.block(0,3,3,3) = J_bTb_cTc.block(3,0,3,3);
+    // J_bTb_cTc.block(3,0,3,3) = g2o::Matrix3D::Zero();
+    // Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
+    // for(int i = 0; i < 6; i++)
+    //     for(int j = 0; j < i; j++)
+    //         Info_se3(i,j) = Info_se3(j,i);
+    // assert(verifyInfo(Info_se3));
 }
 
 void Track::calcSE3toXYZInfo(Point3f xyz1, const Mat& Tcw1, const Mat& Tcw2, Eigen::Matrix3d& info1,
@@ -347,7 +357,7 @@ int Track::RemoveOutliers(const vector<KeyPoint>& kp1, const vector<KeyPoint>& k
 
 bool Track::NeedNewKF(int nTrackedOldMP, int nMatched)
 {
-    int nOldKP = mpReferenceKF->getSizeObsMP();
+    size_t nOldKP = mpReferenceKF->countObservations();
     bool c0 = mCurrentFrame.id - mpReferenceKF->id > nMinFrames;
     bool c1 = (float)nTrackedOldMP <= (float)nOldKP * 0.5f;
     bool c2 = mnGoodPrl > 40;
@@ -356,22 +366,29 @@ bool Track::NeedNewKF(int nTrackedOldMP, int nMatched)
     bool bNeedNewKF = c0 && ((c1 && c2) || c3 || c4);
 
     bool bNeedKFByOdo = true;
+    bool c5 = false, c6 = false;
     if (mbUseOdometry) {
         Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        bool c5 = dOdo.theta >= 0.0349f;  // Larger than 2 degree
-        // cv::Mat cTc = Config::cTb * toT4x4(dOdo.x, dOdo.y, dOdo.theta) * Config::bTc;
+        c5 = abs(dOdo.theta) >= 0.8727f;  // 0.8727(50deg). orig: 0.0349(2deg)
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
-        bool c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // 3 degree = 0.0523 rad
+        //c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
+        c6 = cv::norm(xy) >= (0.05 * Config::UpperDepth);  // 10m高走半米
 
         bNeedKFByOdo = c5 || c6;
     }
     bNeedNewKF = bNeedNewKF && bNeedKFByOdo;
 
     if (mpLocalMapper->acceptNewKF()) {
+        cout << "[Track][Timer] #" << mCurrentFrame.id << " 当前帧即将成为新的KF, 其KF条件满足情况: "
+             << "(跟踪+视差(" << c1 << "+" << mnGoodPrl << ")/上限(" << c3 << ")/匹配(" << c4
+             << "))&&(旋转(" << c5 << ")/平移(" << c6 << "))" << endl;
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
-        mpLocalMapper->setAbortBA();
+        cout << "[Track][Timer] #" << mCurrentFrame.id << " 强制中断LM的BA过程, 当前帧KF条件满足情况: "
+             << "(跟踪+视差(" << c1 << "+" << mnGoodPrl << ")/上限(" << c3 << ")/匹配(" << c4
+             << "))&&(旋转(" << c5 << ")/平移(" << c6 << "))" << endl;
+//        mpLocalMapper->setAbortBA();
     }
 
     return false;
@@ -450,6 +467,8 @@ void Track::CheckReady()
     assert(mpGlobalMapper != nullptr);
     assert(mpSensors != nullptr);
     assert(mpMapPublisher != nullptr);
+    assert(mpORBextractor != nullptr);
+    assert(mpORBmatcher != nullptr);
 }
 
 }  // namespace se2lam

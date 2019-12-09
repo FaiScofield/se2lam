@@ -233,7 +233,7 @@ void LocalMapper::removeOutlierChi2()
 
 void LocalMapper::localBA()
 {
-
+    WorkTimer timer;
     if (mbGlobalBABegin)
         return;
 
@@ -250,7 +250,6 @@ void LocalMapper::localBA()
 #endif
     mpMap->loadLocalGraph(optimizer);
 
-    WorkTimer timer;
 #ifdef TIME_TO_LOG_LOCAL_BA
     int numKf = mpMap->countLocalKFs();
     int numMp = mpMap->countLocalMPs();
@@ -283,7 +282,8 @@ void LocalMapper::localBA()
 
     cout << "[Local][Info ] #" << mpNewKF->id << "(KF#" << mpNewKF->mIdKF
          << ") L6.局部BA涉及的KF/RefKF/MP数量为: " << mpMap->countLocalKFs() << "/"
-         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << endl;
+         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << ", 耗时: "
+         << timer.count() << ", 是否被强制中断: " << optimizer.terminate() << endl;
 
 
 #ifdef REJECT_IF_LARGE_LAMBDA

@@ -11,6 +11,7 @@
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <sensor_msgs/Image.h>
+#include <opencv2/highgui/highgui.hpp>
 
 namespace se2lam
 {
@@ -806,7 +807,7 @@ Mat MapPublish::drawLoopCloseMatches()
     hconcat(imgCurr, imgLoop, imgOut);
 
     //! Draw Features
-    for (int i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+    for (size_t i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
         const Point2f& ptCurr = mpKFCurr->mvKeyPoints[i].pt;
         const bool ifMPCurr = bool(mpKFCurr->hasObservation(i));
         Scalar colorCurr;
@@ -818,7 +819,7 @@ Mat MapPublish::drawLoopCloseMatches()
         circle(imgOut, ptCurr, 5, colorCurr, 1);
     }
 
-    for (int i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+    for (size_t i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
         const Point2f& ptLoop = mpKFLoop->mvKeyPoints[i].pt;
         const Point2f ptLoopMatch = ptLoop + Point2f(imgCurr.cols, 0);
 
