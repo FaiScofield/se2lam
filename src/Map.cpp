@@ -314,7 +314,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     mvLocalRefKFs.clear();
 
     set<PtrKeyFrame> setLocalKFs;
-    set<PtrKeyFrame> setRefKFs;
+    set<PtrKeyFrame> setLocalRefKFs;
     set<PtrMapPoint> setLocalMPs;
 
     //! 1.获得LocalKFs
@@ -326,7 +326,8 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
 
         // kdtree查找, 利用几何关系找到当前KF附件的KF加入到localKFs中,
         // 否则经过同一个地方不会考虑到之前添加的KF
-        addLocalGraphThroughKdtree(setLocalKFs, maxN, searchRadius);  // lock global
+        int toAdd = maxN - setLocalKFs.size();
+        addLocalGraphThroughKdtree(setLocalKFs, toAdd, searchRadius);  // lock global
 
         // 再根据共视关系, 获得当前KF附近的所有KF, 组成localKFs
 //        int searchLevel = maxLevel;  // 2
@@ -370,17 +371,17 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; ++j) {
             if (setLocalKFs.find((*j)) != setLocalKFs.end())
                 continue;
-            setRefKFs.insert((*j));
+            setLocalRefKFs.insert((*j));
         }
     }
     double t3 = timer.count();
     printf("[Local][ Map ] #%ld(KF#%ld) L2.更新局部地图, 总共得到了%ld个LocalKFs, "
            "%ld个LocalMPs和%ld个RefKFs, 共耗时%.2fms\n",
            mCurrentKF->id, mCurrentKF->mIdKF, setLocalKFs.size(), setLocalMPs.size(),
-           setRefKFs.size(), t1 + t2 + t3);
+           setLocalRefKFs.size(), t1 + t2 + t3);
 
     mvLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
-    mvLocalRefKFs = vector<PtrKeyFrame>(setRefKFs.begin(), setRefKFs.end());
+    mvLocalRefKFs = vector<PtrKeyFrame>(setLocalRefKFs.begin(), setLocalRefKFs.end());
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
     std::sort(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), KeyFrame::IdLessThan());
     std::sort(mvLocalRefKFs.begin(), mvLocalRefKFs.end(), KeyFrame::IdLessThan());

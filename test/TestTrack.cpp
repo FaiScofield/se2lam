@@ -32,7 +32,7 @@ TestTrack::TestTrack()
 
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
-    nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
+    nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 40);
     mMaxAngle = static_cast<float>(g2o::deg2rad(50.));
     mMaxDistance = 0.3f * Config::UpperDepth;
 
@@ -226,8 +226,9 @@ void TestTrack::updateFramePoseFromRef()
     const Mat Tc2c1 = Config::Tcb * Tb1b2.inv().toCvSE3() * Config::Tbc;
     mCurrentFrame.setTrb(Tb1b2);
     mCurrentFrame.setTcr(Tc2c1);
-    mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose()); // 测量值, 优化后是预测值
-    mCurrentFrame.setTwb(mpReferenceKF->getTwb() + Tb1b2);
+    mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose()); // 初始位姿用odo进行更新, 这里是位姿的预测值
+    mCurrentFrame.setTwb(mpReferenceKF->getTwb() + Tb1b2);   // Twb是位姿的测量值
+    //mCurrentFrame.setPose(Config::Tcb * (mpReferenceKF->getTwb() + Tb1b2).inv().toCvSE3());
 
     // Eigen::Map 是一个引用, 这里更新了到当前帧的积分
     Eigen::Map<Vector3d> meas(preSE2.meas);
@@ -975,11 +976,11 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
 //    printf("[TIME] #%ld(KF#%ld) L7.第二次更新局部地图耗时: %.2fms\n", pKF->id, pKF->mIdKF, t7);
 
     //! 8.局部图优化
-    timer.start();
-    localBA();
+//    timer.start();
+//    localBA();
 //    doLocalBA(*mpNewKF);
-    double t8 = timer.count();
-    printf("[TIME] #%ld(KF#%ld) L8.局部BA耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
+//    double t8 = timer.count();
+//    printf("[TIME] #%ld(KF#%ld) L8.局部BA耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
 
 
 }

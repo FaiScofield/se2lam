@@ -362,10 +362,18 @@ int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& k
     case 0:
         A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0);
         break;
-    case 1:
+    case 1: {
         A12 = estimateAffinePartial2D(ptRef, ptCur, mask, RANSAC, 3.0);
+        if (abs(A12.at<double>(0, 1)) <= 1.0) {
+            double c_theta = cos(asin(A12.at<double>(0, 1)));
+            A12.at<double>(0, 0) = A12.at<double>(1, 1) = c_theta;
+        } else {
+            A12.at<double>(0, 0) = A12.at<double>(1, 1) = 0.;
+            A12.at<double>(0, 1) = A12.at<double>(1, 0) = 1.;
+        }
         break;
-    case 2:
+    }
+    case 2: {
         //! NOTE 内点数<50%后无法计算
         A12 = estimateRigidTransform(ptRef, ptCur, false);
         mask.resize(ptRef.size(), 1);
@@ -374,8 +382,9 @@ int removeOutliersWithA(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& k
             A12 = Mat::eye(2, 3, CV_64FC1);
         }
         break;
+    }
     default:
-        A12 = estimateAffine2D(ptRef, ptCur, mask, RANSAC, 3.0);
+        A12 = estimateAffinePartial2D(ptRef, ptCur, mask, RANSAC, 3.0);
         break;
     }
 

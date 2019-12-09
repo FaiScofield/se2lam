@@ -116,24 +116,31 @@ int main(int argc, char** argv)
         cout << "AP = " << endl << A12Partial << endl;
         cout << "RT = " << endl << RT << endl;
 
+        // 对A SVD分解
+        Mat U, W, V;
+        SVD::compute(A12, W, U, V);
+        cout << " W of A (SVD) " << endl << W << endl;
+        cout << " U of A (SVD) " << endl << U << endl;
+        cout << " V of A (SVD) " << endl << V << endl;
+
         //! 匹配情况可视化
         outImgWarpA = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxA, A12, projError1);
         outImgWarpAP = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxAP, A12Partial, projError2);
         outImgWarpRT = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxRT, RT, projError3);
 
         char strMatches1[64], strMatches2[64], strMatches3[64];
-        std::snprintf(strMatches1, 64, "A   F: %ld-%ld, M: %d/%d, E: %.2f", frameRef.id, frameCur.id, nInliers1, nMatched1, projError1);
-        std::snprintf(strMatches2, 64, "AP  F: %ld-%ld, M: %d/%d, E: %.2f", frameRef.id, frameCur.id, nInliers2, nMatched2, projError2);
-        std::snprintf(strMatches3, 64, "RT  F: %ld-%ld, M: %d/%d, E: %.2f", frameRef.id, frameCur.id, nInliers3, nMatched3, projError3);
+        std::snprintf(strMatches1, 64, "A   F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers1, nMatched1, projError1);
+        std::snprintf(strMatches2, 64, "AP  F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers2, nMatched2, projError2);
+        std::snprintf(strMatches3, 64, "RT  F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers3, nMatched3, projError3);
         putText(outImgWarpA, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
         putText(outImgWarpAP, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
         putText(outImgWarpRT, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        printf("平均重投影误差A/AP/RT = %.2f/%.2f/%.2f\n", projError1, projError2, projError3);
+        printf("#%ld 平均重投影误差A/AP/RT = %.2f/%.2f/%.2f\n", frameCur.id, projError1, projError2, projError3);
 
-        Mat imgTmp1;
+        Mat imgTmp1, imgTmp2;
         vconcat(outImgWarpA, outImgWarpAP, imgTmp1);
-        vconcat(imgTmp1, outImgWarpRT, outImgConcat);
-
+        vconcat(imgTmp1, outImgWarpRT, imgTmp2);
+        resize(imgTmp2, outImgConcat, Size2i(imgTmp2.cols * 1.5, imgTmp2.rows * 1.5));
         imshow("A & AP & RT Matches", outImgConcat);
 
 
@@ -184,10 +191,11 @@ int main(int argc, char** argv)
 //        hconcat(imgC1, imgC2, imgC3);
 //        imshow("TEST Affine", imgC3);
 
+        string fileWarp = "/home/vance/output/rk_se2lam/warp/" + to_string(frameCur.id) + ".bmp";
+        imwrite(fileWarp, outImgConcat);
 
         waitKey(0);
-        //        string fileWarp = "/home/vance/output/rk_se2lam/warp/warp-" + text + ".bmp";
-        //        imwrite(fileWarp, outImgWarp);
+
 
         //! 内点数太少要生成新的参考帧
         if (nInliers1 <= 12 || nInliers2 <= 12) {
