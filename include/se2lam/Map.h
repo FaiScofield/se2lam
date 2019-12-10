@@ -42,7 +42,7 @@ public:
     size_t countMPs();
     size_t countLocalKFs();
     size_t countLocalMPs();
-    size_t countRefKFs();
+    size_t countLocalRefKFs();
     std::vector<PtrKeyFrame> getAllKFs();
     std::vector<PtrMapPoint> getAllMPs();
     std::vector<PtrKeyFrame> getLocalKFs();
@@ -68,8 +68,8 @@ public:
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateLocalGraph_new(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateCovisibility(const PtrKeyFrame& pNewKF);
-    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame>& setLocalKFs, int maxN = 10,
-                                    float searchRadius = 5.f);
+    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs,
+                                    int maxN = 10, float searchRadius = 5.f);
     int pruneRedundantKF();
     int removeLocalOutlierMP(SlamOptimizer& optimizer);
 

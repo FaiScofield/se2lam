@@ -369,7 +369,7 @@ void MapStorage::loadKeyFrames()
 
         nodeKF["Twb"] >> Twb;
         Se2 twb;
-        pKF->setTwb(twb.fromCvSE3(Twb));
+        pKF->setPose(twb.fromCvSE3(Twb));
 
         Point3f odo;
         nodeKF["Odometry"] >> odo;

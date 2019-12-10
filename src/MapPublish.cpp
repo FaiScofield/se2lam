@@ -23,7 +23,7 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.1f), mCameraSize(0.3f),
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.075f), mCameraSize(0.2f),
       mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
@@ -217,13 +217,12 @@ void MapPublish::run()
             break;
 
         if (mpMap->empty()) {
-            //rate.sleep();
+            rate.sleep();
             continue;
         }
 
         if (!mbUpdated) {  // Tracker/Localizer 更新此标志
-            //rate.sleep();
-            //ros::spinOnce();
+            rate.sleep();
             continue;
         }
         mbUpdated = false;
@@ -257,7 +256,6 @@ void MapPublish::run()
     setFinish();
 }
 
-//! NOTE 需要转换到Twb坐标系的, 应该根据Tcw来显示.
 void MapPublish::publishKeyFrames()
 {
     mKFsNeg.points.clear();
@@ -279,7 +277,7 @@ void MapPublish::publishKeyFrames()
     if (vKFsAll.empty())
         return;
 
-    vector<PtrKeyFrame> vKFsAct, vKFsNeg;
+    vector<PtrKeyFrame> vKFsAct;
     if (mbIsLocalize)
         vKFsAct = mpLocalizer->getLocalKFs();
     else
@@ -331,7 +329,6 @@ void MapPublish::publishKeyFrames()
         // 判断第i帧KF是Active/Active
         int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
         if (count == 0) {  // Negtive
-            vKFsNeg.push_back(pKFi);
             mKFsNeg.points.push_back(msgs_o);
             mKFsNeg.points.push_back(msgs_p1);
             mKFsNeg.points.push_back(msgs_o);
@@ -433,15 +430,8 @@ void MapPublish::publishKeyFrames()
                 firstLocatied = false;
                 msgsLast = msgsCurr;
             }
-
             mVIGraph.points.push_back(msgsLast);
             mVIGraph.points.push_back(msgsCurr);
-            //            printf("[MapPublis] #%ld msgsLast: [%.4f, %.4f], msgsCurr: [%.4f, %.4f],
-            //            Twb: [%.4f, %.4f]\n",
-            //                   id, msgsLast.x*mScaleRatio/1000., msgsLast.y*mScaleRatio/1000.,
-            //                   msgsCurr.x*mScaleRatio/1000., msgsCurr.y*mScaleRatio/1000.,
-            //                   Twb.x/1000., Twb.y/1000.);
-
             msgsLast = msgsCurr;
         }
     }
@@ -457,11 +447,6 @@ void MapPublish::publishKeyFrames()
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
-
-    cout << "[MapPublisher] KF#" << mpMap->getCurrentKF()->mIdKF
-         << " 当前Map的组成: Active/Negtive/All = " << vKFsAct.size() << "/"
-         << vKFsNeg.size() << "/" << vKFsAll.size() << ", mVIGraph size = "
-         << mVIGraph.points.size() / 2 << endl;
 }
 
 void MapPublish::publishMapPoints()
@@ -719,7 +704,7 @@ Mat MapPublish::drawCurrentFrameMatches()
 
     drawKeypoints(imgCur, mvCurrentKPs, imgCur, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
-    if (!mvReferenceKPs.empty()) {
+    if (!mvReferenceKPs.empty() && !imgRef.empty()) {
         drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
         // 取逆得到A21
@@ -749,9 +734,10 @@ Mat MapPublish::drawCurrentFrameMatches()
             }
         }
     } else {  // 说明定位丢失且找不到回环帧
+        imgRef = Mat::zeros(imgCur.size(), CV_8UC3);
         hconcat(imgCur, imgRef, imgOut);
     }
-    putText(imgOut, mImageText, Point(100, 20), 1, 1, Scalar(0, 0, 255), 2);
+    putText(imgOut, mImageText, Point(50, 20), 1, 1, Scalar(0, 0, 255), 2);
     Mat imgScalar;
     resize(imgOut, imgScalar, Size2i(imgOut.cols * 2, imgOut.rows * 2));
 

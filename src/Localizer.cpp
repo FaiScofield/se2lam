@@ -202,7 +202,7 @@ void Localizer::readFrameInfo(const Mat& img, float imgTime, const Se2& odo)
 
     mFrameCurr = Frame(img, odo, mpORBextractor);
     Se2 Twb = mFrameRef.getTwb() + (odo - mFrameRef.odom);
-    mFrameCurr.setTwb(Twb);
+    mFrameCurr.setPose(Twb);
 
     mpKFCurr = make_shared<KeyFrame>(mFrameCurr);
     mpKFCurr->computeBoW(mpORBVoc);

@@ -182,7 +182,7 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
     sortCovisibleKFs();
 }
 
-//! TODO  没啥必要
+//! 没啥必要
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
     vector<PtrMapPoint> vpMPs;

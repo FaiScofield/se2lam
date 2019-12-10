@@ -534,13 +534,13 @@ void LocalMapper::pruneRedundantKFinMap()
 
     int nLocalKFs = mpMap->countLocalKFs();
     int nLocalMPs = mpMap->countLocalMPs();
-    int nLocalRefs = mpMap->countRefKFs();
+    int nLocalRefs = mpMap->countLocalRefKFs();
 
     int nPruned = mpMap->pruneRedundantKF();
 
     printf("[Local][Info ] #%ld(KF#%ld) 修剪冗余KF前后, 局部KF/MP/RefKF的数量为: %d/%d/%d, %ld/%ld/%ld\n",
            mpNewKF->id, mpNewKF->mIdKF, nLocalKFs, nLocalMPs, nLocalRefs,
-           mpMap->countLocalKFs(), mpMap->countLocalMPs(), mpMap->countRefKFs());
+           mpMap->countLocalKFs(), mpMap->countLocalMPs(), mpMap->countLocalRefKFs());
     printf("[Local][Info ] #%ld(KF#%ld) 修剪冗余KF, 共修剪了%d帧KF, 耗时:%.2fms.\n",
            mpNewKF->id, mpNewKF->mIdKF, nPruned, timer.count());
 }

@@ -218,10 +218,8 @@ Frame& Frame::operator=(const Frame& f)
     mvpMapPoints = f.mvpMapPoints;
     Trb = f.Trb;
     Twb = f.Twb;
-    if (!f.Tcr.empty())
-        setTcr(f.Tcr);
-    if (!f.Tcw.empty())
-        setPose(f.Tcw);
+    Tcr = f.Tcr.clone();
+    Tcw = f.Tcw.clone();
 
     return *this;
 }
@@ -230,12 +228,14 @@ void Frame::setPose(const Mat& _Tcw)
 {
     locker lock(mMutexPose);
     _Tcw.copyTo(Tcw);
+    Twb.fromCvSE3(cvu::inv(Tcw) * Config::Tcb);
 }
 
-void Frame::setTwb(const Se2& _Twb)
+void Frame::setPose(const Se2& _Twb)
 {
     locker lock(mMutexPose);
     Twb = _Twb;
+    Tcw = Config::Tcb * Twb.inv().toCvSE3();
 }
 
 void Frame::setTcr(const Mat& _Tcr)

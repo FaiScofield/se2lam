@@ -18,7 +18,7 @@ int main(int argc, char** argv)
         ros::shutdown();
         exit(-1);
     }
-    int num = INT_MAX;
+    int num = Config::ImgCount;
     if (argc == 3) {
         num = atoi(argv[2]);
         cout << " - set number_frames_to_process = " << num << endl << endl;

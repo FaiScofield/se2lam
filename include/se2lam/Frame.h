@@ -53,7 +53,7 @@ public:
 
     //! Pose Operations
     void setPose(const cv::Mat& _Tcw);
-    void setTwb(const Se2& _Twb);
+    void setPose(const Se2& _Twb);
     void setTcr(const cv::Mat& _Tcr);
     void setTrb(const Se2& _Trb);
     Se2 getTwb();

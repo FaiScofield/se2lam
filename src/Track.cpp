@@ -184,7 +184,7 @@ void Track::processFirstFrame()
         cout << "========================================================" << endl;
 
         mCurrentFrame.setPose(Config::Tcb);
-        mCurrentFrame.setTwb(Se2(0, 0, 0));
+        mCurrentFrame.setPose(Se2(0, 0, 0));
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map, 没有给LocalMapper
 
@@ -306,7 +306,7 @@ void Track::updateFramePoseFromRef()
     // Tc2w, World->当前帧Camera, Tc2w = Tc2c1 * Tc1w
     mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose());
     // Twb2, Body->当前帧World，se2形式，故相加， Twb2 = Twb1 * Tb1b2
-    mCurrentFrame.setTwb(mpReferenceKF->getTwb() + Tb1b2);
+    mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
 
     // preintegration 预积分
     Eigen::Map<Vector3d> meas(preSE2.meas);
