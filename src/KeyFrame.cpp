@@ -46,7 +46,7 @@ KeyFrame::KeyFrame(const Frame& frame) : Frame(frame), mIdKF(mNextIdKF++), mpMap
 
 KeyFrame::~KeyFrame()
 {
-    fprintf(stderr, "[KeyFrame] KF#%ld(#%ld) 已被析构!\n", mIdKF, id);
+    //fprintf(stderr, "[KeyFrame] KF#%ld(#%ld) 已被析构!\n", mIdKF, id);
 }
 
 // Please handle odometry based constraints after calling this function

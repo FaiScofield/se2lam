@@ -5,6 +5,163 @@ string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 string g_matchResult = "/home/vance/output/rk_se2lam/test_matchResult.txt";
 
+Frame frameCur, frameRef;
+
+void calculateAffineMatrixSVD(const vector<Point2f>& ptRef, const vector<Point2f>& ptCur,
+                              const vector<uchar>& inlineMask, Mat& Affine)
+{
+    assert(ptRef.size() == ptCur.size());
+    assert(ptRef.size() == inlineMask.size());
+
+    Affine = Mat::eye(2, 3, CV_64FC1);
+
+    // 1.求质心
+    Point2f p1_c(0.f, 0.f), p2_c(0.f, 0.f);
+    size_t N = 0;
+    for (size_t i = 0, iend = inlineMask.size(); i < iend; ++i) {
+        if (inlineMask[i] == 0)
+            continue;
+        p1_c += ptRef[i];
+        p2_c += ptCur[i];
+        N++;
+    }
+    if (N < 5) {
+        cerr << "内点数太少, 无法通过svd计算A" << endl;
+        return;
+    }
+
+    p1_c.x /= N;
+    p1_c.y /= N;
+    p2_c.x /= N;
+    p2_c.y /= N;
+
+    // 2.构造超定矩阵A
+    Mat A = Mat::zeros(2, 2, CV_32FC1);
+    for (size_t i = 0; i < N; ++i) {
+        if (inlineMask[i] == 0)
+            continue;
+        Mat p1_i = Mat(ptRef[i] - p1_c);
+        Mat p2_i = Mat(ptCur[i] - p2_c);
+        A += p1_i * p2_i.t();
+    }
+
+    // 3.用SVD分解求得R,t
+    Mat U, W, Vt;
+    SVD::compute(A, W, U, Vt);
+    Mat R = U * Vt;
+    Mat t = Mat(p1_c) - R * Mat(p2_c);
+
+    // 求得的RT是A12, 即第2帧到第1帧的变换
+    R.copyTo(Affine.colRange(0, 2));
+    t.copyTo(Affine.col(2));
+    //invertAffineTransform(Affine, Affine);
+    //cerr << "根据" << N << "个内点计算出A12:" << endl << Affine << endl;
+}
+
+int removeOutliersWithRansac(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur,
+                             vector<int>& matches12, Mat& Asvd, int inlineTh = 3)
+{
+    assert(kpRef.size() == kpCur.size());
+    assert(kpRef.size() >= 10);
+    assert(!matches12.empty());
+
+    vector<Point2f> ptRef, ptCur;
+    vector<int> idxRef, matches12Good;
+    idxRef.reserve(kpRef.size());
+    ptRef.reserve(kpRef.size());
+    ptCur.reserve(kpCur.size());
+    for (int i = 0, iend = kpRef.size(); i < iend; ++i) {
+        if (matches12[i] < 0)
+            continue;
+        idxRef.push_back(i);
+        ptRef.push_back(kpRef[i].pt);
+        ptCur.push_back(kpCur[matches12[i]].pt);
+    }
+    matches12Good = matches12;
+
+    // Ransac
+    int inliers = 0, lastInliers = 0;
+    double error = 0, lastError = 99999;
+    Mat Affine;
+    Mat lastAffine = Mat::ones(2, 3, CV_64FC1);
+    size_t N = ptRef.size(), i = 0;
+    vector<uchar> inlineMask(ptRef.size(), 1);
+    for (; i < 10; ++i) {
+        inliers = 0;
+        error = 0;
+
+        calculateAffineMatrixSVD(ptRef, ptCur, inlineMask, Affine);  // Affine即A12
+
+        for (size_t j = 0; j < N; ++j) {
+            if (inlineMask[j] == 0)
+                continue;
+
+            const Mat pt2 = (Mat_<double>(3, 1) << ptCur[j].x, ptCur[j].y, 1);
+            const Mat pt2W = Affine * pt2;
+            const Point2f ptCurWarpj = Point2f(pt2W.at<double>(0), pt2W.at<double>(1));
+
+            double ej = norm(ptRef[j] - ptCurWarpj);
+
+            if (ej < 5.991) {
+                inlineMask[j] = 1;
+                error += ej;
+                inliers++;
+            } else {
+                inlineMask[j] = 0;
+                matches12Good[idxRef[j]] = -1;
+            }
+        }
+
+        cout << "#" << frameCur.id << " iter = " << i << ", 内外点数 = " << inliers << "/"
+             << ptRef.size() - inliers << ", 当前平均误差为: " << error/inliers << endl;
+
+        if (inliers == 0) {  // 如果没有内点
+            cout << "#" << frameCur.id << " iter = " << i << ", 内点数为0, 即将退出循环." << endl;
+            Affine = lastAffine;
+            error = lastError;
+            inliers = lastInliers;
+            break;
+        }
+
+        error /= inliers;
+
+        double e2 = 0;
+        Mat A21, show;
+        invertAffineTransform(Affine, A21);
+        show = drawKPMatchesAGood(&frameRef, &frameCur, matches12, matches12Good, A21, e2);
+        imshow("tmp svd", show);
+
+        if (error > lastError) {  // 如果误差变大就用上一次的结果
+            cout << "#" << frameCur.id << " iter = " << i << ", 误差变大结果变坏, 即将退出循环: last/curr error = "
+                 << lastError << "/" << error << endl;
+            Affine = lastAffine;
+            error = lastError;
+            inliers = lastInliers;
+            break;
+        }
+
+        if (error < inlineTh) { // 如果误差足够小则退出
+            cout << "#" << frameCur.id << " iter = " << i << ", 误差足够小, 即将退出循环: curr error = "
+                 << error << endl;
+            break;
+        }
+
+        if (lastError - error < 1e-4) {  // 如果误差下降不明显则退出
+            cout << "#" << frameCur.id << " iter = " << i << ", 误差降低不明显, 即将退出循环: last/curr error = "
+                 << lastError << "/" << error << endl;
+            break;
+        }
+
+        lastError = error;
+        lastAffine = Affine;
+        lastInliers = inliers;
+    }
+
+    invertAffineTransform(Affine, Asvd);
+
+    return inliers;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -48,14 +205,15 @@ int main(int argc, char** argv)
 
     //! main loop
     bool firstFrame = true;
-    double projError1 = 0, projError2 = 0, projError3 = 0;
-    Frame frameCur, frameRef;
+    double projError1 = 0, projError2 = 0, projError3 = 0, projError4 = 0;
+    //Frame frameCur, frameRef;
     PtrKeyFrame KFCur, KFRef;
-    Mat imgColor, imgGray, imgCur, imgRef, imgWithFeatureCur, imgWithFeatureRef;
-    Mat outImgWarpA, outImgWarpAP, outImgWarpRT, outImgConcat;
-    Mat A12 = Mat::eye(2, 3, CV_64FC1);
-    Mat A12Partial = Mat::eye(2, 3, CV_64FC1);
+    Mat imgUn, imgGray, imgCur, imgRef, imgWithFeatureCur, imgWithFeatureRef;
+    Mat outImgWarpA, outImgWarpAP, outImgWarpRT, outImgWarpAsvd, outImgConcat;
+    Mat A21 = Mat::eye(2, 3, CV_64FC1);
+    Mat A21Partial = Mat::eye(2, 3, CV_64FC1);
     Mat RT = Mat::eye(2, 3, CV_64FC1);
+    Mat Asvd = Mat::eye(2, 3, CV_64FC1);
     num = std::min(num, static_cast<int>(imgFiles.size()));
     int skipFrames = 50;
     for (int i = 0; i < num; ++i) {
@@ -69,24 +227,16 @@ int main(int argc, char** argv)
         istringstream iss(line);
         iss >> odo.x >> odo.y >> odo.theta;
 
-        imgColor = imread(imgFiles[i].fileName, CV_LOAD_IMAGE_COLOR);
-        if (imgColor.data == nullptr)
+        imgGray = imread(imgFiles[i].fileName, CV_LOAD_IMAGE_GRAYSCALE);
+        if (imgGray.data == nullptr)
             continue;
-        cv::undistort(imgColor, imgCur, Config::Kcam, Config::Dcam);
-        cvtColor(imgCur, imgGray, CV_BGR2GRAY);
-
-        //! 限制对比度自适应直方图均衡
-        Mat imgClahe;
+        cv::undistort(imgGray, imgUn, Config::Kcam, Config::Dcam);
         Ptr<CLAHE> clahe = createCLAHE(3.0, cv::Size(8, 8));
-        clahe->apply(imgGray, imgClahe);
+        clahe->apply(imgUn, imgCur);
 
         //! ORB提取特征点
-        frameCur = Frame(imgClahe, odo, kpExtractor, imgFiles[i].timeStamp);
+        frameCur = Frame(imgCur, odo, kpExtractor, imgFiles[i].timeStamp);
         KFCur = make_shared<KeyFrame>(frameCur);
-        KFCur->computeBoW(vocabulary);
-        imgCur.copyTo(imgWithFeatureCur);
-        for (int i = 0, iend = frameCur.N; i < iend; ++i)
-            circle(imgWithFeatureCur, frameCur.mvKeyPoints[i].pt, 2, Scalar(255, 0, 0));
 
         if (firstFrame) {
             imgCur.copyTo(imgRef);
@@ -98,50 +248,59 @@ int main(int argc, char** argv)
         }
 
         //! 特征点匹配
-        int nMatched1(0), nMatched2(0), nMatched3(0);
-        int nInliers1(0), nInliers2(0), nInliers3(0);
-        vector<int> matchIdxA, matchIdxAP, matchIdxRT;
-        nMatched1 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, A12, matchIdxA, 25);
-        nMatched2 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, A12Partial, matchIdxAP, 25);
+        int nMatched1(0), nMatched2(0), nMatched3(0), nMatched4(0);
+        int nInliers1(0), nInliers2(0), nInliers3(0), nInliers4(0);
+        vector<int> matchIdxA, matchIdxAP, matchIdxRT, matchIdxAsvd;
+        nMatched1 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, A21, matchIdxA, 25);
+        nMatched2 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, A21Partial, matchIdxAP, 25);
         nMatched3 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, RT, matchIdxRT, 25);
+        nMatched4 = kpMatcher->MatchByWindowWarp(frameRef, frameCur, Asvd, matchIdxAsvd, 25);
 
         if (nMatched1 >= 10)
-            nInliers1 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxA, A12, 0);
+            nInliers1 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxA, A21, 0);
         if (nMatched2 >= 10)
-            nInliers2 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints,  matchIdxAP, A12Partial, 1);
-        if (nMatched3>= 10)
+            nInliers2 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints,  matchIdxAP, A21Partial, 1);
+        if (nMatched3 >= 10)
             nInliers3 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxRT, RT, 2);
+        if (nMatched4 >= 10)
+            nInliers4 = removeOutliersWithRansac(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxAsvd, Asvd);
 
-        cout << "A = " << endl << A12 << endl;
-        cout << "AP = " << endl << A12Partial << endl;
-        cout << "RT = " << endl << RT << endl;
+//        cout << "A = " << endl << A21 << endl;
+//        cout << "AP = " << endl << A21Partial << endl;
+//        cout << "RT = " << endl << RT << endl;
+//        cout << "Asvd = " << endl << Asvd << endl;
 
         // 对A SVD分解
-        Mat U, W, V;
-        SVD::compute(A12, W, U, V);
-        cout << " W of A (SVD) " << endl << W << endl;
-        cout << " U of A (SVD) " << endl << U << endl;
-        cout << " V of A (SVD) " << endl << V << endl;
+//        Mat U, W, Vt;
+//        SVD::compute(A12, W, U, Vt);
+//        cout << " W of A (SVD) " << endl << W << endl;
+//        cout << " U of A (SVD) " << endl << U << endl;
+//        cout << " Vt of A (SVD) " << endl << Vt << endl;
+//        cout << " U * Vt = " << endl << U * Vt << endl;
 
         //! 匹配情况可视化
-        outImgWarpA = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxA, A12, projError1);
-        outImgWarpAP = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxAP, A12Partial, projError2);
-        outImgWarpRT = drawKPMatchesA(&frameRef, &frameCur, imgWithFeatureRef, imgWithFeatureCur, matchIdxRT, RT, projError3);
+        outImgWarpA = drawKPMatchesA(&frameRef, &frameCur, matchIdxA, A21, projError1);
+        outImgWarpAP = drawKPMatchesA(&frameRef, &frameCur, matchIdxAP, A21Partial, projError2);
+        outImgWarpRT = drawKPMatchesA(&frameRef, &frameCur, matchIdxRT, RT, projError3);
+        outImgWarpAsvd = drawKPMatchesA(&frameRef, &frameCur, matchIdxAsvd, Asvd, projError4);
 
-        char strMatches1[64], strMatches2[64], strMatches3[64];
+        char strMatches1[64], strMatches2[64], strMatches3[64], strMatches4[64];
         std::snprintf(strMatches1, 64, "A   F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers1, nMatched1, projError1);
         std::snprintf(strMatches2, 64, "AP  F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers2, nMatched2, projError2);
         std::snprintf(strMatches3, 64, "RT  F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers3, nMatched3, projError3);
+        std::snprintf(strMatches4, 64, "Asvd  F: %ld-%ld, M: %d/%d, E: %.2f", frameCur.id, frameRef.id, nInliers4, nMatched4, projError4);
         putText(outImgWarpA, strMatches1, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
         putText(outImgWarpAP, strMatches2, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
         putText(outImgWarpRT, strMatches3, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
-        printf("#%ld 平均重投影误差A/AP/RT = %.2f/%.2f/%.2f\n", frameCur.id, projError1, projError2, projError3);
+        putText(outImgWarpAsvd, strMatches4, Point(15, 15), 1, 1, Scalar(0, 0, 255), 2);
+        printf("#%ld 平均重投影误差A/AP/RT = %.2f/%.2f/%.2f/%.2f\n", frameCur.id, projError1, projError2, projError3, projError4);
 
         Mat imgTmp1, imgTmp2;
         vconcat(outImgWarpA, outImgWarpAP, imgTmp1);
-        vconcat(imgTmp1, outImgWarpRT, imgTmp2);
-        resize(imgTmp2, outImgConcat, Size2i(imgTmp2.cols * 1.5, imgTmp2.rows * 1.5));
-        imshow("A & AP & RT Matches", outImgConcat);
+        vconcat(outImgWarpRT, outImgWarpAsvd, imgTmp2);
+        hconcat(imgTmp1, imgTmp2, outImgConcat);
+        resize(outImgConcat, outImgConcat, Size2i(outImgConcat.cols * 1.5, outImgConcat.rows * 1.5));
+//        imshow("A & AP & RT Matches", outImgConcat);
 
 
 //        // test A
@@ -191,21 +350,22 @@ int main(int argc, char** argv)
 //        hconcat(imgC1, imgC2, imgC3);
 //        imshow("TEST Affine", imgC3);
 
-        string fileWarp = "/home/vance/output/rk_se2lam/warp/" + to_string(frameCur.id) + ".bmp";
+        string fileWarp = "/home/vance/output/rk_se2lam/warp/" + to_string(frameCur.id) + ".jpg";
         imwrite(fileWarp, outImgConcat);
 
-        waitKey(0);
+        waitKey(10);
 
 
         //! 内点数太少要生成新的参考帧
-        if (nInliers1 <= 12 || nInliers2 <= 12) {
+        if (nInliers1 <= 12 || nInliers2 <= 12 || nInliers4 <= 10) {
             imgCur.copyTo(imgRef);
             imgWithFeatureCur.copyTo(imgWithFeatureRef);
             frameRef = frameCur;
             KFRef = KFCur;
-            A12 = Mat::eye(2, 3, CV_64FC1);
-            A12Partial = Mat::eye(2, 3, CV_64FC1);
+            A21 = Mat::eye(2, 3, CV_64FC1);
+            A21Partial = Mat::eye(2, 3, CV_64FC1);
             RT = Mat::eye(2, 3, CV_64FC1);
+            Asvd = Mat::eye(2, 3, CV_64FC1);
         }
     }
     rec.close();

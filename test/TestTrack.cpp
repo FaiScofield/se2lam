@@ -28,7 +28,7 @@ TestTrack::TestTrack()
     string strVocFile = Config::DataPath + "../se2_config/ORBvoc.bin";
     bool bVocLoad = mpORBvoc->loadFromBinaryFile(strVocFile);
     if (!bVocLoad)
-        cerr << "[Track][Error ] Wrong path to vocabulary, Falied to open it." << endl;
+        cerr << "[Track][Error] Wrong path to vocabulary, Falied to open it." << endl;
 
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
@@ -125,7 +125,7 @@ void TestTrack::processFirstFrame()
         mLastFrame = mCurrentFrame;
         mState = cvu::OK;
     } else {
-        cerr << "[Track][Warni ] Failed to create first frame for too less keyPoints: "
+        cerr << "[Track][Warni] Failed to create first frame for too less keyPoints: "
              << mCurrentFrame.N << endl;
 
         Frame::nextId = 0;
@@ -138,7 +138,7 @@ bool TestTrack::trackReferenceKF()
     if (mCurrentFrame.isNull())
         return false;
     if (mCurrentFrame.mTimeStamp < mLastFrame.mTimeStamp) {
-        fprintf(stderr, "[Track][Warni ] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
+        fprintf(stderr, "[Track][Warni] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
                 mCurrentFrame.id, mLastFrame.id, mLastFrame.mTimeStamp, mCurrentFrame.mTimeStamp);
         return false;
     }
@@ -152,7 +152,7 @@ bool TestTrack::trackReferenceKF()
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix,
                                                   mvKPMatchIdx, 25);
     if (mnKPMatches < 15) {
-        printf("[Track][Warni ] #%ld-#%ld 与参考帧匹配[总]点数少于15(%d), 即将转为重定位!\n",
+        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[总]点数少于15(%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, mnKPMatches);
         return false;
     }
@@ -160,7 +160,7 @@ bool TestTrack::trackReferenceKF()
     //! 3.利用仿射矩阵A计算KP匹配的内点，内点数大于10才能继续
     mnKPsInline = removeOutliers(mpReferenceKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
     if (mnKPsInline < 10) {
-        printf("[Track][Warni ] #%ld-#%ld 与参考帧匹配[内]点数少于10(%d/%d), 即将转为重定位!\n",
+        printf("[Track][Warni] #%ld-#%ld 与参考帧匹配[内]点数少于10(%d/%d), 即将转为重定位!\n",
                mCurrentFrame.id, mpReferenceKF->id, mnKPsInline, mnKPMatches);
         return false;
     }
@@ -181,12 +181,12 @@ bool TestTrack::trackReferenceKF()
         Se2 Twb2 = mCurrentFrame.getTwb();
         printf("[Track][Info ] #%ld-#%ld VO优化位姿更新前后的值为: [%.2f, %.2f, %.2f] ==> [%.2f, %.2f, %.2f]\n",
                mCurrentFrame.id, mpReferenceKF->id, Twb1.x, Twb1.y, Twb1.theta, Twb2.x, Twb2.y, Twb2.theta);
-        printf("[Track][Warni ] #%ld-#%ld 位姿优化情况: 可视MP数/MP内点数/重投影误差为: %d/%d/%.3f,\n",
+        printf("[Track][Warni] #%ld-#%ld 位姿优化情况: 可视MP数/MP内点数/重投影误差为: %d/%d/%.3f,\n",
                mCurrentFrame.id, mpReferenceKF->id, nObs, nCros, projError);
 
 //        bool lost = detectIfLost(nCros, projError);
 //        if (lost) {
-//            printf("[Track][Warni ] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, 即将转为重定位!\n",
+//            printf("[Track][Warni] #%ld-#%ld 由MP优化位姿失败! MP内点数/重投影误差为: %d/%.3f, 即将转为重定位!\n",
 //                   mCurrentFrame.id, mpReferenceKF->id, nCros, projError);
 //            return false;
 //        }
@@ -440,7 +440,7 @@ int  TestTrack::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur,
         return 0;
 
     vector<uchar> vInlier;
-    A12 = estimateAffinePartial2D(vPtRef, vPtCur, vInlier, RANSAC, 2.0);
+    A12 = estimateAffinePartial2D(vPtRef, vPtCur, vInlier, RANSAC, 1.5);
 
     assert(vIdxRef.size() == vInlier.size());
     for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
@@ -743,7 +743,7 @@ bool TestTrack::detectLoopClose()
                     mCurrentFrame.id, pKFBest->mIdKF, pKFBest->id, mLoopScore, minScoreBest);
         }
     } else {
-        fprintf(stderr, "[Track][Warni ] #%ld 重定位-回环检测失败! 所有的KF场景相识度都太低! 最高得分仅为: %.3f\n",
+        fprintf(stderr, "[Track][Warni] #%ld 重定位-回环检测失败! 所有的KF场景相识度都太低! 最高得分仅为: %.3f\n",
                 mCurrentFrame.id, scoreBest);
     }
 
@@ -767,7 +767,7 @@ bool TestTrack::verifyLoopClose()
     bool bIfMatchMPOnly = false;  // 要看总体匹配点数多不多
     mnKPMatches = mpORBmatcher->SearchByBoW(&(*mpLoopKF), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
     if (mnKPMatches < nMinKPMatch * 0.6) {
-        fprintf(stderr, "[Track][Warni ] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
+        fprintf(stderr, "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, int(nMinKPMatch * 0.6));
         return false;
     }
@@ -777,14 +777,14 @@ bool TestTrack::verifyLoopClose()
     mAffineMatrix = getAffineMatrix(dOdo);  // 计算先验A
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(*mpLoopKF, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
     if (mnKPMatches < nMinKPMatch) {
-        printf("[Track][Warni ] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
+        printf("[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配数过少: %d < %d\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);
         return false;
     }
 
     mnKPsInline = removeOutliers(mpLoopKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
     if (mnKPsInline < 10) {
-        printf("[Track][Warni ] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
+        printf("[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的Warp KP匹配内点数少于10(%d/%d)!\n",
                mCurrentFrame.id, mpLoopKF->mIdKF, mnKPsInline, mnKPMatches);
         return false;
     }
@@ -801,17 +801,17 @@ bool TestTrack::verifyLoopClose()
     int nCorres = 0;
     double projError = 1000.;
     Se2 Twb = mCurrentFrame.getTwb();
-    printf("[Track][Warni ] #%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
+    printf("[Track][Warni] #%ld 位姿优化更新前的值为: [%.2f, %.2f, %.2f], 可视MP数为:%ld\n",
            mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, mCurrentFrame.countObservations());
     poseOptimization(&mCurrentFrame, nCorres, projError);  // 确保已经setViewMP()
     Twb = mCurrentFrame.getTwb();
-    printf("[Track][Warni ] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 重投影误差为:%.2f\n",
+    printf("[Track][Warni] #%ld 位姿优化更新后的值为: [%.2f, %.2f, %.2f], 重投影误差为:%.2f\n",
            mCurrentFrame.id, Twb.x, Twb.y, Twb.theta, projError);
 
     const bool bProjLost = detectIfLost(nCorres, projError);
     if (bProjLost) {
         fprintf(stderr,
-                "[Track][Warni ] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
+                "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 优化时MP优化内点数/总数/重投影误差为: %d/%d/%.2f\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, nCorres, nObs, projError);
         return false;
     } else {
@@ -1168,7 +1168,7 @@ void TestTrack::localBA()
 
     mpMap->loadLocalGraph(optimizer);
     if (optimizer.edges().empty()) {
-        fprintf(stderr, "[Track][Error ] #%ld(KF#%ld) No MPs in graph, leaving localBA().\n",
+        fprintf(stderr, "[Track][Error] #%ld(KF#%ld) No MPs in graph, leaving localBA().\n",
                 mpNewKF->id, mpNewKF->mIdKF);
         return;
     }
@@ -1183,7 +1183,7 @@ void TestTrack::localBA()
     double t2 = timer.count();
 
     if (solver->currentLambda() > 100.0) {
-        cerr << "[Track][Error ] current lambda too large " << solver->currentLambda()
+        cerr << "[Track][Error] current lambda too large " << solver->currentLambda()
              << " , reject optimized result!" << endl;
         return;
     }
