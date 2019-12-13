@@ -56,3 +56,13 @@ target_link_libraries(test_SingleThreadTracking
 #    se2lam
 #    ${LINK_LIBS}
 #)
+
+add_executable(test_BA
+    test_BA.cpp
+    test_functions.hpp
+)
+target_link_libraries(test_BA
+    se2lam
+#    ${LINK_LIBS}
+    ${G2O_LIBS}
+)

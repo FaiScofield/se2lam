@@ -974,11 +974,11 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
 //    printf("[Track][Timer] #%ld(KF#%ld) L7.第二次更新局部地图耗时: %.2fms\n", pKF->id, pKF->mIdKF, t7);
 
     //! 8.局部图优化
-//    timer.start();
-//    localBA();
-//    doLocalBA(*mpNewKF);
-//    double t8 = timer.count();
-//    printf("[Track][Timer] #%ld(KF#%ld) L8.局部BA耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
+    timer.start();
+    localBA();
+    doLocalBA(*mpNewKF);
+    double t8 = timer.count();
+    printf("[Track][Timer] #%ld(KF#%ld) L8.局部BA耗时: %.2fms\n", pKF->id, pKF->mIdKF, t8);
 
 
 }
@@ -1159,6 +1159,7 @@ void TestTrack::localBA()
     Se2 Twb1 = mpNewKF->getTwb();
 
     SlamOptimizer optimizer;
+//    SlamLinearSolverPCG* linearSolver = new SlamLinearSolverPCG();
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
 //    SlamLinearSolverCSparse* linearSolver = new SlamLinearSolverCSparse();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);

@@ -67,7 +67,7 @@ private:
 //! 2元边
 //! 误差为3维向量, 表示se2位姿的差异
 //! 两种顶点的类型都是VertexSE2, 表示SE2位姿点
-class PreEdgeSE2 : public BaseBinaryEdge<3, Vector3D, VertexSE2, VertexSE2>
+class PreEdgeSE2 : public BaseBinaryEdge<3, g2o::Vector3D, g2o::VertexSE2, g2o::VertexSE2>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -83,9 +83,14 @@ public:
         double aj = v2->estimate().rotation().angle();
         Vector2D rj = v2->estimate().translation();
 
-        _error.head<2>() = Ri.transpose() * (rj - ri) - _measurement.head<2>();
-        _error[2] = aj - ai - _measurement[2];
+        Vector2D rm = _measurement.head<2>();
+        Matrix2D Rm = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
+
+        // FIXME 这里的残差应该是SE2减法!
+        _error.head<2>() = Rm.transpose() * (Ri.transpose() * (rj - ri) - rm);
+        _error[2] = normalize_theta(aj - ai - _measurement[2]);
     }
+
     virtual void linearizeOplus()
     {
         const VertexSE2* v1 = static_cast<const VertexSE2*>(_vertices[0]);
@@ -99,11 +104,17 @@ public:
         _jacobianOplusXi.block<2, 2>(0, 0) = -Ri.transpose();
         _jacobianOplusXi.block<2, 1>(0, 2) = -Ri.transpose() * rij_x;
         _jacobianOplusXi.block<1, 2>(2, 0).setZero();
-        _jacobianOplusXi(2, 2) = 1;
+        _jacobianOplusXi(2, 2) = -1;  // 这里应该是-1
 
         _jacobianOplusXj.setIdentity();
         _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
+
+        Matrix3D Rm = Matrix3D::Identity();
+        Rm.block<2, 2>(0, 0) = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
+        _jacobianOplusXi = Rm * _jacobianOplusXi;
+        _jacobianOplusXj = Rm * _jacobianOplusXj;
     }
+
     bool read(std::istream& is);
     bool write(std::ostream& os) const;
 };

@@ -742,6 +742,9 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
 //            if (pKF->mIdKF < minKFid)
 //                minKFid = pKF->mIdKF;
 //        }
+        if (mvLocalGraphKFs.size() >= 2)
+            assert(mvLocalGraphKFs[0]->mIdKF < mvLocalGraphKFs[1]->mIdKF);
+
         // 目前Local容器都是有序的
         minKFid = mvLocalGraphKFs[0]->mIdKF;
     }
@@ -775,7 +778,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
             continue;
 
         const int id1 = distance(mvLocalGraphKFs.begin(), it);
-        Eigen::Map<Eigen::Matrix3d, RowMajor> info(meas.cov);
+        Eigen::Map<Eigen::Matrix3d, Eigen::RowMajor> info(meas.cov);
         addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
     }
 

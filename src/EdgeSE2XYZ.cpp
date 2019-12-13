@@ -13,13 +13,13 @@
 namespace g2o
 {
 
-G2O_REGISTER_TYPE(EDGE_SE2:PIROR, PreEdgeSE2);
+G2O_REGISTER_TYPE(EDGE_SE2, PreEdgeSE2);
 G2O_REGISTER_TYPE(EDGE_SE2:XYZ, EdgeSE2XYZ);
 
 using namespace std;
 using namespace Eigen;
 
-Eigen::Matrix3d d_inv_d_se2(const SE2& _se2)
+Matrix3d d_inv_d_se2(const g2o::SE2& _se2)
 {
     double c = std::cos(_se2.rotation().angle());
     double s = std::sin(_se2.rotation().angle());
@@ -32,15 +32,15 @@ Eigen::Matrix3d d_inv_d_se2(const SE2& _se2)
 
 g2o::SE3Quat SE2ToSE3(const g2o::SE2& _se2)
 {
-    SE3Quat ret;
-    ret.setTranslation(Eigen::Vector3d(_se2.translation()(0), _se2.translation()(1), 0));
-    ret.setRotation(Eigen::Quaterniond(AngleAxisd(_se2.rotation().angle(), Vector3d::UnitZ())));
+    g2o::SE3Quat ret;
+    ret.setTranslation(Vector3d(_se2.translation()(0), _se2.translation()(1), 0));
+    ret.setRotation(Quaterniond(AngleAxisd(_se2.rotation().angle(), Vector3d::UnitZ())));
     return ret;
 }
 
-g2o::SE2 SE3ToSE2(const SE3Quat& _se3)
+g2o::SE2 SE3ToSE2(const g2o::SE3Quat& _se3)
 {
-    Eigen::Vector3d eulers = g2o::internal::toEuler(_se3.rotation().matrix());
+    Vector3d eulers = g2o::internal::toEuler(_se3.rotation().matrix());
     return g2o::SE2(_se3.translation()(0), _se3.translation()(1), eulers(2));
 }
 
@@ -82,12 +82,12 @@ bool EdgeSE2XYZ::write(std::ostream& os) const
 //! 计算重投影误差，2维
 void EdgeSE2XYZ::computeError()
 {
-    VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
-    VertexSBAPointXYZ* v2 = static_cast<VertexSBAPointXYZ*>(_vertices[1]);
+    g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
+    g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
 
     //!@Vance: v1是Twb，所以这里要用逆
-    SE3Quat Tbw = SE2ToSE3(v1->estimate().inverse());
-    SE3Quat Tcw = Tcb * Tbw;
+    g2o::SE3Quat Tbw = SE2ToSE3(v1->estimate().inverse());
+    g2o::SE3Quat Tcw = Tcb * Tbw;
 
     // 地图点的观测在相机坐标系下的坐标
     Vector3d lc = Tcw.map(v2->estimate());
@@ -100,12 +100,12 @@ void EdgeSE2XYZ::computeError()
 //! 计算雅克比
 void EdgeSE2XYZ::linearizeOplus()
 {
-    VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
-    VertexSBAPointXYZ* v2 = static_cast<VertexSBAPointXYZ*>(_vertices[1]);
+    g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
+    g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
 
     Vector3d vwb = v1->estimate().toVector();
 
-    SE3Quat Tcw = Tcb * SE2ToSE3(v1->estimate().inverse());
+    g2o::SE3Quat Tcw = Tcb * SE2ToSE3(v1->estimate().inverse());
     Matrix3d Rcw = Tcw.rotation().toRotationMatrix();
 
     Vector3d pi(vwb[0], vwb[1], 0);
@@ -134,7 +134,7 @@ void EdgeSE2XYZ::linearizeOplus()
 
 bool PreEdgeSE2::read(std::istream& is)
 {
-    Vector3D m;
+    g2o::Vector3D m;
     is >> m[0] >> m[1] >> m[2];
     setMeasurement(m);
     for (int i = 0; i < 3; i++) {
@@ -149,7 +149,7 @@ bool PreEdgeSE2::read(std::istream& is)
 
 bool PreEdgeSE2::write(std::ostream& os) const
 {
-    Vector3D m = measurement();
+    g2o::Vector3D m = measurement();
     os << m[0] << " " << m[1] << " " << m[2] << " ";
     for (int i = 0; i < 3; i++) {
         for (int j = i; j < 3; j++) {
@@ -158,4 +158,5 @@ bool PreEdgeSE2::write(std::ostream& os) const
     }
     return os.good();
 }
+
 }

@@ -14,13 +14,14 @@
 #include "Thirdparty/g2o/g2o/core/eigen_types.h"
 #include "Thirdparty/g2o/g2o/core/factory.h"
 #include "Thirdparty/g2o/g2o/core/optimization_algorithm_levenberg.h"
+#include "Thirdparty/g2o/g2o/core/optimization_algorithm_gauss_newton.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
 #include "Thirdparty/g2o/g2o/core/sparse_optimizer.h"
+#include "Thirdparty/g2o/g2o/solvers/pcg/linear_solver_pcg.h"
 #include "Thirdparty/g2o/g2o/solvers/cholmod/linear_solver_cholmod.h"
 #include "Thirdparty/g2o/g2o/solvers/csparse/linear_solver_csparse.h"
 #include "Thirdparty/g2o/g2o/solvers/dense/linear_solver_dense.h"
-//#include "Thirdparty/g2o/g2o/solvers/eigen/linear_solver_eigen.h"
 #include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
 #include "Thirdparty/g2o/g2o/types/slam2d/edge_se2.h"
 #include "Thirdparty/g2o/g2o/types/slam2d/vertex_se2.h"
@@ -35,9 +36,12 @@ namespace se2lam
 typedef g2o::BlockSolverX SlamBlockSolver;
 typedef g2o::LinearSolverCholmod<SlamBlockSolver::PoseMatrixType> SlamLinearSolverCholmod;
 typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType> SlamLinearSolverCSparse;
+typedef g2o::LinearSolverPCG<SlamBlockSolver::PoseMatrixType> SlamLinearSolverPCG;
 typedef g2o::OptimizationAlgorithmLevenberg SlamAlgorithmLM;
+typedef g2o::OptimizationAlgorithmGaussNewton SlamAlgorithmGN;
 typedef g2o::SparseOptimizer SlamOptimizer;
 typedef g2o::CameraParameters CamPara;
+typedef g2o::BlockSolver<g2o::BlockSolverTraits<3, 1>> SlamBlockSolver_3_1;
 
 inline Eigen::Quaterniond toQuaterniond(const Eigen::Vector3d& rot_vector)
 {
