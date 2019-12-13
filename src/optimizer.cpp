@@ -59,6 +59,17 @@ PreEdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id
     return e;
 }
 
+EdgeSE2* addEdgeSE2_g2o(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
+{
+    EdgeSE2* e = new EdgeSE2;
+    e->vertices()[0] = opt.vertex(id0);
+    e->vertices()[1] = opt.vertex(id1);
+    e->setMeasurement(SE2(meas));
+    e->setInformation(info);
+    opt.addEdge(e);
+    return e;
+}
+
 Matrix3D Jl(const Vector3D& v3d)
 {
     double theta = v3d.norm();

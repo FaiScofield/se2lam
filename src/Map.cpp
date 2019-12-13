@@ -337,7 +337,7 @@ void Map::updateLocalGraph()
     } else {
         setLocalKFs.insert(mCurrentKF);
 
-        updateLocalGraphKdtree(setLocalKFs, Config::MaxLocalFrameNum, Config::LocalFrameSearchRadius); // lock global
+        updateLocalGraphKdtree(setLocalKFs, Config::MaxLocalFrameNum, Config::LocalFrameSearchRadius);  // lock global
 
         int toAdd = Config::MaxLocalFrameNum - setLocalKFs.size();
         int searchLevel = Config::LocalFrameSearchLevel;
@@ -366,7 +366,8 @@ void Map::updateLocalGraph()
         PtrMapPoint pMP = (*i);
         std::set<PtrKeyFrame> pKFs = pMP->getObservations();
         for (auto j = pKFs.begin(), jend = pKFs.end(); j != jend; j++) {
-            if (setLocalKFs.find((*j)) != setLocalKFs.end() || setLocalRefKFs.find((*j)) != setLocalRefKFs.end())
+            if (setLocalKFs.find((*j)) != setLocalKFs.end() ||
+                setLocalRefKFs.find((*j)) != setLocalRefKFs.end())
                 continue;
             setLocalRefKFs.insert((*j));
         }
@@ -374,8 +375,8 @@ void Map::updateLocalGraph()
 
     cout << "[Local][ Map ] #" << mCurrentKF->id << "(KF#" << mCurrentKF->mIdKF << ") "
          << "更新局部地图, 局部地图成员个数分别为: LocalKFs/RefKFs/LocalMPs = " << setLocalKFs.size()
-         << "/" << setLocalRefKFs.size() << "/" << setLocalMPs.size() << ", 共耗时"
-         << timer.count() << "ms." << endl;
+         << "/" << setLocalRefKFs.size() << "/" << setLocalMPs.size() << ", 共耗时" << timer.count()
+         << "ms." << endl;
 
     mLocalGraphKFs = vector<PtrKeyFrame>(setLocalKFs.begin(), setLocalKFs.end());
     mLocalRefKFs = vector<PtrKeyFrame>(setLocalRefKFs.begin(), setLocalRefKFs.end());
@@ -1022,7 +1023,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         const int id1 = it - mLocalGraphKFs.begin();
         {
             Eigen::Map<Eigen::Matrix3d, RowMajor> info(meas.cov);
-            addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
+            // addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
+            addEdgeSE2_g2o(optimizer, Vector3D(meas.meas), i, id1, info);
         }
     }
 

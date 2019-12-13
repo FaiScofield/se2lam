@@ -75,8 +75,6 @@ int main(int argc, char** argv)
 
     ros::shutdown();
 
-    cerr << "[Main ][Info ] Rec close..." << endl;
-    rec.close();
     cerr << "[Main ][Info ] Exit test..." << endl;
     return 0;
 }

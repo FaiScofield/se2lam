@@ -102,6 +102,8 @@ g2o::SE2 estimateVertexSE2(SlamOptimizer& opt, int id);
 g2o::PreEdgeSE2* addEdgeSE2(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1,
                             const g2o::Matrix3D& info);
 
+g2o::EdgeSE2* addEdgeSE2_g2o(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1, const g2o::Matrix3D& info);
+
 g2o::ParameterSE3Offset* addParaSE3Offset(SlamOptimizer& opt, const g2o::Isometry3D& se3offset, int id);
 
 void addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed = false);
