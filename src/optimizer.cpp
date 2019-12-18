@@ -137,13 +137,24 @@ SE2 estimateVertexSE2(SlamOptimizer& opt, int id)
     return v->estimate();
 }
 
-PreEdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
+PreEdgeSE2* addPreEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
 {
     PreEdgeSE2* e = new PreEdgeSE2;
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(meas);
     e->setInformation(info);
+    opt.addEdge(e);
+    return e;
+}
+
+EdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
+{
+    EdgeSE2* e = new EdgeSE2;
+    e->vertices()[0] = opt.vertex(id0);
+    e->vertices()[1] = opt.vertex(id1);
+    e->setMeasurement(SE2(meas));  // meas = v1 - v0
+    e->setInformation(info * 1e9);
     opt.addEdge(e);
     return e;
 }
@@ -271,7 +282,7 @@ void EdgeSE3ExpmapPrior::linearizeOplus()
 //    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
 //    Vector6d err = (_measurement * v->estimate().inverse()).log();
 //    _jacobianOplusXi = -invJJl(-err);  // 右扰动的话还要再乘一个Adj(T)
-    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //! ?
+    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //?
 }
 
 bool EdgeSE3ExpmapPrior::read(istream& is)

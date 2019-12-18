@@ -13,18 +13,19 @@
 #include "Thirdparty/g2o/g2o/core/block_solver.h"
 #include "Thirdparty/g2o/g2o/core/eigen_types.h"
 #include "Thirdparty/g2o/g2o/core/factory.h"
-#include "Thirdparty/g2o/g2o/core/optimization_algorithm_levenberg.h"
+#include "Thirdparty/g2o/g2o/core/optimization_algorithm_dogleg.h"
 #include "Thirdparty/g2o/g2o/core/optimization_algorithm_gauss_newton.h"
+#include "Thirdparty/g2o/g2o/core/optimization_algorithm_levenberg.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
 #include "Thirdparty/g2o/g2o/core/sparse_optimizer.h"
-#include "Thirdparty/g2o/g2o/solvers/pcg/linear_solver_pcg.h"
 #include "Thirdparty/g2o/g2o/solvers/cholmod/linear_solver_cholmod.h"
 #include "Thirdparty/g2o/g2o/solvers/csparse/linear_solver_csparse.h"
 #include "Thirdparty/g2o/g2o/solvers/dense/linear_solver_dense.h"
+#include "Thirdparty/g2o/g2o/solvers/eigen/linear_solver_eigen.h"
+#include "Thirdparty/g2o/g2o/solvers/pcg/linear_solver_pcg.h"
 #include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
-#include "Thirdparty/g2o/g2o/types/slam2d/edge_se2.h"
-#include "Thirdparty/g2o/g2o/types/slam2d/vertex_se2.h"
+#include "Thirdparty/g2o/g2o/types/slam2d/types_slam2d.h"
 #include "Thirdparty/g2o/g2o/types/slam3d/dquat2mat.h"
 #include "Thirdparty/g2o/g2o/types/slam3d/types_slam3d.h"
 
@@ -37,8 +38,11 @@ typedef g2o::BlockSolverX SlamBlockSolver;
 typedef g2o::LinearSolverCholmod<SlamBlockSolver::PoseMatrixType> SlamLinearSolverCholmod;
 typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType> SlamLinearSolverCSparse;
 typedef g2o::LinearSolverPCG<SlamBlockSolver::PoseMatrixType> SlamLinearSolverPCG;
+typedef g2o::LinearSolverDense<SlamBlockSolver::PoseMatrixType> SlamLinearSolverDense;
+typedef g2o::LinearSolverEigen<SlamBlockSolver::PoseMatrixType> SlamLinearSolverEigen;
 typedef g2o::OptimizationAlgorithmLevenberg SlamAlgorithmLM;
 typedef g2o::OptimizationAlgorithmGaussNewton SlamAlgorithmGN;
+typedef g2o::OptimizationAlgorithmDogleg SlamAlgorithmDL;
 typedef g2o::SparseOptimizer SlamOptimizer;
 typedef g2o::CameraParameters CamPara;
 typedef g2o::BlockSolver<g2o::BlockSolverTraits<3, 1>> SlamBlockSolver_3_1;
@@ -66,7 +70,8 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond& q_)
  * 旋转在后(虚前实后)
  * VertexSE3Expmap  相机位姿节点，6个维度
  */
-class G2O_TYPES_SBA_API EdgeSE3ExpmapPrior : public g2o::BaseUnaryEdge<6, g2o::SE3Quat, g2o::VertexSE3Expmap>
+class G2O_TYPES_SBA_API EdgeSE3ExpmapPrior
+    : public g2o::BaseUnaryEdge<6, g2o::SE3Quat, g2o::VertexSE3Expmap>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -83,7 +88,8 @@ public:
     virtual void linearizeOplus();
 };
 
-class EdgeSE3ProjectXYZOnlyPose : public g2o::BaseUnaryEdge<2, Eigen::Vector2d, g2o::VertexSE3Expmap>
+class EdgeSE3ProjectXYZOnlyPose
+    : public g2o::BaseUnaryEdge<2, Eigen::Vector2d, g2o::VertexSE3Expmap>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -152,22 +158,28 @@ void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, 
                       const g2o::Matrix6d& info);
 
 g2o::EdgeProjectXYZ2UV* addEdgeXYZ2UV(SlamOptimizer& opt, const Eigen::Vector2d& measure, int id0,
-                                      int id1, int paraId, const Eigen::Matrix2d& info, double thHuber);
+                                      int id1, int paraId, const Eigen::Matrix2d& info,
+                                      double thHuber);
 
-g2o::EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const g2o::Vector2D& meas, int id0, int id1, CamPara* campara,
-                               const g2o::SE3Quat& _Tbc, const g2o::Matrix2D& info, double thHuber);
+g2o::EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const g2o::Vector2D& meas, int id0, int id1,
+                               CamPara* campara, const g2o::SE3Quat& _Tbc,
+                               const g2o::Matrix2D& info, double thHuber);
 
-g2o::PreEdgeSE2* addEdgeSE2(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1,
-                            const g2o::Matrix3D& info);
+g2o::PreEdgeSE2* addPreEdgeSE2(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1,
+                               const g2o::Matrix3D& info);
+g2o::EdgeSE2* addEdgeSE2(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1,
+                         const g2o::Matrix3D& info);
 
-g2o::ParameterSE3Offset* addParaSE3Offset(SlamOptimizer& opt, const g2o::Isometry3D& se3offset, int id);
+g2o::ParameterSE3Offset* addParaSE3Offset(SlamOptimizer& opt, const g2o::Isometry3D& se3offset,
+                                          int id);
 
 
 g2o::EdgeSE3* addEdgeSE3(SlamOptimizer& opt, const g2o::Isometry3D& measure, int id0, int id1,
                          const g2o::Matrix6d& info);
 
-g2o::EdgeSE3PointXYZ* addEdgeSE3XYZ(SlamOptimizer& opt, const g2o::Vector3D& measure, int idse3, int idxyz,
-                                    int paraSE3OffsetId, const g2o::Matrix3D& info, double thHuber);
+g2o::EdgeSE3PointXYZ* addEdgeSE3XYZ(SlamOptimizer& opt, const g2o::Vector3D& measure, int idse3,
+                                    int idxyz, int paraSE3OffsetId, const g2o::Matrix3D& info,
+                                    double thHuber);
 
 
 g2o::SE2 estimateVertexSE2(SlamOptimizer& opt, int id);

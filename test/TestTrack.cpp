@@ -957,7 +957,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
 
     //! 5.修剪冗余KF
 //    timer.start();
-    pruneRedundantKFinMap();  // 会自动更新LocalMap
+//    pruneRedundantKFinMap();  // 会自动更新LocalMap
 //    double t5 = timer.count();
 //    printf("[Track][Timer] #%ld(KF#%ld) L5.修剪冗余KF耗时: %.2fms\n", pKF->id, pKF->mIdKF, t5);
 
@@ -1164,10 +1164,11 @@ void TestTrack::localBA()
 //    SlamLinearSolverCSparse* linearSolver = new SlamLinearSolverCSparse();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
+    solver->setMaxTrialsAfterFailure(5);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 
-    mpMap->loadLocalGraph(optimizer);
+    mpMap->loadLocalGraph_test(optimizer);
     if (optimizer.edges().empty()) {
         fprintf(stderr, "[Track][Error] #%ld(KF#%ld) No MPs in graph, leaving localBA().\n",
                 mpNewKF->id, mpNewKF->mIdKF);
@@ -1186,7 +1187,7 @@ void TestTrack::localBA()
     if (solver->currentLambda() > 100.0) {
         cerr << "[Track][Error] current lambda too large " << solver->currentLambda()
              << " , reject optimized result!" << endl;
-        return;
+        //return;
     }
 
     timer.start();

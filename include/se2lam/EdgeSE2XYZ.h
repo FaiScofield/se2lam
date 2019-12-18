@@ -14,7 +14,6 @@
 #include "Thirdparty/g2o/g2o/types/sba/types_six_dof_expmap.h"
 #include "Thirdparty/g2o/g2o/types/slam2d/vertex_se2.h"
 
-
 #define CUSTOMIZE_JACOBIAN_SE2XYZ
 
 namespace g2o
@@ -23,22 +22,21 @@ namespace g2o
 typedef Eigen::Matrix<double, 2, 3> Matrix23d;
 typedef Eigen::Matrix<double, 3, 2> Matrix32d;
 
-Eigen::Matrix3d d_inv_d_se2(const g2o::SE2& _se2);
+Matrix3D d_inv_d_se2(const SE2& _se2);
 
-g2o::SE3Quat SE2ToSE3(const g2o::SE2& _se2);
+SE3Quat SE2ToSE3(const SE2& _se2);
 
-g2o::SE2 SE3ToSE2(const g2o::SE3Quat& _se3);
+SE2 SE3ToSE2(const SE3Quat& _se3);
 
 //! 2元边
 //! 2维测量，测量类型为Vector2d，代表像素的重投影误差
 //! 两种顶点类型分别是VertexSE2、VertexSBAPointXYZ，即此2元边连接SE2李群位姿点和三维地图点
-class EdgeSE2XYZ : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
+class EdgeSE2XYZ : public BaseBinaryEdge<2, Vector2D, VertexSE2, VertexSBAPointXYZ>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    EdgeSE2XYZ();
-    ~EdgeSE2XYZ();
+    EdgeSE2XYZ() {}
 
     // Useless functions we don't care
     bool read(std::istream& is);
@@ -47,76 +45,48 @@ public:
     // Note: covariance are set here. Just set information to identity outside.
     void computeError();
 
-    virtual void linearizeOplus();
+#ifdef CUSTOMIZE_JACOBIAN_SE2XYZ
+//    virtual void linearizeOplus();
+#endif
 
-    inline void setCameraParameter(g2o::CameraParameters* _cam) { cam = _cam; }
+    inline void setCameraParameter(CameraParameters* _cam) { cam = _cam; }
 
-    inline void setExtParameter(const g2o::SE3Quat& _Tbc)
+    inline void setExtParameter(const SE3Quat& _Tbc)
     {
         Tbc = _Tbc;
         Tcb = Tbc.inverse();
     }
 
 private:
-    g2o::SE3Quat Tbc;
-    g2o::SE3Quat Tcb;
+    SE3Quat Tbc;
+    SE3Quat Tcb;
 
-    g2o::CameraParameters* cam;
+    CameraParameters* cam;
 };
 
 //! 2元边
 //! 误差为3维向量, 表示se2位姿的差异
 //! 两种顶点的类型都是VertexSE2, 表示SE2位姿点
-class PreEdgeSE2 : public BaseBinaryEdge<3, g2o::Vector3D, g2o::VertexSE2, g2o::VertexSE2>
+class PreEdgeSE2 : public BaseBinaryEdge<3, Vector3D, VertexSE2, VertexSE2>
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     PreEdgeSE2() {}
 
-    void computeError()
-    {
-        const VertexSE2* v1 = static_cast<const VertexSE2*>(_vertices[0]);
-        const VertexSE2* v2 = static_cast<const VertexSE2*>(_vertices[1]);
-        Matrix2D Ri = v1->estimate().rotation().toRotationMatrix();
-        Vector2D ri = v1->estimate().translation();
-        double ai = v1->estimate().rotation().angle();
-        double aj = v2->estimate().rotation().angle();
-        Vector2D rj = v2->estimate().translation();
-
-        Vector2D rm = _measurement.head<2>();
-        Matrix2D Rm = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
-
-        // FIXME 这里的残差应该是SE2减法!
-        _error.head<2>() = Rm.transpose() * (Ri.transpose() * (rj - ri) - rm);
-        _error[2] = normalize_theta(aj - ai - _measurement[2]);
+    virtual void setMeasurement(const Vector3D& m){
+        _measurement = m;
+        _inverseMeasurement = SE2(m).inverse();
     }
 
-    virtual void linearizeOplus()
-    {
-        const VertexSE2* v1 = static_cast<const VertexSE2*>(_vertices[0]);
-        const VertexSE2* v2 = static_cast<const VertexSE2*>(_vertices[1]);
-        Matrix2D Ri = v1->estimate().rotation().toRotationMatrix();
-        Vector2D ri = v1->estimate().translation();
-        Vector2D rj = v2->estimate().translation();
-        Vector2D rij = rj - ri;
-        Vector2D rij_x(-rij[1], rij[0]);
+    void computeError();
 
-        _jacobianOplusXi.block<2, 2>(0, 0) = -Ri.transpose();
-        _jacobianOplusXi.block<2, 1>(0, 2) = -Ri.transpose() * rij_x;
-        _jacobianOplusXi.block<1, 2>(2, 0).setZero();
-        _jacobianOplusXi(2, 2) = -1;  // 这里应该是-1
-
-        _jacobianOplusXj.setIdentity();
-        _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
-
-        Matrix3D Rm = Matrix3D::Identity();
-        Rm.block<2, 2>(0, 0) = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
-        _jacobianOplusXi = Rm * _jacobianOplusXi;
-        _jacobianOplusXj = Rm * _jacobianOplusXj;
-    }
+//    virtual void linearizeOplus();
 
     bool read(std::istream& is);
     bool write(std::ostream& os) const;
+
+protected:
+    SE2 _inverseMeasurement;
 };
 
 }  // namespace se2lam

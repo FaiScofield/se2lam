@@ -74,6 +74,7 @@ public:
     int removeLocalOutlierMP(SlamOptimizer& optimizer);
 
     void loadLocalGraph(SlamOptimizer& optimizer);
+    void loadLocalGraph_test(SlamOptimizer& optimizer);
 
     void loadLocalGraphOnlyBa(SlamOptimizer& optimizer,
                               std::vector<std::vector<g2o::EdgeProjectXYZ2UV*>>& vpEdgesAll,

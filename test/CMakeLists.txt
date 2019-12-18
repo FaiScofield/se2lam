@@ -60,6 +60,7 @@ target_link_libraries(test_SingleThreadTracking
 add_executable(test_BA
     test_BA.cpp
     test_functions.hpp
+    test_optimizer.hpp
 )
 target_link_libraries(test_BA
     se2lam

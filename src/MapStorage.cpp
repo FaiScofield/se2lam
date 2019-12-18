@@ -51,6 +51,10 @@ void MapStorage::loadMap()
 
 void MapStorage::saveMap()
 {
+    if (mMapPath.empty() || mMapFile.empty()) {
+        cerr << "[MapStorage] Error on saving the map. Please check the output path set!" << endl;
+        return;
+    }
 
     mvKFs = mpMap->getAllKFs();
     mvMPs = mpMap->getAllMPs();

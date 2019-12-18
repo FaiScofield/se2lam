@@ -1,11 +1,10 @@
 #include "test_functions.hpp"
 #include "TestTrack.h"
 #include "MapPublish.h"
-
+#include "MapStorage.h"
 
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
-
 
 int main(int argc, char** argv)
 {
@@ -69,6 +68,7 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
+
     //! main loop
     const int skipFrames = Config::ImgStartIndex;
     num = std::min(num, static_cast<int>(allImages.size()));
@@ -88,6 +88,13 @@ int main(int argc, char** argv)
         rate.sleep();
     }
     pMapPub->requestFinish();
+
+    if (Config::SaveNewMap) {
+        MapStorage* pMapStorage = new MapStorage();
+        pMapStorage->setMap(pMap);
+        pMapStorage->setFilePath(Config::MapFileStorePath, Config::WriteMapFileName);
+        pMapStorage->saveMap();
+    }
 
     delete pMatcher;
     delete pVocabulary;
