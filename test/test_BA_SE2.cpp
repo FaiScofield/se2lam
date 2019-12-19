@@ -14,11 +14,16 @@
 #include "test_functions.hpp"
 #include "test_optimizer.hpp"
 
-#define USE_PRESE2  // else use g2o::SE2
+//#define USE_PRESE2  // else use g2o::SE2
 //#define USE_XYZCUSTOM  // else use EdgeSE2XYZ
-//#define USE_LM    // else use GN algorithm
+#define USE_LM    // else use GN algorithm
+//#define ONLY_EDGEXYZ // else EDGExyz + EdgeSE2
 
 using namespace std;
+
+const std::string outPointCloudFile = "/home/vance/output/test_BA.ply";
+size_t nKFVertices = 0;  // num of camera pose
+
 
 bool inBoard(const Eigen::Vector2d& uv)
 {
@@ -28,48 +33,63 @@ bool inBoard(const Eigen::Vector2d& uv)
     return uv(0) >= 1. && uv(0) <= w - 1. && uv(1) >= 1. && uv(1) <= h - 1.;
 }
 
-size_t nKFVertices = 0;
-void writeToPCDFile(const string& filename, SlamOptimizer* optimizer)
+void writeToPlyFile(SlamOptimizer* optimizer)
 {
-    ofstream of(filename.c_str());
+    ofstream of(outPointCloudFile.c_str());
     if (!of.is_open()) {
-        cerr << "Error on openning the output file: " << filename << endl;
+        cerr << "Error on openning the output file: " << outPointCloudFile << endl;
         return;
     }
 
     auto vertices = optimizer->vertices();
-    int nPose = vertices.size();
+    const size_t nPose = vertices.size();
 
-    of << "VERSION .7" << '\n'
-       << "FIELDS x y z rgb" << '\n'
-       << "SIZE 4 4 4 4" << '\n'
-       << "TYPE F F F F" << '\n'
-       << "COUNT 1 1 1 1" << '\n'
-       << "WIDTH " << nPose << '\n'
-       << "HEIGHT 1" << '\n'
-       << "VIEWPOINT 0 0 0 1 0 0 0" << '\n'
-       << "POINTS " << nPose << '\n'
-       << "DATA ascii" << endl;
+    of << "ply" << '\n'
+       << "format ascii 1.0" << '\n'
+       << "element vertex " << nPose * 2 << '\n'
+       << "property float x" << '\n'
+       << "property float y" << '\n'
+       << "property float z" << '\n'
+       << "property uchar red" << '\n'
+       << "property uchar green" << '\n'
+       << "property uchar blue" << '\n'
+       << "end_header" << std::endl;
 
-    uint8_t r1, g1, b1, r2, g2, b2;
-    r1 = uint8_t(255);
-    g1 = uint8_t(255);
-    b1 = uint8_t(255);
-    r2 = uint8_t(255);
-    g2 = uint8_t(255);
-    b2 = uint8_t(0);
-    uint32_t rgb1 = ((uint32_t)r1 << 16 | (uint32_t)g1 << 8 | (uint32_t)b1);
-    uint32_t rgb2 = ((uint32_t)r2 << 16 | (uint32_t)g2 << 8 | (uint32_t)b2);
-
-    for (int i = 0; i < nPose; ++i) {
+    for (size_t i = 0; i < nPose; ++i) {
         if (i < nKFVertices) {
             auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
             auto pose = v->estimate();
-            of << pose[0] << ' ' << pose[1] << ' ' << 0 << " " << rgb1 << '\n';
+            of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 0 255 0" << '\n';
         } else {
             auto v = static_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
             auto pose = v->estimate();
-            of << pose[0] << ' ' << pose[1] << ' ' << pose[2] << ' ' << rgb2 << '\n';
+            of << pose[0] << ' ' << pose[1] << ' ' << pose[2] << " 0 255 0" << '\n';
+        }
+    }
+
+    of.close();
+}
+
+void writeToPlyFileAppend(SlamOptimizer* optimizer)
+{
+    ofstream of(outPointCloudFile.c_str(), ios::app);
+    if (!of.is_open()) {
+        cerr << "Error on openning the output file: " << outPointCloudFile << endl;
+        return;
+    }
+
+    auto vertices = optimizer->vertices();
+    const size_t nPose = vertices.size();
+
+    for (size_t i = 0; i < nPose; ++i) {
+        if (i < nKFVertices) {
+            auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
+            auto pose = v->estimate();
+            of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 255 0 0" << '\n';
+        } else {
+            auto v = static_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
+            auto pose = v->estimate();
+            of << pose[0] << ' ' << pose[1] << ' ' << pose[2] << " 255 0 0" << '\n';
         }
     }
 
@@ -79,7 +99,7 @@ void writeToPCDFile(const string& filename, SlamOptimizer* optimizer)
 
 int main(int argc, char** argv)
 {
-    //! check input
+    // check input
     if (argc < 2) {
         cerr << "Usage: test_pointDetection <dataPath> [number_frames_to_process]" << endl;
         exit(-1);
@@ -90,20 +110,11 @@ int main(int argc, char** argv)
         cerr << "set number_frames_to_process = " << num << endl << endl;
     }
 
-    bool usePreSE2 = false;
-    if (argc == 4)
-        usePreSE2 = atoi(argv[3]);
-    cerr << "usePreSE2 = " << usePreSE2 << endl << endl;
-
-    //! initialization
+    // initialization
     string configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
     Config::readConfig(configPath);
 
-//    string dataFolder = string(argv[1]) + "slamimg";
-//    vector<RK_IMAGE> imgFiles;
-//    readImagesRK(dataFolder, imgFiles);
-
-    //! read data
+    // read data
     string odomRawFile = string(argv[1]) + "odo_raw.txt";  // [mm]
     ifstream rec(odomRawFile);
     if (!rec.is_open()) {
@@ -111,7 +122,6 @@ int main(int argc, char** argv)
         rec.close();
         exit(-1);
     }
-
     const double scale = 0.1;
     vector<g2o::SE2> vOdomData;
     vOdomData.reserve(2000);
@@ -125,28 +135,28 @@ int main(int argc, char** argv)
         lineData[1] *= scale;
         vOdomData.push_back(g2o::SE2(lineData));
     }
-    const int skip = 0;
+    const int skip = 100;
     const int delta = 20;
     const int N = min((int)vOdomData.size(), num);
     cout << "Use " << N << " odom data (size of vertices) in the file to test BA. " << endl;
     cout << "skip = " << skip << ", delta = " << delta << endl;
 
-    //! random noise
+    // random noise
     cv::RNG rng;  // OpenCV随机数产生器
     const double noiseX = Config::OdoNoiseX * 5;
     const double noiseY = Config::OdoNoiseY * 5;
-    const double noiseT = Config::OdoNoiseTheta * 5;
+    const double noiseT = Config::OdoNoiseTheta * 10;
     // const double uncerX = Config::OdoUncertainX ;
     // const double uncerY = Config::OdoUncertainY;
     // const double uncerT = Config::OdoUncertainTheta;
 
-    //! preintergation
+    // preintergation
     PreSE2 preInfo;
     vector<PreSE2> vPreInfos;
     vPreInfos.reserve(N / delta);
 
-    //! generate observations
-    size_t nMPs = 300;
+    // generate observations
+    size_t nMPs = 200;
     vector<Eigen::Vector3d> vPoints;
     vPoints.reserve(nMPs);
     for (size_t i = 0; i < nMPs; ++i) {
@@ -160,7 +170,7 @@ int main(int argc, char** argv)
 
     WorkTimer timer;
 
-    //! g2o solver construction
+    // g2o solver construction
     SlamOptimizer optimizer;
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
@@ -226,11 +236,11 @@ int main(int argc, char** argv)
             continue;
 
         const int vertexIDTo = (i - skip) / delta;
-        auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
-        auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
+        const auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
+        const auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
 
         double* m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
-        g2o::SE2 meas(m[0], m[1], m[2]);
+        const g2o::SE2 meas(m[0], m[1], m[2]);
         Eigen::Map<Eigen::Matrix3d, Eigen::RowMajor> info(vPreInfos[vertexIDTo].cov);
         // bool isSymmetric = info.transpose() == info;
         // if (!isSymmetric) {
@@ -244,43 +254,22 @@ int main(int argc, char** argv)
 #else
         // Edge SE2
         g2o::EdgeSE2* e = new g2o::EdgeSE2();
+//        EdgeSE2Custom* e = new EdgeSE2Custom();
         e->setMeasurement(meas);
 #endif
         e->setVertex(0, v1);
         e->setVertex(1, v2);
-        e->setInformation(info * 1e9);
+        e->setInformation(/*info*/Eigen::Matrix3d::Identity());
         optimizer.addEdge(e);
+
         e->computeError();
         cout << "EdgeSE2 from " << v1->id() << " to " << v2->id() << " , chi2 = "
-             << e->chi2() << endl;
-
-//        double thetai = v1->estimate().rotation().angle();
-
-//        g2o::Vector2D dt = v2->estimate().translation() - v1->estimate().translation();
-//        double si=sin(thetai), ci=cos(thetai);
-
-//        g2o::Matrix3D J1, J2;
-//        J1(0, 0) = -ci; J1(0, 1) = -si; J1(0, 2) = -si*dt.x()+ci*dt.y();
-//        J1(1, 0) =  si; J1(1, 1) = -ci; J1(1, 2) = -ci*dt.x()-si*dt.y();
-//        J1(2, 0) =  0;  J1(2, 1) = 0;   J1(2, 2) = -1;
-
-//        J2(0, 0) = ci; J2(0, 1)= si; J2(0, 2)= 0;
-//        J2(1, 0) =-si; J2(1, 1)= ci; J2(1, 2)= 0;
-//        J2(2, 0) = 0;  J2(2, 1)= 0;  J2(2, 2)= 1;
-
-//        g2o::SE2 rmean = g2o::SE2(g2o::Vector3D(m));
-//        g2o::Matrix3D z = g2o::Matrix3D::Zero();
-//        z.block<2, 2>(0, 0) = rmean.rotation().toRotationMatrix();
-//        z(2, 2) = 1.;
-//        J1 = z * J1;
-//        J2 = z * J2;
-//        cout <<  "g2o SE2 Jacobian J1 = " << endl << J1 << endl;
-//        cout <<  "g2o SE2 Jacobian J2 = " << endl << J2 << endl;
+             << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
     }
     cout << endl << endl;
 
     // vertices/edges of MPs
-    g2o::SE3Quat Tbc = toSE3Quat(Config::Tbc);
+    const g2o::SE3Quat Tbc = toSE3Quat(Config::Tbc);
     size_t MPVertexId = nKFVertices;
     for (size_t j = 0; j < nMPs; ++j) {
         // vetex
@@ -289,24 +278,22 @@ int main(int argc, char** argv)
         vj->setEstimate(lw);
         vj->setId(MPVertexId++);
         vj->setMarginalized(true);
+        // vj->setFixed(true); // pose optimization
         optimizer.addVertex(vj);
 
         // edge
         for (size_t i = 0; i < nKFVertices; ++i) {
-            auto vi = static_cast<g2o::VertexSE2*>(optimizer.vertex(i));
-            const int idx = vi->id() * delta * skip;
+            const auto vi = static_cast<g2o::VertexSE2*>(optimizer.vertex(i));
+            const int idx = vi->id() * delta + skip;
             const g2o::SE3Quat Tcw = Tbc.inverse() * SE2ToSE3_(vOdomData[idx].inverse());
             const Eigen::Vector3d lc = Tcw.map(lw);
             if (lc(2) < 0)
                 continue;
 
-            Eigen::Vector2d uv = cam->cam_map(lc);
+            const Eigen::Vector2d uv = cam->cam_map(lc);
             if (inBoard(uv)) {
                 g2o::RobustKernelCauchy* kernel = new g2o::RobustKernelCauchy();
                 kernel->setDelta(1);
-
-                g2o::Matrix2D info;
-                info << uv(0) * uv(0), uv(0) * uv(1), uv(1) * uv(0), uv(1) * uv(1);
 
 #ifdef USE_XYZCUSTOM
                 EdgeSE2XYZCustom* e = new EdgeSE2XYZCustom();
@@ -316,22 +303,22 @@ int main(int argc, char** argv)
                 e->setVertex(0, vi);
                 e->setVertex(1, vj);
                 e->setMeasurement(uv);
-                e->setInformation(info /*Eigen::Matrix2d::Identity()*/);
+                e->setInformation(Eigen::Matrix2d::Identity());
                 e->setCameraParameter(cam);
                 e->setExtParameter(Tbc);
                 e->setRobustKernel(kernel);
                 optimizer.addEdge(e);
 
-                e->computeError();
-                cout << "EdgeSE2XYZ from " << vi->id() << " to " << vj->id() << " , chi2 = "
-                     << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
+//                e->computeError();
+//                cout << "EdgeSE2XYZ from " << vi->id() << " to " << vj->id() << " , chi2 = "
+//                     << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
             }
         }
     }
     double t1 = timer.count();
 
     optimizer.save("/home/vance/output/test_BA_before.g2o");
-    writeToPCDFile("/home/vance/output/test_BA_before.pcd", &optimizer);
+    writeToPlyFile(&optimizer);
 
     timer.start();
     optimizer.initializeOptimization();
@@ -344,8 +331,23 @@ int main(int argc, char** argv)
     cout << "optimizaiton time cost in (building system/optimization): " << t1 << "/"
          << timer.count() << "ms. " << endl;
 
+#ifdef ONLY_EDGEXYZ
+    // 如果只有EdgeXYZ, 则在优化结束后添加SE2边用于可视化轨迹效果
+    for (int i = skip + delta; i < N; ++i) {
+        if ((i - skip) % delta != 0)
+            continue;
+        const int vertexIDTo = (i - skip) / delta;
+        const auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
+        const auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
+        g2o::EdgeSE2* e = new g2o::EdgeSE2();
+        e->setVertex(0, v1);
+        e->setVertex(1, v2);
+        optimizer.addEdge(e);
+    }
+#endif
+
     optimizer.save("/home/vance/output/test_BA_after.g2o");
-    writeToPCDFile("/home/vance/output/test_BA_after.pcd", &optimizer);
+    writeToPlyFileAppend(&optimizer);
 
     return 0;
 }

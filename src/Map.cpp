@@ -843,13 +843,13 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
             const double zc_inv = 1. / zc;
             const double zc_inv2 = zc_inv * zc_inv;
             const float fx = Config::fx;
-            Matrix23d J_pi;
+            Matrix23D J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
             const Matrix3d Rcw = toMatrix3d(pKFj->getPose().rowRange(0, 3).colRange(0, 3));
             const Se2 Twb = pKFj->getTwb();
             const Vector3d pi(Twb.x, Twb.y, 0);
 
-            const Matrix23d J_pi_Rcw = J_pi * Rcw;
+            const Matrix23D J_pi_Rcw = J_pi * Rcw;
 
             const Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
             const Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);
@@ -985,13 +985,13 @@ void Map::loadLocalGraph_test(SlamOptimizer& optimizer)
             const double zc_inv = 1. / zc;
             const double zc_inv2 = zc_inv * zc_inv;
             const float fx = Config::fx;
-            Matrix23d J_pi;
+            Matrix23D J_pi;
             J_pi << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
             const Matrix3d Rcw = toMatrix3d(pKFj->getPose().rowRange(0, 3).colRange(0, 3));
             const Se2 Twb = pKFj->getTwb();
             const Vector3d pi(Twb.x, Twb.y, 0);
 
-            const Matrix23d J_pi_Rcw = J_pi * Rcw;
+            const Matrix23D J_pi_Rcw = J_pi * Rcw;
 
             const Matrix2d J_rotxy = (J_pi_Rcw * skew(lw - pi)).block<2, 2>(0, 0);
             const Matrix<double, 2, 1> J_z = -J_pi_Rcw.block<2, 1>(0, 2);

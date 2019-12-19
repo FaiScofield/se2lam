@@ -57,13 +57,22 @@ target_link_libraries(test_SingleThreadTracking
 #    ${LINK_LIBS}
 #)
 
-add_executable(test_BA
-    test_BA.cpp
+add_executable(test_BA_SE2
+    test_BA_SE2.cpp
     test_functions.hpp
     test_optimizer.hpp
 )
-target_link_libraries(test_BA
+target_link_libraries(test_BA_SE2
     se2lam
-#    ${LINK_LIBS}
     ${G2O_LIBS}
 )
+
+#add_executable(test_BA_SE3
+#    test_BA_SE3.cpp
+#    test_functions.hpp
+#    test_optimizer.hpp
+#)
+#target_link_libraries(test_BA_SE3
+#    se2lam
+#    ${G2O_LIBS}
+#)

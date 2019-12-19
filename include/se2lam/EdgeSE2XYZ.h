@@ -19,8 +19,8 @@
 namespace g2o
 {
 
-typedef Eigen::Matrix<double, 2, 3> Matrix23d;
-typedef Eigen::Matrix<double, 3, 2> Matrix32d;
+typedef Eigen::Matrix<double, 2, 3> Matrix23D;
+typedef Eigen::Matrix<double, 3, 2> Matrix32D;
 
 Matrix3D d_inv_d_se2(const SE2& _se2);
 
@@ -46,7 +46,8 @@ public:
     void computeError();
 
 #ifdef CUSTOMIZE_JACOBIAN_SE2XYZ
-//    virtual void linearizeOplus();
+    //! 如果不提供解析雅克比, g2o会自动使用数值雅克比, 但会降低计算速度
+    virtual void linearizeOplus();
 #endif
 
     inline void setCameraParameter(CameraParameters* _cam) { cam = _cam; }
@@ -80,7 +81,7 @@ public:
 
     void computeError();
 
-//    virtual void linearizeOplus();
+    virtual void linearizeOplus();
 
     bool read(std::istream& is);
     bool write(std::ostream& os) const;

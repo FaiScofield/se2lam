@@ -14,6 +14,11 @@
 namespace se2lam
 {
 
+#define SE2_INFO(x)  std::cerr << "\033[0;0m[INFO ] " << x << "\033[0;0m" << std::endl;
+#define SE2_DEBUG(x) std::cerr << "\033[0;0m[DEBUG] " << x << "\033[0;0m" << std::endl;
+#define SE2_WARN(x)  std::cerr << "\033[0;33m[WARN ] " << x << "\033[0;0m" << std::endl;
+#define SE2_ERROR(x) std::cerr << "\033[1;31m[ERROR] " << x << "\033[0;0m" << std::endl;
+
 // -pi ~ +pi
 inline double normalizeAngle(double theta)
 {

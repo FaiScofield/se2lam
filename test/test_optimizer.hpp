@@ -36,9 +36,10 @@
 
 using std::cout;
 using std::endl;
+
 typedef Eigen::Matrix<double, 2, 3> Matrix23d;
 typedef Eigen::Matrix<double, 3, 2> Matrix32d;
-
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
 
 g2o::SE3Quat SE2ToSE3_(const g2o::SE2& _se2)
 {
@@ -49,13 +50,31 @@ g2o::SE3Quat SE2ToSE3_(const g2o::SE2& _se2)
     return ret;
 }
 
+
 class VertexSE2InSE3 : public g2o::VertexSE3Expmap
 {
 public:
     VertexSE2InSE3() {}
+
+    virtual void setToOriginImpl() { _estimate = g2o::SE3Quat(); }
+
+    virtual void setEstimate(const g2o::SE2& se2)
+    {
+        Vector6d v;
+        v << se2[0], se2[1], 0., 0., 0., se2[2];
+        _estimate = g2o::SE3Quat::exp(v);
+    }
+
+    virtual void setEstimate(const g2o::SE3Quat& se3) { _estimate = se3; }
+
+    virtual void oplusImpl(const double* update_)
+    {
+        Eigen::Map<const Vector6d> update(update_);
+        setEstimate(g2o::SE3Quat::exp(update) * estimate());
+    }
 };
 
-
+//! 完成使命
 class EdgeSE2XYZCustom
     : public g2o::BaseBinaryEdge<2, g2o::Vector2D, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
 {
@@ -105,8 +124,9 @@ public:
 
     virtual void linearizeOplus()
     {
-        g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
-        g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
+        const g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
+        const g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
+
 
         const Eigen::Vector3d vwb = v1->estimate().toVector();
         const Eigen::Vector3d pi(vwb[0], vwb[1], 0);
@@ -128,33 +148,38 @@ public:
         de_dlc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;
         J_v2 = de_dlc * Rcw;
 
-        J_v1.block<2, 2>(0, 0) = -(de_dlc * Tcb.rotation().toRotationMatrix()).block<2, 2>(0, 0);
-        J_v1.block<2, 1>(0, 2) = (J_v2 * g2o::skew(lw - pi)).block<2, 1>(0, 2);
+        //! 这里是把平移扰动加在SE2上的求导结果, 不适用.
+        // J_v1.block<2, 2>(0, 0) = -(de_dlc * Tcb.rotation().toRotationMatrix()).block<2, 2>(0, 0);
+        // J_v1.block<2, 1>(0, 2) = J_v2 * g2o::skew(lw - pi).block<3, 1>(0, 2);
 
+        J_v1.block<2, 2>(0, 0) = -J_v2.block<2, 2>(0, 0);
+        J_v1.block<2, 1>(0, 2) = (J_v2 * g2o::skew(lw - pi)).block<2, 1>(0, 2);
         _jacobianOplusXi = J_v1;
         _jacobianOplusXj = J_v2;
 
         /*
         {  //! ------------- check jacobians -----------------
+            se2lam::WorkTimer timer2;
             // 数值法求解雅克比, 看结果是否跟自己解析写的一样
             const double eps = 1e-6;
             const double eps1[3] = {eps, 0, 0};
             const double eps2[3] = {0, eps, 0};
             const double eps3[3] = {0, 0, eps};
-            cout << "解析 Jacobian Xi = " << endl << _jacobianOplusXi << endl;
+            cout << "EdgeSE2XYZCustom 解析雅克比 Jv1 = " << endl << _jacobianOplusXi << endl;
             Matrix23d J1, J2;
             for (int i = 0; i < 3; ++i) {
                 const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
-                g2o::SE3Quat Tbw_eps =
-                    SE2ToSE3_(v1->estimate() * g2o::SE2(epsi[0], epsi[1], epsi[2])).inverse();
-                g2o::SE3Quat Tcw_eps = Tcb * Tbw_eps;
-                Eigen::Vector3d lc_eps1 = Tcw_eps.map(v2->estimate());
-                Eigen::Vector2d Ji = (cam->cam_map(lc_eps1) - cam->cam_map(lc)) / eps;
+                const g2o::SE2 pose = v1->estimate();  //! 注意扰动要直接加在SE3中的平移上,
+        不能加在SE2上
+                const g2o::SE2 pose_eps(pose[0] + epsi[0], pose[1] + epsi[1], pose[2] + epsi[2]);
+                const g2o::SE3Quat Tcw_eps = Tcb * SE2ToSE3_(pose_eps.inverse());
+                const Eigen::Vector3d lc_eps1 = Tcw_eps.map(v2->estimate());
+                const Eigen::Vector2d Ji = (cam->cam_map(lc_eps1) - cam->cam_map(lc)) / eps;
                 J1.block<2, 1>(0, i) = Ji;
             }
-            cout << "数值 Jacobian Xi = " << endl << J1 << endl;
+            cout << "EdgeSE2XYZCustom 数值雅克比 Jv1 = " << endl << J1 << endl;
 
-            cout << "解析 Jacobian Xj = " << endl << _jacobianOplusXj << endl;
+            cout << "EdgeSE2XYZCustom 解析雅克比 Jv2 = " << endl << _jacobianOplusXj << endl;
             for (int i = 0; i < 3; ++i) {
                 const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
                 const Eigen::Vector3d lw_eps = lw + Eigen::Vector3d(epsi[0], epsi[1], epsi[2]);
@@ -162,7 +187,9 @@ public:
                 Eigen::Vector2d Ji = (cam->cam_map(lc_eps2) - cam->cam_map(lc)) / eps;
                 J2.block<2, 1>(0, i) = Ji;
             }
-            cout << "数值 Jacobian Xj = " << endl << J2 << endl;
+            cout << "EdgeSE2XYZCustom 数值雅克比 Jv2 = " << endl << J2 << endl;
+            double t2 = timer2.count();
+            cout << "EdgeSE2XYZCustom 雅克比求解时间: 解析/数值 = " << t1 << "/" << t2 << endl;
         }*/
     }
 
@@ -180,5 +207,98 @@ private:
 
     g2o::CameraParameters* cam;
 };
+
+class EdgeSE2Custom : public g2o::EdgeSE2
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+
+    EdgeSE2Custom() {}
+
+    bool read(std::istream& is)
+    {
+        g2o::Vector3D p;
+        is >> p[0] >> p[1] >> p[2];
+        setMeasurement(g2o::SE2(p));
+        _inverseMeasurement = measurement().inverse();
+        for (int i = 0; i < 3; ++i)
+            for (int j = i; j < 3; ++j) {
+                is >> information()(i, j);
+                if (i != j)
+                    information()(j, i) = information()(i, j);
+            }
+        return true;
+    }
+
+    bool write(std::ostream& os) const
+    {
+        g2o::Vector3D p = measurement().toVector();
+        os << p.x() << " " << p.y() << " " << p.z();
+        for (int i = 0; i < 3; ++i)
+            for (int j = i; j < 3; ++j)
+                os << " " << information()(i, j);
+        return os.good();
+    }
+
+    virtual void linearizeOplus()
+    {
+        const g2o::VertexSE2* vi = static_cast<const g2o::VertexSE2*>(_vertices[0]);
+        const g2o::VertexSE2* vj = static_cast<const g2o::VertexSE2*>(_vertices[1]);
+        const g2o::Matrix2D Ri = vi->estimate().rotation().toRotationMatrix();
+        const g2o::Vector2D ti = vi->estimate().translation();
+        const g2o::Vector2D tj = vj->estimate().translation();
+        const g2o::Vector2D dt = tj - ti;
+        const g2o::Vector2D dt_x(-dt[1], dt[0]);
+
+        _jacobianOplusXi.setZero();
+        _jacobianOplusXi.block<2, 2>(0, 0) = -Ri.transpose();
+        _jacobianOplusXi.block<2, 1>(0, 2) = -Ri.transpose() * dt_x;
+        _jacobianOplusXi(2, 2) = -1;
+
+        _jacobianOplusXj.setIdentity();
+        _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
+
+        g2o::Matrix3D Rm = g2o::Matrix3D::Identity();
+        Rm.block<2, 2>(0, 0) = _measurement.rotation().toRotationMatrix();
+        _jacobianOplusXi = Rm.transpose() * _jacobianOplusXi;
+        _jacobianOplusXj = Rm.transpose() * _jacobianOplusXj;
+
+        //? 这里数值法的结果有误
+        {  //! ------------- check jacobians -----------------
+            // 数值法求解雅克比, 看结果是否跟自己解析写的一样
+            const double eps = 1e-6;
+            const double eps1[3] = {eps, 0, 0};
+            const double eps2[3] = {0, eps, 0};
+            const double eps3[3] = {0, 0, eps};
+            cout << "EdgeSE2Custom Jacobian 解析法 Xi = " << endl << _jacobianOplusXi << endl;
+            g2o::Matrix3D J1, J2;
+            for (int i = 0; i < 3; ++i) {
+                const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
+                g2o::SE2 vi_eps(vi->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
+                //g2o::SE2 vi_eps(vi->estimate() * g2o::SE2(epsi[0], epsi[1], epsi[2]));
+                g2o::SE2 delta_eps = _measurement.inverse() * (vi_eps.inverse() * vj->estimate());
+                g2o::Vector3D Ji = (delta_eps.toVector() - _error) / eps;
+                //g2o::Vector3D Ji = (g2o::SE2(_error).inverse() * delta_eps).toVector() / eps;
+                J1.block<3, 1>(0, i) = Ji;
+            }
+            cout << "EdgeSE2Custom Jacobian 数值法 Xi = " << endl << J1 << endl;
+
+            cout << "EdgeSE2Custom Jacobian 解析法 Xj = " << endl << _jacobianOplusXj << endl;
+            for (int j = 0; j < 3; ++j) {
+                const double epsi[3] = {eps1[j], eps2[j], eps3[j]};
+                g2o::SE2 vj_eps(vj->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
+                //g2o::SE2 vj_eps(vj->estimate() * g2o::SE2(epsi[0], epsi[1], epsi[2]));
+                g2o::SE2 delta_eps = _measurement.inverse() * (vi->estimate().inverse() * vj_eps);
+                g2o::Vector3D Jj = (delta_eps.toVector() - _error) / eps;
+                //g2o::Vector3D Jj = (g2o::SE2(_error).inverse() * delta_eps).toVector() / eps;
+                J2.block<3, 1>(0, j) = Jj;
+            }
+            cout << "EdgeSE2Custom Jacobian 数值法 Xj = " << endl << J2 << endl;
+        }
+
+    }
+};
+
+G2O_REGISTER_TYPE(EDGE_SE2, EdgeSE2Custom);
 
 #endif  // TEST_OPTIMIZER_HPP
