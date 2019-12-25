@@ -68,7 +68,7 @@ public:
     void updateLocalGraph(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateLocalGraph_new(int maxLevel = 3, int maxN = 20, float searchRadius = 5.f);
     void updateCovisibility(const PtrKeyFrame& pNewKF);
-    void addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs,
+    size_t addLocalGraphThroughKdtree(std::set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs,
                                     int maxN = 10, float searchRadius = 5.f);
     int pruneRedundantKF();
     int removeLocalOutlierMP(SlamOptimizer& optimizer);

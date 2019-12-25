@@ -168,11 +168,7 @@ void TrackKlt::createFrameFirstKlt(const Mat& img, const Se2& odo)
     // 创建当前帧
     if (mvForwPts.size() > 200) {
         vector<KeyPoint> vKPs;
-        vKPs.resize(mvForwPts.size());
-        for (int i = 0, iend = mvForwPts.size(); i < iend; ++i) {
-            vKPs[i].pt = mvForwPts[i];
-            vKPs[i].octave = 0;
-        }
+        KeyPoint::convert(mvForwPts, vKPs);
         mCurrentFrame = Frame(mForwImg, odo, vKPs, mpORBextractor);
 
         cout << "========================================================" << endl;
@@ -446,7 +442,7 @@ void TrackKlt::updateFramePose()
     mCurrentFrame.setPose(Tc2c1 * Tc1w);
 
     // preintegration 预积分
-    Eigen::Map<Vector3d> meas(preSE2.meas);
+    Eigen::Vector3d& meas = preSE2.meas;
     Se2 odok = mCurrentFrame.odom - mLastOdom;
     Vector2d odork(odok.x, odok.y);
     Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
@@ -457,7 +453,7 @@ void TrackKlt::updateFramePose()
     Matrix3d Bk = Matrix3d::Identity();
     Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]);
     Bk.block<2, 2>(0, 0) = Phi_ik;
-    Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
+    Eigen::Matrix3d& Sigmak = preSE2.cov;
     Matrix3d Sigma_vk = Matrix3d::Identity();
     Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
     Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
@@ -472,10 +468,8 @@ void TrackKlt::resetLocalTrack()
     mLocalMPs = mpReferenceKF->getObservations(false, false);
     mnGoodPrl = 0;
 
-    for (int i = 0; i < 3; ++i)
-        preSE2.meas[i] = 0;
-    for (int i = 0; i < 9; ++i)
-        preSE2.cov[i] = 0;
+    preSE2.meas.setZero();
+    preSE2.cov.setZero();
 
     mAffineMatrix = Mat::eye(3, 2, CV_64FC1);
     mHomograpy = Mat::eye(3, 3, CV_64FC1);

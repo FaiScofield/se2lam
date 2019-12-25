@@ -133,18 +133,18 @@ void initOptimizer(SlamOptimizer& opt, bool verbose = false);
 CamPara* addCamPara(SlamOptimizer& opt, const cv::Mat& K, int id);
 
 // Camera Pose Vertex in SE3
-void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bool fixed = false);
+g2o::VertexSE3Expmap* addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bool fixed = false);
 
 // Landmark Pose Vertex in R^3
-void addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal = true,
+g2o::VertexSBAPointXYZ* addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal = true,
                      bool fixed = false);
 
 // Robot Pose Vertex in SE2
 g2o::VertexSE2* addVertexSE2(SlamOptimizer& opt, const g2o::SE2& pose, int id, bool fixed = false);
 
-void addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed = false);
+g2o::VertexSE3* addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed = false);
 
-void addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal = true);
+g2o::VertexPointXYZ* addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal = true);
 
 g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose,
                                                   int id, const cv::Mat& extPara,
@@ -154,7 +154,7 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
 EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose,
                                                     int vId, const cv::Mat& extPara);
 
-void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, int id1,
+g2o::EdgeSE3Expmap* addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id0, int id1,
                       const g2o::Matrix6d& info);
 
 g2o::EdgeProjectXYZ2UV* addEdgeXYZ2UV(SlamOptimizer& opt, const Eigen::Vector2d& measure, int id0,

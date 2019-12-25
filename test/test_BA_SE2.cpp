@@ -189,7 +189,7 @@ int main(int argc, char** argv)
     for (int i = skip; i < N; ++i) {
         // update preInfo
         if (i != skip) {
-            Eigen::Map<Eigen::Vector3d> meas(preInfo.meas);
+            Eigen::Vector3d& meas = preInfo.meas;
             g2o::SE2 odok = vOdomData[i - 1].inverse() * vOdomData[i];
             Eigen::Vector2d odork = odok.translation();
             Eigen::Matrix2d Phi_ik = Eigen::Rotation2Dd(meas[2]).toRotationMatrix();
@@ -200,7 +200,7 @@ int main(int argc, char** argv)
             Eigen::Matrix3d Bk = Eigen::Matrix3d::Identity();
             Ak.block<2, 1>(0, 2) = Phi_ik * Eigen::Vector2d(-odork[1], odork[0]);
             Bk.block<2, 2>(0, 0) = Phi_ik;
-            Eigen::Map<Eigen::Matrix3d, Eigen::RowMajor> Sigmak(preInfo.cov);
+            Eigen::Matrix3d& Sigmak = preInfo.cov;
             Eigen::Matrix3d Sigma_vk = Eigen::Matrix3d::Identity();
             Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
             Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
@@ -223,10 +223,8 @@ int main(int argc, char** argv)
 
             // reset preInfo
             vPreInfos.push_back(preInfo);  // 有效值从1开始
-            for (size_t k = 0; k < 3; k++)
-                preInfo.meas[k] = 0;
-            for (size_t k = 0; k < 9; k++)
-                preInfo.cov[k] = 0;
+            preInfo.meas.setZero();
+            preInfo.cov.setZero();
         }
     }
 
@@ -239,9 +237,9 @@ int main(int argc, char** argv)
         const auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
         const auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
 
-        double* m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
+        Eigen::Vector3d& m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
         const g2o::SE2 meas(m[0], m[1], m[2]);
-        Eigen::Map<Eigen::Matrix3d, Eigen::RowMajor> info(vPreInfos[vertexIDTo].cov);
+        Eigen::Matrix3d& info = vPreInfos[vertexIDTo].cov;
         // bool isSymmetric = info.transpose() == info;
         // if (!isSymmetric) {
         //     cerr << "非对称信息矩阵: " << endl << info << endl;
@@ -250,7 +248,7 @@ int main(int argc, char** argv)
 #ifdef USE_PRESE2
         // EdgePreSE2
         g2o::PreEdgeSE2* e = new g2o::PreEdgeSE2();
-        e->setMeasurement(g2o::Vector3D(m));
+        e->setMeasurement(m);
 #else
         // Edge SE2
         g2o::EdgeSE2* e = new g2o::EdgeSE2();

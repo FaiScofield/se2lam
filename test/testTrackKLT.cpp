@@ -443,24 +443,6 @@ public:
         }
     }
 
-    void getRotatedPoints(const vector<Point2f>& srcPoints, vector<Point2f>& dstPoints,
-                          const Point& center, double angle)
-    {
-        dstPoints.resize(srcPoints.size());
-
-        double row = static_cast<double>(240);
-        for (size_t i = 0, iend = srcPoints.size(); i < iend; i++) {
-            double x1 = srcPoints[i].x;
-            double y1 = row - srcPoints[i].y;
-            double x2 = center.x;
-            double y2 = row - center.y;
-            double x = cvRound((x1 - x2) * cos(angle) - (y1 - y2) * sin(angle) + x2);
-            double y = cvRound((x1 - x2) * sin(angle) + (y1 - y2) * cos(angle) + y2);
-            y = row - y;
-
-            dstPoints[i] = Point2f(x, y);
-        }
-    }
 
     bool inBorder(const Point2f& pt)
     {
@@ -476,32 +458,6 @@ public:
     }
 
     void reduceVector(const vector<uchar>& status)
-    {
-        assert(ptsCurr.size() == status.size());
-        assert(ptsPrev.size() == status.size());
-        assert(ptsForw.size() == status.size());
-
-        size_t j = 0;
-        for (size_t i = 0, iend = status.size(); i < iend; i++) {
-            if (status[i]) {
-                ptsPrev[j] = ptsPrev[i];
-                ptsCurr[j] = ptsCurr[i];
-                ptsForw[j] = ptsForw[i];
-                idFirstAdd[j] = idFirstAdd[i];
-                idxToFirstAdd[j] = idxToFirstAdd[i];
-                trackCount[j] = trackCount[i];
-                j++;
-            }
-        }
-        ptsPrev.resize(j);
-        ptsCurr.resize(j);
-        ptsForw.resize(j);
-        idFirstAdd.resize(j);
-        idxToFirstAdd.resize(j);
-        trackCount.resize(j);
-    }
-
-    void reduceVectorCell(const vector<uchar>& status)
     {
         assert(ptsCurr.size() == status.size());
         assert(ptsPrev.size() == status.size());
@@ -537,10 +493,7 @@ public:
             vector<unsigned char> inliersMask(ptsForw.size());
             findHomography(ptsCurr, ptsForw, RANSAC, 3.0, inliersMask);
             // AffineMatrix = estimateAffine2D(ptsCurr, ptsForw, inliersMask, RANSAC, 2.0);
-            if (cell)
-                reduceVectorCell(inliersMask);
-            else
-                reduceVector(inliersMask);
+            reduceVectorCell(inliersMask);
         }
     }
 
@@ -621,43 +574,6 @@ public:
             pm.ptInForw = ptsForw[i];
             pm.ptInCurr = ptsCurr[i];
             pm.ptInPrev = ptsPrev[i];
-            vCountPtsId.emplace_back(trackCount[i], pm);
-        }
-        sort(vCountPtsId.begin(), vCountPtsId.end(),
-             [](const pair<int, PairMask>& a, const pair<int, PairMask>& b) {
-                 return a.first > b.first;
-             });
-
-        ptsCurr.clear();
-        ptsForw.clear();
-        ptsPrev.clear();
-        trackCount.clear();
-        idFirstAdd.clear();
-        idxToFirstAdd.clear();
-        for (const auto& it : vCountPtsId) {
-            if (mask.at<uchar>(it.second.ptInForw) == 255) {
-                trackCount.push_back(it.first);
-                ptsForw.push_back(it.second.ptInForw);
-                ptsCurr.push_back(it.second.ptInCurr);
-                ptsPrev.push_back(it.second.ptInPrev);
-                idFirstAdd.push_back(it.second.firstAdd);
-                idxToFirstAdd.push_back(it.second.idxToAdd);
-                cv::circle(mask, it.second.ptInForw, maskRadius, Scalar(0), -1);  // 标记掩模
-            }
-        }
-    }
-
-    void setMaskCell(int maskRadius = 0)
-    {
-        mask = Mat(imgCurr.rows, imgCurr.cols, CV_8UC1, Scalar(255));
-        PairMask pm;
-        vector<pair<int, PairMask>> vCountPtsId;
-        for (size_t i = 0, iend = ptsForw.size(); i < iend; ++i) {
-            pm.firstAdd = idFirstAdd[i];
-            pm.idxToAdd = idxToFirstAdd[i];
-            pm.ptInForw = ptsForw[i];
-            pm.ptInCurr = ptsCurr[i];
-            pm.ptInPrev = ptsPrev[i];
             pm.cellLabel = cellLable[i];
             vCountPtsId.push_back(make_pair(trackCount[i], pm));
         }
@@ -698,41 +614,6 @@ public:
                 numInCell[it.second.cellLabel]--;
             }
         }
-    }
-
-    void drawNewAddPointsInMatch(Mat& image)
-    {
-        Point2f offset(imgPrev.cols, 0);
-        for (size_t i = 0, iend = ptsNew.size(); i < iend; ++i)
-            circle(image, ptsNew[i] + offset, 3, Scalar(255, 0, 255));  // 新点紫色
-    }
-
-    Mat drawMachesPointsToLastFrame(const string& title = "")
-    {
-        Mat imgCur, imgPre, imgMatchLast;
-        cvtColor(imgPrev, imgPre, CV_GRAY2BGR);
-        cvtColor(imgForw, imgCur, CV_GRAY2BGR);
-        hconcat(imgPre, imgCur, imgMatchLast);
-
-        Point2f offset(imgPrev.cols, 0);
-        size_t N = ptsForw.size();
-        for (size_t i = 0; i < N; ++i) {
-            if (idFirstAdd[i] == KFRef->id) {  // 从参考帧追下来的点标记黄色实心
-                circle(imgMatchLast, ptsPrev[i], 3, Scalar(0, 255, 255), -1);
-                circle(imgMatchLast, ptsForw[i] + offset, 3, Scalar(0, 255, 255), -1);
-                line(imgMatchLast, ptsPrev[i], ptsForw[i] + offset, Scalar(220, 248, 255));
-            } else {  // 和上一帧的匹配点标记绿色
-                circle(imgMatchLast, ptsPrev[i], 3, Scalar(0, 255, 0));
-                circle(imgMatchLast, ptsForw[i] + offset, 3, Scalar(0, 255, 0));
-                line(imgMatchLast, ptsPrev[i], ptsForw[i] + offset, Scalar(170, 150, 50));
-            }
-        }
-
-        string str = title + ": F-F: " + to_string(frameLast.id) + "-" + to_string(idCurr) +
-                     ", M:  " + to_string(N);
-        putText(imgMatchLast, str, Point(15, 20), 1, 1, Scalar(0, 0, 255), 2);
-
-        return imgMatchLast.clone();
     }
 
     Mat drawMachesPointsToRefFrame(const string& title = "")
@@ -814,24 +695,6 @@ public:
         return imgMatchRef.clone();
     }
 
-    bool needNewKF(int matchedPtsWithRef)
-    {
-        //! 内点数太少要生成新的参考帧
-        if (matchedPtsWithRef <= 0.05 * Config::MaxFtrNumber)
-            return true;
-//        if (idCurr % 30 == 0)
-//            return true;
-        return false;
-    }
-
-    void resetKltData()
-    {
-        // 当下一帧图像到来时，当前帧数据就成为了上一帧发布的数据
-        imgCurr = imgForw.clone();  // 需要深拷贝
-        ptsCurr = ptsForw;
-        frameLast = frameCurr;
-    }
-
     size_t countCellPts()
     {
         size_t num = 0;
@@ -872,6 +735,10 @@ public:
     }
 
 };
+
+
+
+
 
 
 int main(int argc, char* argv[])

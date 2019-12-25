@@ -1,5 +1,6 @@
-#ifndef TESTTRACK_HPP
-#define TESTTRACK_HPP
+#ifndef TESTTRACKKLT_H
+#define TESTTRACKKLT_H
+
 
 #include "Config.h"
 #include "Frame.h"
@@ -11,6 +12,8 @@
 
 namespace se2lam
 {
+
+#define USE_KLT      1
 
 using namespace cv;
 using namespace std;
@@ -45,14 +48,38 @@ public:
     cvu::eTrackingState mLastState;
     std::string mImageText;
 
+    // klt
+    int mImageRows, mImageCols;
+    int mCellWidth, mCellHeight;      // 分块尺寸
+    int mnCellsW, mnCellsH, mnCells;  // 分块数
+    int mnMaxNumPtsInCell;            // 与分块检点的最大点数
+    int mnMaskRadius;                 // mask建立时的特征点周边半径
+
+    cv::Mat mMask;                    // 图像掩码
+    cv::Mat mPrevImg, mCurrImg, mForwImg;
+    std::vector<cv::Point2f> mvPrevPts, mvCurrPts, mvForwPts;  // 对应的图像特征点
+    std::vector<cv::Point2f> mvNewPts;                         // 每一帧中新提取的特征点
+
+    // 以下变量针对当前帧(Forw)
+    std::vector<size_t> mvIdxToFirstAdded;      // 与关键帧匹配点的对应索引;
+    std::vector<int> mvCellLabel;               // 每个KP所属的分块索引号
+    std::vector<int> mvNumPtsInCell;            // 每个分块当前检测到的KP数
+
     // debug
     unsigned long mLastRefKFid = 0;
     double trackTimeTatal = 0;
 
 private:
-    void processFirstFrame();
-    bool trackReferenceKF();
-    bool trackLocalMap();
+    void processFirstFrame(const cv::Mat& img, const Se2& odo, double time);
+    bool trackReferenceKF(const cv::Mat& img, const Se2& odo, double time);
+//    bool trackLocalMap(const cv::Mat& img, const Se2& odo, double time);
+//    bool doRelocalization(const cv::Mat& img, const Se2& odo, double time);
+    void predictPointsAndImage(const Se2& dOdo);
+    void detectFeaturePointsCell(const cv::Mat& image, const cv::Mat& mask);
+    bool inBorder(const cv::Point2f& pt);
+    void segImageToCells(const cv::Mat& image, std::vector<cv::Mat>& cellImgs);
+    void updateAffineMatix();
+
     cv::Mat poseOptimize(Frame* pFrame);
 
     void updateFramePoseFromRef();
@@ -82,6 +109,9 @@ private:
     void localBA();
     void loadLocalGraph(SlamOptimizer& optimizer);
 
+    // for debug
+    void localBA_test();
+
     Map* mpMap;
     MapPublish* mpMapPublisher;
     ORBextractor* mpORBextractor;  // 这三个有new
@@ -110,7 +140,8 @@ private:
 
     std::mutex mMutexForPub;
 };
-
 }
 
-#endif  // TESTTRACK_HPP
+
+
+#endif // TESTTRACKKLT_H

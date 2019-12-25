@@ -132,8 +132,8 @@ public:
     static float OdoUncertainX, OdoUncertainY, OdoUncertainTheta;
 
     // plane motion
-    static float PlaneMotionInfoZ;
-    static float PlaneMotionInfoXrot;
+    static float PlaneMotionInfoZ;     // 1
+    static float PlaneMotionInfoXrot;  // 1e6
     static float PlaneMotionInfoYrot;
 
     // local graph

@@ -62,14 +62,14 @@ public:
 
     //! 共视关系的维护函数
     std::vector<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
-    std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
-    std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
-    std::map<std::shared_ptr<KeyFrame>, int> getAllCovisibleKFsAndWeights();
-    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
+    // std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
+    // std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
+    // std::map<std::shared_ptr<KeyFrame>, int> getAllCovisibleKFsAndWeights();
+    // void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
     void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
     void eraseCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
-    void sortCovisibleKFs();
-    void updateCovisibleGraph();
+    // void sortCovisibleKFs();
+    // void updateCovisibleGraph();
     size_t countCovisibleKFs();
 
     //! MP观测的维护函数
@@ -109,10 +109,10 @@ public:
 protected:
     Map* mpMap;
 
-    // std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
-    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
-    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
-    std::vector<int> mvOrderedWeights;
+    std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
+//    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
+//    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
+//    std::vector<int> mvOrderedWeights;
     std::mutex mMutexCovis;
 
 //    std::mutex mMutexObs;

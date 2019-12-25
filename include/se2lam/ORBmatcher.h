@@ -51,7 +51,6 @@ public:
     // Search matches between MapPoints in a KeyFrame and ORB in a Frame.
     // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
     // Used in Relocalisation and Loop Detection
-    int SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2, std::map<int, int>& mapIdxMatches12, bool bIfMPOnly);
     int SearchByBoW(Frame* F1, Frame* F2, std::map<int, int>& mapIdxMatches12, bool bIfMPOnly);
 
     // int SearchByProjection(Frame& CurrentFrame, KeyFrame& LastFrame, const float th = 7);

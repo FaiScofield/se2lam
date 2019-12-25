@@ -193,6 +193,7 @@ void MapStorage::saveKeyFrames()
 
         file << "Covisibilities"
              << "[";
+        /*
         map<PtrKeyFrame, int> vCosKFsWeight = pKF->getAllCovisibleKFsAndWeights();
         for (auto it = vCosKFsWeight.begin(), iend = vCosKFsWeight.end(); it != iend; ++it) {
             file << "{";
@@ -200,6 +201,13 @@ void MapStorage::saveKeyFrames()
             file << "CovisibleKFID" << static_cast<int>(it->first->mIdKF);
             file << "CovisibleMPCount" << it->second;
 
+            file << "}";
+        }
+        */
+        vector<PtrKeyFrame> vCosKFs = pKF->getAllCovisibleKFs();
+        for (auto it = vCosKFs.begin(), iend = vCosKFs.end(); it != iend; ++it) {
+            file << "{";
+            file << "CovisibleKFID" << static_cast<int>((*it)->mIdKF);
             file << "}";
         }
         file << "]";
@@ -447,7 +455,7 @@ void MapStorage::loadKeyFrames()
                 FileNode nodeCovis = *itCovisKF;
                 CovisibleRelationship cr;
                 nodeCovis["CovisibleKFID"] >> cr.thatKFid;
-                nodeCovis["CovisibleMPCount"] >> cr.covisbleCount;
+                //nodeCovis["CovisibleMPCount"] >> cr.covisbleCount;
                 cr.thisKFid = pKF->mIdKF;
                 vCovisRelation.push_back(cr);
             }
@@ -462,7 +470,7 @@ void MapStorage::loadKeyFrames()
               [](const PtrKeyFrame& lhs, const PtrKeyFrame& rhs) { return lhs->mIdKF < rhs->mIdKF; });
     for (const auto& cr : vCovisRelation) {
         PtrKeyFrame& pKF = mvKFs[cr.thisKFid];
-        pKF->addCovisibleKF(mvKFs[cr.thatKFid], cr.covisbleCount);
+        pKF->addCovisibleKF(mvKFs[cr.thatKFid]/*, cr.covisbleCount*/);
     }
 
     if (Config::NeedVisualization) {

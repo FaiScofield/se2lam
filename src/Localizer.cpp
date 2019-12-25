@@ -507,7 +507,7 @@ bool Localizer::verifyLoopClose(map<int, int>& mapMatchMP, map<int, int>& mapMat
     //! Match ORB KPs
     ORBmatcher matcher;
     bool bIfMatchMPOnly = false;
-    matcher.SearchByBoW(mpKFCurr, mpKFLoop, mapMatch, bIfMatchMPOnly);
+    matcher.SearchByBoW(static_cast<Frame*>(mpKFCurr.get()), static_cast<Frame*>(mpKFLoop.get()), mapMatch, bIfMatchMPOnly);
     mapMatchRaw = mapMatch;
 
     //! Remove Outliers: by RANSAC of Fundamental

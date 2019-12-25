@@ -27,8 +27,8 @@ typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 struct PreSE2 {
 public:
-    double meas[3];  // x, y, theta
-    double cov[9];  // 3*3, RowMajor
+    Eigen::Vector3d meas; // x, y, theta, measurement
+    Eigen::Matrix3d cov;  // 3*3, cov
 };
 
 

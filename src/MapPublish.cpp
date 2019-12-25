@@ -692,7 +692,7 @@ Mat MapPublish::drawCurrentFrameMatches()
 {
     locker lock(mMutexPub);
 
-    Mat imgCur, imgRef, imgWarp, imgOut, A21;
+    Mat imgCur, imgRef, imgWarp, imgOut, A12;
     if (mCurrentImage.channels() == 1)
         cvtColor(mCurrentImage, imgCur, CV_GRAY2BGR);
     else
@@ -707,9 +707,9 @@ Mat MapPublish::drawCurrentFrameMatches()
     if (!mvReferenceKPs.empty() && !imgRef.empty()) {
         drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
-        // 取逆得到A21
-        invertAffineTransform(mAffineMatrix, A21);
-        warpAffine(imgCur, imgWarp, A21, imgCur.size());
+        // 取逆得到A12
+        invertAffineTransform(mAffineMatrix, A12);
+        warpAffine(imgCur, imgWarp, A12, imgCur.size());
         hconcat(imgWarp, imgRef, imgOut);
 
         for (size_t i = 0, iend = mvMatchIdx.size(); i != iend; ++i) {
@@ -718,9 +718,9 @@ Mat MapPublish::drawCurrentFrameMatches()
             } else {
                 const Point2f& ptRef = mvReferenceKPs[i].pt;
                 const Point2f& ptCur = mvCurrentKPs[mvMatchIdx[i]].pt;
-                const Mat pt1 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
-                const Mat pt1W = A21 * pt1;
-                const Point2f ptL = Point2f(pt1W.at<double>(0), pt1W.at<double>(1));
+                const Mat pt2 = (Mat_<double>(3, 1) << ptCur.x, ptCur.y, 1);
+                const Mat pt2W = A12 * pt2;
+                const Point2f ptL = Point2f(pt2W.at<double>(0), pt2W.at<double>(1));
                 const Point2f ptR = ptRef + Point2f(imgRef.cols, 0);
 
                 if (mvMatchIdxGood[i] < 0) {  // 只有KP匹配对标绿色

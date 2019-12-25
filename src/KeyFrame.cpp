@@ -120,13 +120,14 @@ void KeyFrame::setNull()
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系前(%ld)引用计数 = %ld\n", mIdKF,
-            mCovisibleKFsWeight.size(), pThis.use_count());
-    for (auto it = mCovisibleKFsWeight.begin(), iend = mCovisibleKFsWeight.end(); it != iend; ++it) {
-        it->first->eraseCovisibleKF(pThis);
+            mspCovisibleKFs.size(), pThis.use_count());
+    for (auto it = mspCovisibleKFs.begin(), iend = mspCovisibleKFs.end(); it != iend; ++it) {
+        (*it)->eraseCovisibleKF(pThis);
     }
-    mCovisibleKFsWeight.clear();
-    mvpCovisibleKFsSorted.clear();
-    mvOrderedWeights.clear();
+//    mCovisibleKFsWeight.clear();
+//    mvpCovisibleKFsSorted.clear();
+//    mvOrderedWeights.clear();
+    mspCovisibleKFs.clear();
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     if (mpMap != nullptr) {
@@ -141,9 +142,10 @@ void KeyFrame::setNull()
 vector<shared_ptr<KeyFrame>> KeyFrame::getAllCovisibleKFs()
 {
     locker lock(mMutexCovis);
-    return mvpCovisibleKFsSorted;
+    // return mvpCovisibleKFsSorted;
+    return vector<shared_ptr<KeyFrame>>(mspCovisibleKFs.begin(), mspCovisibleKFs.end());
 }
-
+/*
 vector<shared_ptr<KeyFrame>> KeyFrame::getBestCovisibleKFs(size_t n)
 {
     locker lock(mMutexCovis);
@@ -181,10 +183,13 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
     }
     sortCovisibleKFs();
 }
-
+*/
 //! 没啥必要
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
+    locker lock(mMutexCovis);
+    mspCovisibleKFs.insert(pKF);
+/*
     vector<PtrMapPoint> vpMPs;
     {
         locker lockMPs(mMutexObs);
@@ -203,21 +208,23 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
             weight++;
     }
 
-//    if (weight == 0)
-//        return;
-
     addCovisibleKF(pKF, weight);
+*/
 }
 
 void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
+    locker lock(mMutexCovis);
+    mspCovisibleKFs.erase(pKF);
+    /*
     {
         locker lock(mMutexCovis);
         mCovisibleKFsWeight.erase(pKF);
     }
     sortCovisibleKFs();
+    */
 }
-
+/*
 void KeyFrame::sortCovisibleKFs()
 {
     locker lock(mMutexCovis);
@@ -237,6 +244,7 @@ void KeyFrame::sortCovisibleKFs()
     }
 }
 
+//! 没啥用. 本场景下KF之间共视关系并不会很好
 void KeyFrame::updateCovisibleGraph()
 {
     WorkTimer timer;
@@ -314,11 +322,12 @@ void KeyFrame::updateCovisibleGraph()
     printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超30%%), 共耗时%.2fms\n",
            id, mIdKF, vpMPs.size(), mKFadnW.size(), timer.count());
 }
+*/
 
 size_t KeyFrame::countCovisibleKFs()
 {
     locker lock(mMutexCovis);
-    return mCovisibleKFsWeight.size();
+    return mspCovisibleKFs.size();
 }
 
 

@@ -149,7 +149,7 @@ int main(int argc, char** argv)
         // printf("#%ld 匹配方式 matchByCV() 耗时%.2fms\n", frameCur.id, timer.count());
 
         timer.start();
-        nMatched2 = kpMatcher->SearchByBoW(KFRef, KFCur, matchIdxBow, false);
+        nMatched2 = kpMatcher->SearchByBoW(static_cast<Frame*>(KFRef.get()), static_cast<Frame*>(KFCur.get()), matchIdxBow, false);
         // printf("#%ld 匹配方式 SearchByBoW() 耗时%.2fms\n", frameCur.id, timer.count());
 
         timer.start();

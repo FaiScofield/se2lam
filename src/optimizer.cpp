@@ -103,15 +103,15 @@ void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eige
 }
 
 
-//! TODO 信息矩阵存在不对称的情况!
+
 EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
-                          CamPara* campara, const SE3Quat& _Tbc, const Matrix2D& info, double thHuber)
+                          CamPara* campara, const SE3Quat& Tbc, const Matrix2D& info, double thHuber)
 {
     EdgeSE2XYZ* e = new EdgeSE2XYZ;
-    e->vertices()[0] = opt.vertex(id0);
-    e->vertices()[1] = opt.vertex(id1);
+    e->vertices()[0] = opt.vertex(id0);  // KF id
+    e->vertices()[1] = opt.vertex(id1);  // MP id
     e->setCameraParameter(campara);
-    e->setExtParameter(_Tbc);
+    e->setExtParameter(Tbc);
     e->setMeasurement(meas);
     e->setInformation(info);
     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -124,8 +124,8 @@ EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int
 VertexSE2* addVertexSE2(SlamOptimizer& opt, const SE2& pose, int id, bool fixed)
 {
     VertexSE2* v = new VertexSE2;
-    v->setId(id);
     v->setEstimate(pose);
+    v->setId(id);
     v->setFixed(fixed);
     opt.addVertex(v);
     return v;
@@ -154,7 +154,7 @@ EdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, 
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(SE2(meas));  // meas = v1 - v0
-    e->setInformation(info * 1e9);
+    e->setInformation(info);
     opt.addEdge(e);
     return e;
 }
@@ -276,13 +276,11 @@ void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat& m)
     _measurement = m;  // 测量值Tcw
 }
 
+//! NOTE 0917改成和PPT上一致
 void EdgeSE3ExpmapPrior::linearizeOplus()
 {
-    //! NOTE 0917改成和PPT上一致
-//    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
-//    Vector6d err = (_measurement * v->estimate().inverse()).log();
-//    _jacobianOplusXi = -invJJl(-err);  // 右扰动的话还要再乘一个Adj(T)
-    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //?
+    _jacobianOplusXi = -invJJl(-_error);  // 右扰动的话还要再乘一个Adj(T)
+//    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //?
 }
 
 bool EdgeSE3ExpmapPrior::read(istream& is)
@@ -416,13 +414,15 @@ g2o::ParameterSE3Offset* addParaSE3Offset(SlamOptimizer& opt, const g2o::Isometr
  * @param id    KF id
  * @param fixed 要优化相机位姿, 这里是false
  */
-void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bool fixed)
+g2o::VertexSE3Expmap* addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bool fixed)
 {
     g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
     v->setEstimate(pose);
     v->setId(id);
     v->setFixed(fixed);
     opt.addVertex(v);
+
+    return v;
 }
 
 /** TODO pose好像不是由Twb得到的!
@@ -436,36 +436,6 @@ void addVertexSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& pose, int id, bo
 EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose,
                                                     int vId, const cv::Mat& extPara)
 {
-
-//#define USE_EULER
-
-#ifdef USE_EULER
-    const cv::Mat bTc = extPara;
-    const cv::Mat cTb = scv::inv(bTc);
-
-    cv::Mat Tcw = toCvMat(pose);
-    cv::Mat Tbw = bTc * Tcw;
-    g2o::Vector3D euler = g2o::internal::toEuler(toMatrix3d(Tbw.rowRange(0, 3).colRange(0, 3)));
-    float yaw = euler(2);
-
-    // Fix pitch and raw to zero, only yaw remains
-    cv::Mat Rbw = (cv::Mat_<float>(3, 3) << cos(yaw), -sin(yaw), 0, sin(yaw), cos(yaw), 0, 0, 0, 1);
-    Rbw.copyTo(Tbw.rowRange(0, 3).colRange(0, 3));
-    Tbw.at<float>(2, 3) = 0;  // Fix the height to zero
-
-    Tcw = cTb * Tbw;
-    //! Vector order: [rot, trans]
-    g2o::Matrix6d Info_bw = g2o::Matrix6d::Zero();
-    Info_bw(0, 0) = Config::PLANEMOTION_XROT_INFO;
-    Info_bw(1, 1) = Config::PLANEMOTION_YROT_INFO;
-    Info_bw(2, 2) = 1e-4;
-    Info_bw(3, 3) = 1e-4;
-    Info_bw(4, 4) = 1e-4;
-    Info_bw(5, 5) = Config::PLANEMOTION_Z_INFO;
-    g2o::Matrix6d J_bb_cc = toSE3Quat(bTc).adj();
-    g2o::Matrix6d Info_cw = J_bb_cc.transpose() * Info_bw * J_bb_cc;
-#else
-
     g2o::SE3Quat Tbc = toSE3Quat(extPara);
     g2o::SE3Quat Tbw = Tbc * pose;  // Tbc * Tcw
 
@@ -480,11 +450,12 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
     xyz_bw[2] = 0;
     Tbw.setTranslation(xyz_bw);
 
+    // measurement
     g2o::SE3Quat Tcw = Tbc.inverse() * Tbw;  // 扣去三个方向的变换后, 再转回到相机坐标系下
 
     //! Vector order: [rot, trans]
     // 确定信息矩阵，XY轴旋转和Z平移的值大, 表示这三个分量的值在优化过程中不应该出现大的变动.
-    // Info_bw已经平方了
+    // Info_bw 是信息矩阵
     g2o::Matrix6d Info_bw = g2o::Matrix6d::Zero();
     Info_bw(0, 0) = Config::PlaneMotionInfoXrot;  // 1e6
     Info_bw(1, 1) = Config::PlaneMotionInfoYrot;
@@ -493,8 +464,7 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
     Info_bw(4, 4) = 1e-4;
     Info_bw(5, 5) = Config::PlaneMotionInfoZ;  // 1
     g2o::Matrix6d J_bb_cc = Tbc.adj();
-    g2o::Matrix6d Info_cw = J_bb_cc.transpose() * Info_bw * J_bb_cc;
-#endif
+    g2o::Matrix6d Info_cw = J_bb_cc.transpose() * Info_bw * J_bb_cc; // 误差传递
 
     // Make sure the infor matrix is symmetric. 确保信息矩阵正定
     for (int i = 0; i < 6; ++i)
@@ -503,11 +473,7 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
 
     EdgeSE3ExpmapPrior* planeConstraint = new EdgeSE3ExpmapPrior();
     planeConstraint->setInformation(Info_cw);
-#ifdef USE_EULER
-    planeConstraint->setMeasurement(toSE3Quat(Tcw));
-#else
     planeConstraint->setMeasurement(Tcw);
-#endif
     planeConstraint->vertices()[0] = opt.vertex(vId);
     opt.addEdge(planeConstraint);
 
@@ -522,7 +488,7 @@ EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2
  * @param marginal  节点是否边缘化, default = true
  * @param fixed     节点是否固定, default = false
  */
-void addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal, bool fixed)
+g2o::VertexSBAPointXYZ* addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, bool marginal, bool fixed)
 {
     g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
     v->setEstimate(xyz);
@@ -530,17 +496,21 @@ void addVertexSBAXYZ(SlamOptimizer& opt, const Eigen::Vector3d& xyz, int id, boo
     v->setMarginalized(marginal);
     v->setFixed(fixed);
     opt.addVertex(v);
+
+    return v;
 }
 
 
 // 6d vector (x,y,z,qx,qy,qz) (note that we leave out the w part of the quaternion)
-void addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed)
+g2o::VertexSE3* addVertexSE3(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id, bool fixed)
 {
     g2o::VertexSE3* v = new g2o::VertexSE3();
     v->setEstimate(pose);
     v->setFixed(fixed);
     v->setId(id);
     opt.addVertex(v);
+
+    return v;
 }
 
 g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
@@ -619,7 +589,6 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
             Info_pose(i, j) = Info_t_cm_c.at<float>(i, j);
     g2o::Isometry3D Iso_w_c = toIsometry3D(T_w_c);
 
-
 #else
     g2o::SE3Quat Tbc = toSE3Quat(extPara);
     g2o::SE3Quat Twc = toSE3Quat(pose);
@@ -650,6 +619,7 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
     Isometry3D Iso_w_c = Twc;
 
 #endif
+
     g2o::EdgeSE3Prior* planeConstraint = new g2o::EdgeSE3Prior();
     planeConstraint->setInformation(Info_pose);
     planeConstraint->setMeasurement(Iso_w_c);
@@ -663,13 +633,15 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
 }
 
 // 地图点观测节点
-void addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal)
+g2o::VertexPointXYZ* addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal)
 {
     g2o::VertexPointXYZ* v = new g2o::VertexPointXYZ();
     v->setEstimate(xyz);
     v->setId(id);
     v->setMarginalized(marginal);
     opt.addVertex(v);
+
+    return v;
 }
 
 /**
@@ -682,7 +654,7 @@ void addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool mar
  * @param id1       T2的id
  * @param info      信息矩阵
  */
-void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id2, int id1, const g2o::Matrix6d& info)
+g2o::EdgeSE3Expmap* addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id2, int id1, const g2o::Matrix6d& info)
 {
     assert(verifyInfo(info));  // 保证信息矩阵是正定的!
 
@@ -701,6 +673,8 @@ void addEdgeSE3Expmap(SlamOptimizer& opt, const g2o::SE3Quat& measure, int id2, 
     // e->setInformation(infoNew);
     e->setInformation(info);  // 旋转平移顺序在计算info时应该已经调整好了
     opt.addEdge(e);
+
+    return e;
 }
 
 /**
@@ -867,6 +841,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
 
     const float delta = Config::ThHuber;
     const vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false, false);
+    assert(vAllMPs.size() == N);
     for (int i = 0; i < N; i++) {
         const PtrMapPoint& pMP = vAllMPs[i];
         if (!pMP || pMP->isNull())

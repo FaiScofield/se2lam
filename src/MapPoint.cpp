@@ -208,13 +208,13 @@ void MapPoint::setPos(const Point3f& pt3f)
 //{
 //    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
 //        PtrKeyFrame pKF = it->first;
-//        assert(pKF != nullptr);
-//        assert(!pKF->isNull());
+//        if (pKF == nullptr || pKF->isNull())
+//            eraseObservation(pKF);
 
-//        Mat Tcw = pKF->getPose();
+//        const Mat Tcw = pKF->getPose();
 //        Point3f posKF = cvu::se3map(Tcw, mPos);
 
-//        pKF->setObservation([it->second] = posKF;
+//        pKF->setObservation(it->second) = posKF;
 //    }
 //}
 

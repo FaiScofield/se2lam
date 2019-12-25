@@ -220,11 +220,11 @@ bool GlobalMapper::detectLoopClose()
     const int idKFCurr = pKFCurr->mIdKF;
 
     const vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
-    const int numKFs = vpKFsAll.size();
+    const size_t numKFs = vpKFsAll.size();
 
-    PtrKeyFrame pKFBest;
     double scoreBest = 0;
-    for (int i = 0; i < numKFs; ++i) {
+    PtrKeyFrame pKFBest = nullptr;
+    for (size_t i = 0; i < numKFs; ++i) {
         const PtrKeyFrame& pKF = vpKFsAll[i];
         const DBoW2::BowVector& BowVec = pKF->mBowVec;
 
@@ -277,7 +277,7 @@ bool GlobalMapper::verifyLoopClose(map<int, int>& _mapMatchMP, map<int, int>& _m
     //! Match ORB KPs
     ORBmatcher matcher;
     bool bIfMatchMPOnly = false;
-    matcher.SearchByBoW(mpKFCurr, mpKFLoop, mapMatch, bIfMatchMPOnly);
+    matcher.SearchByBoW(static_cast<Frame*>(mpKFCurr.get()), static_cast<Frame*>(mpKFLoop.get()), mapMatch, bIfMatchMPOnly);
     _mapMatchRaw = mapMatch;
 
     //! Remove Outliers: by RANSAC of Fundamental
@@ -1078,13 +1078,11 @@ void GlobalMapper::createVecMeasSE3XYZ(
 void GlobalMapper::computeBowVecAll()
 {
     // Compute BowVector for all KFs, when BowVec does not exist
-    vector<PtrKeyFrame> vpKFs = mpMap->getAllKFs();
-    for (size_t i = 0, numKFs = vpKFs.size(); i < numKFs; ++i) {
-        PtrKeyFrame pKF = vpKFs[i];
-        if (pKF->mbBowVecExist)
-            continue;
-        pKF->computeBoW(mpORBVoc);
-    }
+    vector<PtrKeyFrame> vpKFsAll = mpMap->getAllKFs();
+    for_each(vpKFsAll.begin(), vpKFsAll.end(), [&](PtrKeyFrame& pKFj) {
+        if (!pKFj->mbBowVecExist)
+            pKFj->computeBoW(mpORBVoc);
+    });
 }
 
 //void GlobalMapper::drawMatch(const map<int, int>& mapMatch)

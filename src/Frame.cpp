@@ -85,6 +85,7 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, double time
     mvInvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
+    mvInvLevelSigma2[0] = 1.0f;
     for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];
@@ -148,6 +149,7 @@ Frame::Frame(const Mat& im, const Se2& odo, const vector<KeyPoint>& vKPs, ORBext
     mvInvLevelSigma2.resize(mnScaleLevels);
     mvScaleFactors[0] = 1.0f;
     mvLevelSigma2[0] = 1.0f;
+    mvInvLevelSigma2[0] = 1.0f;
     for (int i = 1; i != mnScaleLevels; ++i) {
         mvScaleFactors[i] = mvScaleFactors[i - 1] * mfScaleFactor;
         mvLevelSigma2[i] = mvScaleFactors[i] * mvScaleFactors[i];

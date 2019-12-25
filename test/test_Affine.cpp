@@ -1,11 +1,92 @@
 #include "test_functions.hpp"
 
+#define FIX_DELTA_FRAME 1
+#if FIX_DELTA_FRAME
+const int g_delta_frame = 15;
+#endif
+
 // string g_configPath = "/home/vance/dataset/se2/se2_config/";
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 string g_matchResult = "/home/vance/output/rk_se2lam/test_matchResult.txt";
 
 Frame frameCur, frameRef;
+
+
+//! FIXME 手写的 RANSAC 需要改进, 内点数不能太少, 应该要保持一个下限
+//! 目前来看这种方法修正后得到的Affine可以达到最好的效果
+Mat estimateAffineMatrix(const vector<KeyPoint>& kpRef, const vector<KeyPoint>& kpCur, vector<int>& matches12)
+{
+    vector<Point2f> ptRef, ptCur;
+    vector<int> idxRef;
+    idxRef.reserve(kpRef.size());
+    ptRef.reserve(kpRef.size());
+    ptCur.reserve(kpCur.size());
+    for (int i = 0, iend = kpRef.size(); i < iend; ++i) {
+        if (matches12[i] < 0)
+            continue;
+        idxRef.push_back(i);
+        ptRef.push_back(kpRef[i].pt);
+        ptCur.push_back(kpCur[matches12[i]].pt);
+    }
+
+    Se2 dOdom = frameCur.odom - frameRef.odom;
+    Mat R = getRotationMatrix2D(Point2f(0, 0), dOdom.theta * 180.f / CV_PI, 1.).colRange(0, 2);
+
+    const size_t N = ptCur.size();
+    vector<uchar> inlineMask(N, 1);
+    Mat t = Mat::zeros(2, 1, CV_64FC1);
+    Mat J = -R;
+
+    int inliers = N;
+    double errorSumLast = 9999999;
+    for (int it = 0; it < 10; ++it) {
+        Mat H = Mat::zeros(2, 2, CV_64FC1);
+        Mat b = Mat::zeros(2, 1, CV_64FC1);
+        double errorSum = 0;
+        for (size_t i = 0; i < N; ++i) {
+            if (inlineMask[i] == 0)
+                continue;
+
+            Mat x1, x2;
+            Mat(ptRef[i]).convertTo(x1, CV_64FC1);
+            Mat(ptCur[i]).convertTo(x2, CV_64FC1);
+            Mat e = x2 - R * x1 - t;
+            H += J.t() * J;
+            b += J.t() * e;
+            errorSum += norm(e);
+
+            if (it > 3 && norm(e) > 5.991) {
+                inlineMask[i] = 0;
+                inliers--;
+            }
+        }
+
+        Mat dt = -H.inv() * b;
+        t += dt;
+
+        cout << "iter = " << it << ", inliers = " << inliers << ", ave chi = "
+             << errorSum / inliers << ", t = " << t.t() << endl;
+        if (errorSumLast < errorSum) {
+            t -= dt;
+            break;
+        }
+        if (errorSumLast - errorSum < 1e-6)
+            break;
+        errorSumLast = errorSum;
+    }
+    Mat A21(2, 3, CV_64FC1);
+    R.copyTo(A21.colRange(0, 2));
+    t.copyTo(A21.col(2));
+
+    for (size_t i = 0; i < inlineMask.size(); ++i) {
+        if (inlineMask[i] == 0)
+            matches12[idxRef[i]] = -1;
+    }
+
+
+    return A21;
+}
 
 void calculateAffineMatrixSVD(const vector<Point2f>& ptRef, const vector<Point2f>& ptCur,
                               const vector<uchar>& inlineMask, Mat& Affine)
@@ -54,6 +135,7 @@ void calculateAffineMatrixSVD(const vector<Point2f>& ptRef, const vector<Point2f
     // 求得的RT是A12, 即第2帧到第1帧的变换
     R.copyTo(Affine.colRange(0, 2));
     t.copyTo(Affine.col(2));
+
     //invertAffineTransform(Affine, Affine);
     //cerr << "根据" << N << "个内点计算出A12:" << endl << Affine << endl;
 }
@@ -102,7 +184,7 @@ int removeOutliersWithRansac(const vector<KeyPoint>& kpRef, const vector<KeyPoin
 
             double ej = norm(ptRef[j] - ptCurWarpj);
 
-            if (ej < 5.991) {
+            if (ej < sqrt(5.991)) {
                 inlineMask[j] = 1;
                 error += ej;
                 inliers++;
@@ -247,6 +329,7 @@ int main(int argc, char** argv)
             continue;
         }
 
+
         //! 特征点匹配
         int nMatched1(0), nMatched2(0), nMatched3(0), nMatched4(0);
         int nInliers1(0), nInliers2(0), nInliers3(0), nInliers4(0);
@@ -260,10 +343,14 @@ int main(int argc, char** argv)
             nInliers1 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxA, A21, 0);
         if (nMatched2 >= 10)
             nInliers2 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints,  matchIdxAP, A21Partial, 1);
-        if (nMatched3 >= 10)
-            nInliers3 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxRT, RT, 2);
+        if (nMatched3 >= 10) {
+            //nInliers3 = removeOutliersWithA(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxRT, RT, 2);
+            RT = estimateAffineMatrix(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxRT);
+            nInliers3 = nMatched3;
+        }
         if (nMatched4 >= 10)
             nInliers4 = removeOutliersWithRansac(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxAsvd, Asvd);
+
 
 //        cout << "A = " << endl << A21 << endl;
 //        cout << "AP = " << endl << A21Partial << endl;
@@ -300,7 +387,7 @@ int main(int argc, char** argv)
         vconcat(outImgWarpRT, outImgWarpAsvd, imgTmp2);
         hconcat(imgTmp1, imgTmp2, outImgConcat);
         resize(outImgConcat, outImgConcat, Size2i(outImgConcat.cols * 1.5, outImgConcat.rows * 1.5));
-//        imshow("A & AP & RT Matches", outImgConcat);
+        imshow("A & AP & RT Matches", outImgConcat);
 
 
 //        // test A
@@ -353,11 +440,15 @@ int main(int argc, char** argv)
         string fileWarp = "/home/vance/output/rk_se2lam/warp/" + to_string(frameCur.id) + ".jpg";
         imwrite(fileWarp, outImgConcat);
 
-        waitKey(10);
+        waitKey(30);
 
 
         //! 内点数太少要生成新的参考帧
+#if FIX_DELTA_FRAME
+        if (frameCur.id % g_delta_frame == 0) {
+#else
         if (nInliers1 <= 12 || nInliers2 <= 12 || nInliers4 <= 10) {
+#endif
             imgCur.copyTo(imgRef);
             imgWithFeatureCur.copyTo(imgWithFeatureRef);
             frameRef = frameCur;

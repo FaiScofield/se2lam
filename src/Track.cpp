@@ -40,19 +40,16 @@ Track::Track()
 
     nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
-    nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 50);
-    mMaxAngle = static_cast<float>(g2o::deg2rad(88.));
+    nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 40);
+    mMaxAngle = static_cast<float>(g2o::deg2rad(80.));
     mMaxDistance = 0.3f * Config::UpperDepth;
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
+    preSE2.meas.setZero();
+    preSE2.cov.setZero();
 
     mbPrint = Config::GlobalPrint;
     mbNeedVisualization = Config::NeedVisualization;
-
-    for (int i = 0; i < 3; ++i)
-        preSE2.meas[i] = 0;
-    for (int i = 0; i < 9; ++i)
-        preSE2.cov[i] = 0;
 
     fprintf(stderr, "[Track][Info ] 相关参数如下: \n - 最小/最大KF帧数: %d/%d\n"
                     " - 最大移动距离/角度: %.0fmm/%.0fdeg\n - 最少匹配数量: %d\n",
@@ -75,7 +72,7 @@ void Track::run()
     if (mState == cvu::NO_READY_YET)
         mState = cvu::FIRST_FRAME;
 
-    unsigned long lastRefKFid = 0;
+    unsigned long lastRefKFid = 0; // 这里仅用于输出logs
     ros::Rate rate(Config::FPS * 5);
     while (ros::ok()) {
         if (checkFinish())
@@ -91,17 +88,16 @@ void Track::run()
 
         Mat img;
         Se2 odo;
+        double time = 0;
         mpSensors->readData(odo, img);
         double t1 = timer.count(), t2 = 0, t3 = 0;
 
-        // Tracking
         timer.start();
         bool bOK = false;
         {
             locker lock(mMutexForPub);
 
-            double imgTime = 0.;
-            mCurrentFrame = Frame(img, odo, mpORBextractor, imgTime);
+            mCurrentFrame = Frame(img, odo, mpORBextractor, time);
             t2 = timer.count();
 
             timer.start();
@@ -111,8 +107,8 @@ void Track::run()
                 continue;
             } else if (mState == cvu::OK) {
                 bOK = trackReferenceKF();
-                //                if (!bOK)
-                //                    bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
+                if (!bOK)
+                    bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
             } else if (mState == cvu::LOST) {
                 bOK = doRelocalization();  // 没追上的直接检测回环重定位
             }
@@ -127,31 +123,17 @@ void Track::run()
         } else {
             mnLostFrames++;
             mState = cvu::LOST;
-            //            if (mpLoopKF) {
-            //                const Point2f rotationCenter(160.5827 - 0.01525, 117.7329 - 3.6984);
-            //                const double angle = normalizeAngle(mCurrentFrame.odom.theta -
-            //                mpLoopKF->odom.theta);
-            //                mAffineMatrix = getRotationMatrix2D(rotationCenter, angle * 180 /
-            //                CV_PI, 1.);
-            //            } else
-            //                mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // 这里主要为了可视化正常
-
-            //            if (mnLostFrames >= 50) {
-            //                startNewTrack();
-            //                rate.sleep();
-            //                continue;
-            //            }
+            if (mnLostFrames >= 50) {
+                startNewTrack();
+                rate.sleep();
+                continue;
+            }
         }
-        // mpMap->setCurrentFramePose(mCurrentFrame.getPose());
-
-        // Visualization
-        if (mbNeedVisualization)
-            copyForPub();
+        mpMap->setCurrentFramePose(mCurrentFrame.getPose());
 
         {  // Reset
             locker lock(mMutexForPub);
-            lastRefKFid =
-                mpReferenceKF->id;  // cur更新成ref后ref的id就和cur相等了, 这里仅用于输出log
+            lastRefKFid = mpReferenceKF->id;
             resetLocalTrack();  // KF判断在这里
         }
 
@@ -160,12 +142,6 @@ void Track::run()
                "%.2f/%.2f/%.2f/%.2fms, 平均追踪耗时: %.2fms\n",
                mCurrentFrame.id, lastRefKFid, t1, t2, t3, t1 + t2 + t3,
                trackTimeTatal * 1.f / mCurrentFrame.id);
-
-        //        Se2 Twb = mCurrentFrame.getTwb();
-        //        printf("[Track][Timer] #%ld-#%ld 当前帧的位姿为: [%.2f, %.2f, %.2f], 里程计输入为:
-        //        [%.2f, %.2f, %.2f]\n",
-        //               mCurrentFrame.id, lastRefKFid, Twb.x * 0.001f, Twb.y * 0.001f, Twb.theta,
-        //               odo.x * 0.001f, odo.y * 0.001f, odo.theta);
 
         rate.sleep();
     }
@@ -183,7 +159,6 @@ void Track::processFirstFrame()
              << "And the start odom is: " << mCurrentFrame.odom << endl;
         cout << "========================================================" << endl;
 
-        mCurrentFrame.setPose(Config::Tcb);
         mCurrentFrame.setPose(Se2(0, 0, 0));
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
         mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map, 没有给LocalMapper
@@ -204,18 +179,17 @@ bool Track::trackReferenceKF()
     if (mCurrentFrame.isNull())  // 图像挂掉的时候Frame会变成null.
         return false;
     if (mCurrentFrame.mTimeStamp < mLastFrame.mTimeStamp) {
-        fprintf(stderr,
-                "[Track][Warni] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
+        fprintf(stderr, "[Track][Warni] #%ld-#%ld 图像序列在时间上不连续: Last = %.3f, Curr = %.3f\n",
                 mCurrentFrame.id, mLastFrame.id, mLastFrame.mTimeStamp, mCurrentFrame.mTimeStamp);
         return false;
     }
 
     assert(mnKPsInline == 0);
 
-    //! 1.根据里程计设置初始位姿
+    // 1.根据里程计设置初始位姿
     updateFramePoseFromRef();
 
-    //! 2.基于仿射变换先验估计投影Cell的位置
+    // 2.基于仿射变换先验估计投影Cell的位置
     //! TODO  仿射变换要改成欧氏变换!! 只有旋转和平移, 没有缩放!
     mnKPMatches =
         mpORBmatcher->MatchByWindowWarp(*mpReferenceKF, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
@@ -273,7 +247,7 @@ bool Track::trackReferenceKF()
 // 把局部地图的点往当前帧上投
 bool Track::trackLocalMap()
 {
-    vector<PtrMapPoint> vpLocalMPs = mpMap->getLocalMPs();
+    const vector<PtrMapPoint> vpLocalMPs = mpMap->getLocalMPs();
     vector<int> vMatchedIdxMPs;  // 一定是新投上的点
     int nProj = mpORBmatcher->SearchByProjection(mCurrentFrame, vpLocalMPs, vMatchedIdxMPs, 20, 1);
     if (nProj > 0) {
@@ -306,25 +280,27 @@ void Track::updateFramePoseFromRef()
     // Tc2w, World->当前帧Camera, Tc2w = Tc2c1 * Tc1w
     mCurrentFrame.setPose(Tc2c1 * mpReferenceKF->getPose());
     // Twb2, Body->当前帧World，se2形式，故相加， Twb2 = Twb1 * Tb1b2
-    mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
+    // mCurrentFrame.setPose(mpReferenceKF->getTwb() + Tb1b2);
+
+    assert(mCurrentFrame.id - mLastFrame.id == 1);
 
     // preintegration 预积分
-    Eigen::Map<Vector3d> meas(preSE2.meas);
+    Vector3d& meas = preSE2.meas;
     Se2 odok = mCurrentFrame.odom - mLastFrame.odom;
     Vector2d odork(odok.x, odok.y);
     Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
     meas.head<2>() += Phi_ik * odork;
     meas[2] += odok.theta;
-
-    Matrix3d Ak = Matrix3d::Identity();
-    Matrix3d Bk = Matrix3d::Identity();
-    Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]);
-    Bk.block<2, 2>(0, 0) = Phi_ik;
-    Eigen::Map<Matrix3d, RowMajor> Sigmak(preSE2.cov);
+    // 协方差传递参考卡尔曼滤波
+    Matrix3d Ak = Matrix3d::Identity();  // dodok_dxk-1
+    Matrix3d Bk = Matrix3d::Identity();  // dodok_dxk
+    Ak.block<2, 1>(0, 2) = -Phi_ik * Vector2d(-odork[1], odork[0]);
+    Bk.block<2, 2>(0, 0) = -Phi_ik;
+    Matrix3d& Sigmak = preSE2.cov;
     Matrix3d Sigma_vk = Matrix3d::Identity();
-    Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
-    Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
-    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
+    Sigma_vk(0, 0) = Config::OdoNoiseX * Config::OdoNoiseX;
+    Sigma_vk(1, 1) = Config::OdoNoiseY * Config::OdoNoiseY;
+    Sigma_vk(2, 2) = Config::OdoNoiseTheta * Config::OdoNoiseTheta;
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 }
@@ -332,6 +308,7 @@ void Track::updateFramePoseFromRef()
 //! 根据仿射矩阵A剔除外点，利用了RANSAC算法
 int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, vector<int>& vKPMatchIdx12, Mat& A12)
 {
+    assert(pKFRef->N == vKPMatchIdx12.size());
     if (vKPMatchIdx12.empty())
         return 0;
 
@@ -342,8 +319,6 @@ int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, vector<
     vIdxRef.reserve(pKFRef->N);
     vPtRef.reserve(pKFRef->N);
     vPtCur.reserve(pFCur->N);
-
-    assert(pKFRef->N == vKPMatchIdx12.size());
     for (size_t i = 0, iend = pKFRef->N; i < iend; ++i) {
         if (vKPMatchIdx12[i] < 0)
             continue;
@@ -351,21 +326,11 @@ int Track::removeOutliers(const PtrKeyFrame& pKFRef, const Frame* pFCur, vector<
         vPtRef.push_back(pKFRef->mvKeyPoints[i].pt);
         vPtCur.push_back(pFCur->mvKeyPoints[vKPMatchIdx12[i]].pt);
     }
-
     if (vPtRef.size() == 0)
         return 0;
 
     vector<uchar> vInlier;
-    if (!A12.empty())  // 一般情况下更新A
-        A12 = estimateAffinePartial2D(vPtRef, vPtCur, vInlier, RANSAC, 2.0);
-
-//        cout << "Relocalization A = " << endl << A12 << endl;
-//   } else { //NOTE 重定位情况中不能用A去外点, 因为KP匹配本来就是通过A来匹配的. 要用H来剔除外点
-//        Mat A = estimateAffinePartial2D(vPtRef, vPtCur, vInlier, RANSAC, 2.0);
-//        cout << "Relocalization A = " << endl << A << endl;
-//        A12 = findHomography(vPtRef, vPtCur, RANSAC, 2, vInlier);
-//        cout << "Relocalization H = " << endl << A12.rowRange(0, 2) << endl;
-//    }
+    A12 = estimateAffinePartial2D(vPtRef, vPtCur, vInlier, RANSAC, 2.0);
 
     assert(vIdxRef.size() == vInlier.size());
     for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
@@ -440,8 +405,8 @@ Mat Track::computeA12(const PtrKeyFrame &pKFRef, const Frame *pFCur, std::vector
 
     Mat A(2 * m, 4, CV_64F);
     for (int i = 0; i < m; i++) {
-        const float u1 = vPtRef[i].x;
-        const float v1 = vPtRef[i].y;
+        //const float u1 = vPtRef[i].x;
+        //const float v1 = vPtRef[i].y;
         const float u2 = vPtCur[i].x;
         const float v2 = vPtCur[i].y;
 
@@ -470,7 +435,7 @@ Mat Track::computeA12(const PtrKeyFrame &pKFRef, const Frame *pFCur, std::vector
  */
 void Track::doTriangulate(PtrKeyFrame& pKF)
 {
-    if (mvKPMatchIdx.empty())
+    if (mvKPMatchIdx.empty() || mCurrentFrame.id - mpReferenceKF->id < nMinFrames)
         return;
 
     // 以下成员变量在这个函数中会被修改
@@ -673,6 +638,9 @@ void Track::resetLocalTrack()
 
             mpLocalMapper->addNewKF(pNewKF, mMPCandidates);  // 新的KF观测和共视关系在LocalMap里更新
 
+            if (mbNeedVisualization)
+                copyForPub();  // Visualization
+
             mpReferenceKF = pNewKF;
             mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
             mMPCandidates.clear();  // 加了新的KF后才清空. 和普通帧的匹配也会生成MP
@@ -690,6 +658,8 @@ void Track::resetLocalTrack()
         mnMPsTracked = 0;
         mnMPsNewAdded = 0;
         mnMPsInline = 0;
+        preSE2.meas.setZero();
+        preSE2.cov.setZero();
         return;
     }
 
@@ -720,6 +690,8 @@ void Track::resetLocalTrack()
     mnMPsInline = 0;
     mLastRatioGoodDepth = 0.f;
     mLastRatioGoodParl = 0.f;
+    preSE2.meas.setZero();
+    preSE2.cov.setZero();
 }
 
 /**
@@ -748,10 +720,10 @@ bool Track::needNewKF()
     //        return true;
 
     // 必要条件
-    bool c0 = deltaFrames > nMinFrames;  // 下限
+    bool c0 = deltaFrames >= nMinFrames;  // 下限
 
     // 充分条件
-    bool c1 = deltaFrames > nMaxFrames;  // 上限
+    bool c1 = deltaFrames >= nMaxFrames;  // 上限
     bool c2 = mnKPMatches < 20 || mnKPsInline < 15;  // 和参考帧匹配的内点数太少.
     bool c3 = mnMPsCandidate > 100;  // 候选MP多且新增MP少(远)已经新增的MP数够多
     bool c4 = (mCurrRatioGoodDepth < mLastRatioGoodDepth) && (mCurrRatioGoodParl < mLastRatioGoodParl);
@@ -1078,7 +1050,7 @@ bool Track::verifyLoopClose()
 
     // BoW匹配
     bool bIfMatchMPOnly = false;  // 要看总体匹配点数多不多
-    mnKPMatches = mpORBmatcher->SearchByBoW(&(*mpLoopKF), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
+    mnKPMatches = mpORBmatcher->SearchByBoW(static_cast<Frame*>(mpLoopKF.get()), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
     if (mnKPMatches < nMinKPMatch) {
         fprintf(stderr, "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);

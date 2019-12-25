@@ -6,12 +6,6 @@ target_link_libraries(test_vn
     ${G2O_LIBS}
 )
 
-#add_executable(test_dataPub test_dataPub.cpp)
-#target_link_libraries(test_dataPub
-#    se2lam
-#    ${LINK_LIBS}
-#)
-
 add_executable(test_Affine
    test_Affine.cpp
    test_functions.hpp

@@ -78,7 +78,8 @@ void LocalMapper::processNewKF()
     //! 2.更新局部地图里的共视关系，MP共同观测超过自身的30%则添加共视关系, 更新 mspCovisibleKFs
     timer.start();
 
-    mpNewKF->updateCovisibleGraph();
+    mpMap->updateCovisibility(mpNewKF);
+    //mpNewKF->updateCovisibleGraph();
     double t2 = timer.count();
     printf("[Local][Timer] #%ld(KF#%ld) L1.2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF, MP观测数: %ld\n",
            mpNewKF->id, mpNewKF->mIdKF, t2, mpNewKF->countCovisibleKFs(), mpNewKF->countObservations());
