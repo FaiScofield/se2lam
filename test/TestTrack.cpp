@@ -7,13 +7,6 @@
 #include "optimizer.h"
 #include <opencv2/calib3d/calib3d.hpp>
 #include <ros/ros.h>
-#if USE_KLT
-#include "LineDetector.h"
-#include <opencv2/video/tracking.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#endif
-
-const int EDGE = 12;
 
 namespace se2lam
 {
@@ -41,19 +34,19 @@ TestTrack::TestTrack()
     if (!bVocLoad)
         cerr << "[Track][Error] Wrong path to vocabulary, Falied to open it." << endl;
 
-    nMinFrames = min(2, cvCeil(0.25 * Config::FPS));  // 上溢
+    nMinFrames = min(3, cvCeil(0.3 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 40);
     mMaxAngle = static_cast<float>(g2o::deg2rad(80.));
-    mMaxDistance = 0.3f * Config::UpperDepth;
+    mMinDistance = 10000.f / Config::UpperDepth;
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);  // double
     preSE2.meas.setZero();
     preSE2.cov.setZero();
 
-    fprintf(stderr, "[Track][Info ] 相关参数如下: \n - 最小/最大KF帧数: %d/%d\n"
-                    " - 最大移动距离/角度: %.0fmm/%.0fdeg\n - 最少匹配数量: %d\n",
-            nMinFrames, nMaxFrames, mMaxDistance, g2o::rad2deg(mMaxAngle), nMinMatches);
+    fprintf(stderr, "[Track][Info ] KF选择策略相关参数如下: \n - 最小/最大KF帧数: %d/%d\n"
+                    " - 最小移动距离/最大角度: %.0fmm/%.0fdeg\n - 最少匹配数量: %d\n",
+            nMinFrames, nMaxFrames, mMinDistance, g2o::rad2deg(mMaxAngle), nMinMatches);
 }
 
 TestTrack::~TestTrack()
@@ -82,26 +75,7 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
 
     {
         locker lock(mMutexForPub);
-#if USE_KLT
-        Mat imgUn, imgClahed;
-        Ptr<CLAHE> clahe = createCLAHE(3.0, Size(8, 8));
-        clahe->apply(img, imgClahed);
-        undistort(imgClahed, imgUn, Config::Kcam, Config::Dcam);
-        double t1 = timer.count();
 
-        timer.start();
-        if (mState == cvu::FIRST_FRAME) {
-            processFirstFrame_KLT(imgUn, odo, time);
-            return;
-        } else if (mState == cvu::OK) {
-            mLastRefKFid = mpReferenceKF->id;
-            bOK = trackReferenceKF_KLT(imgUn, odo, time);
-            //if (!bOK)
-            //    bOK = trackLocalMap_KLT(imgUn, odo, time);
-        } else if (mState == cvu::LOST) {
-            //bOK = doRelocalization_KLT(imgUn, odo, time);
-        }
-#else
         mCurrentFrame = Frame(img, odo, mpORBextractor, time);
         t1 = timer.count();
 
@@ -117,7 +91,6 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
         } else if (mState == cvu::LOST) {
             bOK = doRelocalization();  // 没追上的直接检测回环重定位
         }
-#endif
         t2 = timer.count();
     }
 
@@ -291,15 +264,20 @@ void TestTrack::updateFramePoseFromRef()
 
 int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
 {
-    if (mvKPMatchIdx.empty() || mCurrentFrame.id - mpReferenceKF->id < nMinFrames)
-        return 0;
-
-    // 以下成员变量在这个函数中会被修改
     mnMPsCandidate = mMPCandidates.size();
     mvKPMatchIdxGood = mvKPMatchIdx;
     mnMPsInline = 0;
     mnMPsTracked = 0;
     mnMPsNewAdded = 0;
+
+    if (mvKPMatchIdx.empty() || mCurrentFrame.id - mpReferenceKF->id < nMinFrames) {
+        mnKPsInline = mnKPMatchesGood = mnKPMatches;
+        return 0;
+    }
+//    const Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
+//    if (dOdo.x * dOdo.x + oOdo.y * dOdo.y)
+
+    // 以下成员变量在这个函数中会被修改
     mnKPMatchesGood = 0;
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
     int n2 = mnMPsCandidate;
@@ -435,12 +413,12 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
         }
     }
 
-//    printf("[Track][Info ] #%ld-#%ld KP匹配结果: KP好匹配数/总内点数/总匹配数: %d/%d/%d, "
-//           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n", frame->id, pKF->id,
-//           mnKPMatchesGood, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
-//    printf("[Track][Info ] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
-//           "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
-//           frame->id, pKF->id, n2, n21, n22, n32, mnMPsCandidate, n31, n32, n33, mnMPsNewAdded);
+    printf("[Track][Info ] #%ld-#%ld KP匹配结果: KP好匹配数/总内点数/总匹配数: %d/%d/%d, "
+           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n", frame->id, pKF->id,
+           mnKPMatchesGood, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
+    printf("[Track][Info ] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
+           "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
+           frame->id, pKF->id, n2, n21, n22, n32, mnMPsCandidate, n31, n32, n33, mnMPsNewAdded);
 
     assert(n11 + n121 == mnMPsTracked);
     assert(n21 + n31 == mnMPsNewAdded);
@@ -530,11 +508,6 @@ void TestTrack::resetLocalTrack()
             mnMPsCandidate = 0;
             preSE2.meas.setZero();
             preSE2.cov.setZero();
-
-#if USE_KLT
-            cv::KeyPoint::convert(mpReferenceKF->mvKeyPoints, mvCurrPts);
-            mCurrImg = mpReferenceKF->mImage.clone();  //! NOTE 需要深拷贝
-#endif
         } else {
             copyForPub();
         }
@@ -599,39 +572,40 @@ bool TestTrack::needNewKF()
         return true;
     }
 
-    int deltaFrames = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id);
+    // 先确定当前状态是在旋转还是在平移
+    const Se2 dOdo1 = mCurrentFrame.odom - mLastFrame.odom;
+    const Se2 dOdo2 = mCurrentFrame.odom - mpReferenceKF->odom;
+    const Point2f dxy(dOdo1.x, dOdo1.y);
+    const bool bRotate = cv::norm(dxy) < 15.f && abs(dOdo1.theta) > 0.1;  // [mm/rad]
 
-    // 必要条件
-    bool c0 = deltaFrames >= nMinFrames;  // 下限
-
-    // 充分条件
-    bool c1 = mnKPMatches < 50 || (mnKPsInline < 20 && mnKPMatchesGood < 10); // 和参考帧匹配的内点数太少. 这里顺序很重要! 30/20/15
-    bool c2 = mnMPsInline > 170;  // 关联/新增MP数量够多, 说明这时候比较理想 60
-    bool bNeedKFByVO = c0 && (c1 || c2);
-
-    // 1.跟踪要跪了必须要加入新的KF
-    if (bNeedKFByVO) {
-        printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 其KF条件满足情况: 内点少(%d, %d/%d/%d)/新增多(%d, %d+%d=%d)\n",
-               mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, c1, mnKPMatches, mnKPsInline, mnKPMatchesGood,
-               c2, mnMPsTracked, mnMPsNewAdded, mnMPsInline);
+    // 1. 如果在旋转, 则只看旋转角度是否达到上限
+    if (bRotate && abs(dOdo2.theta) >= mMaxAngle) {
+        printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其旋转角度(%.2f)达到上限.\n",
+               mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, abs(dOdo2.theta));
         return true;
     }
 
-    // 上限/旋转/平移
-    bool c4 = deltaFrames > nMaxFrames;  // 上限
-    Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-    bool c5 = static_cast<double>(abs(dOdo.theta)) >= mMaxAngle;  // 旋转量超过50°
-    cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
-    cv::Mat xy = cTc.rowRange(0, 2).col(3);
-    bool c6 = cv::norm(xy) >= mMaxDistance;  // 相机的平移量足够大
-    bool bNeedKFByOdo = (c5 || c6) || c4;  // 相机移动取决于深度上限,考虑了不同深度下视野的不同
+    // 2. 如果在平移, 则尽量选择和参考帧视差最好的那一帧
+    const int deltaFrames = static_cast<int>(mCurrentFrame.id - mpReferenceKF->id);
+    if (deltaFrames < nMinFrames)  // 必要条件, 不能太近
+        return false;
 
-    // 2.如果跟踪效果还可以, 就看旋转平移条件
-    if (bNeedKFByOdo) {
-        printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 其KF条件满足情况: 大旋转(%d)/大平移(%d)/达上限(%d)"
-               ", 匹配情况: 内点(%d/%d/%d)/新增(%d+%d=%d)\n",
-               mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, c5, c6, c4,
-               mnKPMatches, mnKPsInline, mnKPMatchesGood, mnMPsTracked, mnMPsNewAdded, mnMPsInline);
+    // 充分条件
+    const cv::Mat cTc = Config::Tcb * dOdo2.toCvSE3() * Config::Tbc;
+    const cv::Mat xy = cTc.rowRange(0, 2).col(3);
+    const bool c1 = cv::norm(xy) >= mMinDistance;  // 相机的平移量足够大, 视差才好
+    const bool c2 = mnMPsNewAdded > 20 || mnMPsInline > 50;  // 关联/新增MP数量够多, 说明这时候比较理想 60
+    if (c1 && c2) {
+        printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其平移适中(%.2f)且新增MP多(%d/%d)\n",
+               mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, cv::norm(xy), mnMPsNewAdded, mnMPsInline);
+        return true;
+    }
+
+    // 快要丢失时一定要插入.  这里顺序很重要! 30/20/15
+    const bool c3 = mnKPMatches < 20 || mnKPsInline < 18 || mnKPMatchesGood < 8;
+    if (c1 && c3) {
+        printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld),  因为其匹配数过少(%d/%d/%d)\n",
+           mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, mnKPMatches, mnKPsInline, mnKPMatchesGood);
         return true;
     }
 
@@ -642,6 +616,9 @@ void TestTrack::copyForPub()
 {
     locker lock1(mMutexForPub);
     locker lock2(mpMapPublisher->mMutexPub);
+
+    assert(!mvKPMatchIdx.empty());
+    assert(!mvKPMatchIdxGood.empty());
 
     mpMapPublisher->mnCurrentFrameID = mCurrentFrame.id;
     mpMapPublisher->mCurrentFramePose = mCurrentFrame.getPose()/*.clone()*/;
@@ -689,9 +666,9 @@ bool TestTrack::detectIfLost(Frame& f, const Mat& Tcw_opt)
     Se2 dSe2 = Twb_opt - Twb_ori;
     const double dt = sqrt(dSe2.x * dSe2.x + dSe2.y * dSe2.y);
     const double da = abs(dSe2.theta);
-    if (dt > mMaxDistance) {
+    if (dt > mMinDistance) {
         fprintf(stderr, "[Track][Warni] #%ld\t 位姿优化结果相差太大: dt(%.2f) > mMaxDistance(%.2f)\n",
-                f.id, dt, mMaxDistance);
+                f.id, dt, mMinDistance);
         return true;
     }
     if (da > mMaxAngle) {
@@ -1801,285 +1778,5 @@ int TestTrack::doTriangulate_Global(PtrKeyFrame& pKF, PtrKeyFrame& frame, vector
     return n11 + n121 + n21;  // nMPsInline
 }
 
-#if USE_KLT
-void TestTrack::processFirstFrame_KLT(const Mat &img, const Se2 &odo, double time)
-{
-    mForwImg = img;
-
-    // 直线掩模上特征点提取
-    vector<Keyline> lines;
-    Mat lineMask = getLineMask(mForwImg, lines, false);
-    detectFeaturePointsCell(mForwImg, lineMask);
-    mvForwPts = mvNewPts;
-
-    // 创建当前帧
-    if (mvForwPts.size() > Config::MaxFtrNumber * 0.5) {
-        vector<KeyPoint> vKPs;
-        KeyPoint::convert(mvForwPts, vKPs);
-        mCurrentFrame = Frame(mForwImg, odo, vKPs, mpORBextractor, time);
-
-        cout << "========================================================" << endl;
-        cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
-             << "And the start odom is: " << odo << endl;
-        cout << "========================================================" << endl;
-
-        mCurrentFrame.setPose(Se2(0.f, 0.f, 0.f));
-        mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);  // 首帧为关键帧
-        mpMap->insertKF(mpReferenceKF);  // 首帧的KF直接给Map,没有给LocalMapper
-        mpMap->updateLocalGraph();       // 首帧添加到LocalMap里
-
-        mCurrImg = mpReferenceKF->mImage.clone();
-        mvCurrPts = mvForwPts;
-        mLastFrame = mCurrentFrame;
-        mState = cvu::OK;
-    } else {
-        cout << "[Track][Warni] Failed to create first frame for too less keyPoints: "
-             << mvForwPts.size() << endl;
-
-        Frame::nextId = 0;
-        mState = cvu::FIRST_FRAME;
-    }
-}
-
-bool TestTrack::trackReferenceKF_KLT(const Mat &img, const Se2 &odo, double time)
-{
-    mForwImg = img;
-    mnKPsInline = 0;
-    std::fill(mvKPMatchIdx.begin(), mvKPMatchIdx.end(), -1);
-    mvKPMatchIdx.resize(mpReferenceKF->N, -1);
-
-    // 1.预测上一帧img和KP旋转后的值
-    const Se2 dOdo = mpReferenceKF->odom - odo;  // A21
-    predictPointsAndImage(dOdo);  // 得到旋转后的预测点mvPrevPts
-
-    // 2.光流追踪上一帧的KP
-    vector<uchar> status;
-    vector<float> err;
-    calcOpticalFlowPyrLK(mPrevImg, mForwImg, mvPrevPts, mvForwPts, status, err, Size(17, 17), 0);
-    assert(mpReferenceKF->N == mvForwPts.size());
-    mvPrevPts.clear();
-    mnKPMatches = mvForwPts.size();
-
-    // 3.更新和参考帧的匹配关系
-    size_t j = 0;
-    mvIdxToFirstAdded.clear();
-    mvIdxToFirstAdded.resize(mvForwPts.size(), 0);
-    for (size_t i = 0, iend = mpReferenceKF->N; i < iend; i++) {
-        mvIdxToFirstAdded[i] = i;
-        if (status[i] && inBorder(mvForwPts[i])) {
-            mvCurrPts[j] = mvCurrPts[i];
-            mvForwPts[j] = mvForwPts[i];
-            mvCellLabel[j] = mvCellLabel[i];
-            mvIdxToFirstAdded[j] = mvIdxToFirstAdded[i];
-            mvKPMatchIdx[i] = j; // mvKPMatchIdx 对应RefKF的KPs
-            j++;
-        } else {
-            mvNumPtsInCell[mvCellLabel[i]]--; // 数量先扣, 回头再把消减mvForwPts[i]给去掉
-        }
-    }
-    mvCurrPts.resize(j);
-    mvForwPts.resize(j);
-    mvCellLabel.resize(j);
-    mvIdxToFirstAdded.resize(j);
-    mnKPMatches = mnKPsInline = j;
-    if (mnKPMatches >= 10) {
-        vector<uchar> inliersMask(mvCurrPts.size());
-//        mAffineMatrix = estimateAffinePartial2D(mvCurrPts, mvForwPts, inliersMask, RANSAC, 2.0); // 更新A
-//        inliersMask.clear();
-        Mat H = findHomography(mvCurrPts, mvForwPts, RANSAC, 3.0, inliersMask);
-
-        // 去掉外点再一次更新匹配关系!
-        size_t k = 0;
-        for (size_t j = 0, iend = inliersMask.size(); j < iend; ++j) {
-            if (inliersMask[j]) {
-                mvCurrPts[k] = mvCurrPts[j];
-                mvForwPts[k] = mvForwPts[j];
-                mvCellLabel[k] = mvCellLabel[j];
-                mvIdxToFirstAdded[k] = mvIdxToFirstAdded[j];
-                mvKPMatchIdx[mvIdxToFirstAdded[j]] = k;
-                k++;
-            } else {
-                mvNumPtsInCell[mvCellLabel[j]]--;
-                mvKPMatchIdx[mvIdxToFirstAdded[j]] = -1;
-                mnKPsInline--;
-            }
-        }
-
-        mvCurrPts.resize(k);
-        mvForwPts.resize(k);
-        mvCellLabel.resize(k);
-        mvIdxToFirstAdded.resize(k);
-        assert(mnKPsInline == k);
-    }
-    updateAffineMatix();
-    mvCurrPts.clear();
-    printf("[Track][Info ] #%ld-#%ld 光流追踪上Ref的内点数/总点数 = %d/%ld\n",
-           Frame::nextId, mLastRefKFid, mnKPsInline, mpReferenceKF->N);
-
-    // 4.增加新点 TODO 放到生成KF后去做
-    vector<Keyline> lines;
-    mMask = getLineMask(mForwImg, lines, false);
-    const Mat borderMaskRow(EDGE, mImageCols, CV_8UC1, Scalar(0));
-    const Mat borderMaskCol(mImageRows, EDGE, CV_8UC1, Scalar(0));
-    borderMaskRow.copyTo(mMask.rowRange(0, EDGE));
-    borderMaskRow.copyTo(mMask.rowRange(mImageRows - EDGE, mImageRows));
-    borderMaskCol.copyTo(mMask.colRange(0, EDGE));
-    borderMaskCol.copyTo(mMask.colRange(mImageCols - EDGE, mImageCols));
-    imshow("mask", mMask);
-    waitKey(30);
-    for (const auto& p : mvForwPts)
-        cv::circle(mMask, p, mnMaskRadius, Scalar(0), -1);  // 标记掩模
-    detectFeaturePointsCell(mForwImg, mMask);
-    const size_t n = mvForwPts.size();
-    const size_t m = mvNewPts.size();
-    mvForwPts.resize(n + m);
-    mvIdxToFirstAdded.resize(n + m);
-    for (size_t i = 0; i < m; ++i) {
-        mvForwPts[n + i] = mvNewPts[i];
-        mvIdxToFirstAdded[n + i] = n + i;
-    }
-
-    // 5.更新Frame
-    vector<KeyPoint> vKPsCurFrame(mvForwPts.size());
-    cv::KeyPoint::convert(mvForwPts, vKPsCurFrame);  //! NOTE 金字塔层数没了
-    mCurrentFrame = Frame(mForwImg, odo, vKPsCurFrame, mpORBextractor, time);
-    updateFramePoseFromRef();
-
-    // 6.三角化
-    mvKPMatchIdx.resize(mCurrentFrame.N, -1); // 保证不越界
-    mnMPsInline = doTriangulate(mpReferenceKF, &mCurrentFrame);
-
-    // reset data
-    cv::KeyPoint::convert(mpReferenceKF->mvKeyPoints, mvCurrPts);
-
-    return true;
-}
-
-void TestTrack::predictPointsAndImage(const Se2& dOdo)
-{
-    assert(!mvCurrPts.empty());
-    assert(!mCurrImg.empty());
-
-    mvPrevPts.clear();
-    Mat R = getRotationMatrix2D(Point2f(0, 0), dOdo.theta * 180.f / CV_PI, 1.).colRange(0, 2);
-    R.copyTo(mAffineMatrix.colRange(0, 2));
-    warpAffine(mCurrImg, mPrevImg, mAffineMatrix, mCurrImg.size());
-    transform(mvCurrPts, mvPrevPts, mAffineMatrix);
-}
-
-bool TestTrack::inBorder(const Point2f& pt)
-{
-    const int minBorderX = EDGE;
-    const int minBorderY = minBorderX;
-    const int maxBorderX = mImageCols - EDGE;
-    const int maxBorderY = mImageRows - EDGE;
-
-    const int x = cvRound(pt.x);
-    const int y = cvRound(pt.y);
-
-    return minBorderX <= x && x < maxBorderX && minBorderY <= y && y < maxBorderY;
-}
-
-void TestTrack::updateAffineMatix()
-{
-    assert(mvCurrPts.size() == mvForwPts.size());
-    assert(mvKPMatchIdx.size() == mpReferenceKF->N);
-
-    vector<Point2f> ptRef, ptCur;
-    ptRef.reserve(mvForwPts.size());
-    ptCur.reserve(mvForwPts.size());
-    for (int i = 0, iend = mvForwPts.size(); i < iend; ++i) {
-        if (mvKPMatchIdx[mvIdxToFirstAdded[i]] < 0)
-            continue;
-        ptRef.push_back(mvCurrPts[i]);
-        ptCur.push_back(mvForwPts[i]);
-    }
-
-    const size_t N = ptRef.size();
-    const Mat R = mAffineMatrix.colRange(0, 2); // R21
-    const Mat J = -R;
-
-    Mat t = Mat::zeros(2, 1, CV_64FC1);
-    double errorSumLast = 9999999;
-    for (int it = 0; it < 10; ++it) {
-        Mat H = Mat::zeros(2, 2, CV_64FC1);
-        Mat b = Mat::zeros(2, 1, CV_64FC1);
-        double errorSum = 0;
-        for (size_t i = 0; i < N; ++i) {
-            Mat x1, x2;
-            Mat(ptRef[i]).convertTo(x1, CV_64FC1);
-            Mat(ptCur[i]).convertTo(x2, CV_64FC1);
-            Mat e = x2 - R * x1 - t;
-            H += J.t() * J;
-            b += J.t() * e;
-            errorSum += norm(e);
-        }
-
-        Mat dt = -H.inv() * b;
-        t += dt;
-
-        //cout << "iter = " << it << ", ave chi = " << errorSum / N << ", t = " << t.t() << endl;
-        if (errorSumLast < errorSum) {
-            t -= dt;
-            break;
-        }
-        if (errorSumLast - errorSum < 1e-6)
-            break;
-        errorSumLast = errorSum;
-    }
-
-    t.copyTo(mAffineMatrix.col(2));
-}
-
-void TestTrack::detectFeaturePointsCell(const Mat& image, const Mat& mask)
-{
-    vector<Mat> cellImgs, cellMasks;
-    segImageToCells(image, cellImgs);
-    segImageToCells(mask, cellMasks);
-
-    mvNewPts.clear();
-    mvNewPts.reserve(mnMaxNumPtsInCell * mnCells);
-    const int th = mnMaxNumPtsInCell * 0.1;
-    for (int i = 0; i < mnCells; ++i) {
-        int newPtsToAdd = mnMaxNumPtsInCell - mvNumPtsInCell[i];
-        newPtsToAdd = newPtsToAdd > mnMaxNumPtsInCell ? mnMaxNumPtsInCell : newPtsToAdd;
-        if (newPtsToAdd > th) {
-            vector<Point2f> ptsInThisCell;
-            ptsInThisCell.reserve(newPtsToAdd);
-            goodFeaturesToTrack(cellImgs[i], ptsInThisCell, newPtsToAdd, 0.05, mnMaskRadius,
-                                cellMasks[i], 3);
-            mvNumPtsInCell[i] += static_cast<int>(ptsInThisCell.size());
-
-            // 获得特征点在图像上的实际坐标
-            for (size_t j = 0, jend = ptsInThisCell.size(); j < jend; j++) {
-                int cellIndexX = i % mnCellsW;
-                int cellIndexY = i / mnCellsW;
-
-                Point2f& thisPoint = ptsInThisCell[j];
-                thisPoint.x += mCellWidth * cellIndexX;
-                thisPoint.y += mCellHeight * cellIndexY;
-                mvNewPts.push_back(thisPoint);
-                mvCellLabel.push_back(i);
-            }
-        }
-    }
-}
-
-void TestTrack::segImageToCells(const Mat& image, vector<Mat>& cellImgs)
-{
-    Mat imageCut;
-    int m = image.cols / mCellWidth;
-    int n = image.rows / mCellHeight;
-    cellImgs.reserve(m * n);
-    for (int j = 0; j < n; j++) {
-        for (int i = 0; i < m; i++) {
-            Rect rect(i * mCellWidth, j * mCellHeight, mCellWidth, mCellHeight);
-            imageCut = Mat(image, rect);
-            cellImgs.push_back(imageCut.clone());
-        }
-    }
-}
-
-#endif
 
 }  // namespace se2lam

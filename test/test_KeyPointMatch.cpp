@@ -169,15 +169,15 @@ int main(int argc, char** argv)
 
         timer.start();
         if (nMatched1 >= 10)
-            nInliers1 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxCV, I3);
+            nInliers1 = removeOutliersWithH(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxCV, I3);
         if (nMatched2 >= 10)
-            nInliers2 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxBow, I3);
+            nInliers2 = removeOutliersWithH(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxBow, I3);
         if (nMatched3 >= 10) {
-            nInliers3 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx, I3);
+            nInliers3 = removeOutliersWithH(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdx, I3);
             nInliersAll3 += nInliers3;
         }
         if (nMatched4 >= 10) {
-            nInliers4 = removeOutliersWithHF(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxH, H12);
+            nInliers4 = removeOutliersWithH(frameRef.mvKeyPoints, frameCur.mvKeyPoints, matchIdxH, H12);
             nInliersAll4 += nInliers4;
         } else
             H12 = Mat::eye(3, 3, CV_64FC1);

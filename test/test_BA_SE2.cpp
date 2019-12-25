@@ -257,7 +257,7 @@ int main(int argc, char** argv)
 #endif
         e->setVertex(0, v1);
         e->setVertex(1, v2);
-        e->setInformation(/*info*/Eigen::Matrix3d::Identity());
+        e->setInformation(info/*Eigen::Matrix3d::Identity()*/);
         optimizer.addEdge(e);
 
         e->computeError();

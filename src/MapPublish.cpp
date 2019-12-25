@@ -692,6 +692,9 @@ Mat MapPublish::drawCurrentFrameMatches()
 {
     locker lock(mMutexPub);
 
+    assert(!mvMatchIdx.empty());
+    assert(!mvMatchIdxGood.empty());
+
     Mat imgCur, imgRef, imgWarp, imgOut, A12;
     if (mCurrentImage.channels() == 1)
         cvtColor(mCurrentImage, imgCur, CV_GRAY2BGR);

@@ -15,8 +15,6 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-typedef std::unique_lock<std::mutex> locker;
-
 class MapPublish;
 
 //! 单线程的Track. 测试用!
@@ -103,7 +101,7 @@ private:
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames, nMinMatches;
-    float mMaxAngle, mMaxDistance;
+    float mMaxAngle, mMinDistance;
 
     cv::Mat mAffineMatrix; // A21
     PreSE2 preSE2;  // 参考帧到当前帧的se2积分

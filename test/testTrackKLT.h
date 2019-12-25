@@ -18,16 +18,42 @@ namespace se2lam
 using namespace cv;
 using namespace std;
 
-typedef std::unique_lock<std::mutex> locker;
-
 class MapPublish;
 
+struct PairMask {
+    cv::Point2f ptInForw;  // 点在当前帧下的像素坐标
+    cv::Point2f ptInCurr;  // 对应上一帧的点的像素坐标
+    cv::Point2f ptInPrev;
+    unsigned long firstAdd;  // 所在图像的id
+    size_t idxToAdd;         // 与生成帧的匹配点索引
+    int cellLabel;           // 特征点所在块的lable
+    int trackCount;          // 被追踪上的次数
+};
+
+struct KLT_KP {
+    KLT_KP(const cv::Point2f& pt, unsigned long id, int idx, int label)
+        : ptInCurr(pt), firstAdd(id), idxToRef(idx), cellLabel(label)
+    {
+    }
+
+    void addTrackCount() { trackCount++; }
+    void setCorInLast(const cv::Point2f& pt) { ptInLast = pt; }
+
+    cv::Point2f ptInCurr;  // 在当前帧下的像素坐标
+    cv::Point2f ptInLast;  // 在上一帧下的像素坐标
+    cv::Point2f ptInPred;
+    unsigned long firstAdd = 0;  // 所诞生的帧号
+    int idxToRef = -1;           // 与参考KF的匹配点索引
+    int cellLabel = -1;          // 所处的cell编号
+    int trackCount = 0;          // 被追踪上的总次数
+};
+
 //! 单线程的Track. 测试用!
-class TestTrack
+class TestTrackKLT
 {
 public:
-    TestTrack();
-    ~TestTrack();
+    TestTrackKLT();
+    ~TestTrackKLT();
 
     bool checkReady();
     void setMap(Map* pMap) { mpMap = pMap; }
@@ -72,8 +98,7 @@ public:
 private:
     void processFirstFrame(const cv::Mat& img, const Se2& odo, double time);
     bool trackReferenceKF(const cv::Mat& img, const Se2& odo, double time);
-//    bool trackLocalMap(const cv::Mat& img, const Se2& odo, double time);
-//    bool doRelocalization(const cv::Mat& img, const Se2& odo, double time);
+    bool doRelocalization(const cv::Mat& img, const Se2& odo, double time);
     void predictPointsAndImage(const Se2& dOdo);
     void detectFeaturePointsCell(const cv::Mat& image, const cv::Mat& mask);
     bool inBorder(const cv::Point2f& pt);
