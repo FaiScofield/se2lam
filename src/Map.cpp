@@ -382,7 +382,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
     mvLocalGraphMPs = vector<PtrMapPoint>(setLocalMPs.begin(), setLocalMPs.end());
 }
 
-void Map::updateLocalGraph_new(int maxLevel, int maxN, float searchRadius)
+void Map::updateLocalGraph_new(const cv::Mat& pose, int maxLevel, int maxN, float searchRadius)
 {
     WorkTimer timer;
 
@@ -404,7 +404,7 @@ void Map::updateLocalGraph_new(int maxLevel, int maxN, float searchRadius)
         setLocalKFs.insert(mCurrentKF);
         int toAdd = maxN - 1;
         if (toAdd > 0)   // LocalKF不够maxN个则补全
-            toAdd -= addLocalGraphThroughKdtree(setLocalKFs, toAdd, searchRadius);  // lock
+            toAdd -= addLocalGraphThroughKdtree_new(setLocalKFs, pose, toAdd, searchRadius);  // lock
         if (toAdd > 0) {
             assert(setLocalKFs.size() < maxN);
             int searchLevel = maxLevel;  // 2
@@ -432,7 +432,7 @@ void Map::updateLocalGraph_new(int maxLevel, int maxN, float searchRadius)
         if (!pKF || pKF->isNull())
             continue;
 
-        const vector<PtrMapPoint> vpMPs = pKF->getObservations(true, true);
+        const vector<PtrMapPoint> vpMPs = pKF->getObservations(true, true); // 只要视差好的
         setLocalMPs.insert(vpMPs.begin(), vpMPs.end());
     }
     double t2 = timer.count();
@@ -1351,13 +1351,12 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> Map::SelectKFPairFeat(const PtrKeyFrame& 
     int threshCovisGraphDist = 5;
 
     set<PtrKeyFrame> sKFSelected;
-    vector<PtrKeyFrame> sKFCovis = _pKF->getAllCovisibleKFs();
-    set<PtrKeyFrame> sKFLocal =
-        GlobalMapper::getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
+    vector<PtrKeyFrame> vCovisKFs = _pKF->getAllCovisibleKFs();
+    set<PtrKeyFrame> sKFLocal = GlobalMapper::getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
 
     // 共视图里的KF如果在特征图里,就加入到sKFSelected里,然后会更新特征图
-    for (auto iter = sKFCovis.begin(); iter != sKFCovis.end(); iter++) {
-        PtrKeyFrame _pKFCand = *iter;
+    for (auto iter = vCovisKFs.begin(); iter != vCovisKFs.end(); iter++) {
+        const PtrKeyFrame _pKFCand = *iter;
         if (sKFLocal.count(_pKFCand) == 0) {
             sKFSelected.insert(*iter);
             sKFLocal = GlobalMapper::getAllConnectedKFs_nLayers(_pKF, threshCovisGraphDist, sKFSelected);
@@ -1393,9 +1392,11 @@ bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
     int numPairKFs = _vKFPairs.size();
     for (int i = 0; i != numPairKFs; ++i) {
         pair<PtrKeyFrame, PtrKeyFrame> pairKF = _vKFPairs[i];
-        PtrKeyFrame ptKFFrom = pairKF.first;  //! 这里始终都是当前帧_pKF啊???
+        PtrKeyFrame ptKFFrom = pairKF.first;  //? 这里始终都是当前帧_pKF啊???
         PtrKeyFrame ptKFTo = pairKF.second;
         SE3Constraint ftrCnstr;
+
+        assert(ptKFFrom->mIdKF == _pKF->mIdKF);
 
         //! NOTE 为KF对添加特征图约束,这里对应论文里的SE3XYZ约束??
         if (GlobalMapper::createFeatEdge(ptKFFrom, ptKFTo, ftrCnstr) == 0) {
@@ -1433,6 +1434,37 @@ size_t Map::addLocalGraphThroughKdtree(set<PtrKeyFrame, KeyFrame::IdLessThan>& s
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
     Mat pose = cvu::inv(mCurrentKF->getPose());
+    std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
+                                pose.at<float>(2, 3) * 0.001f};
+    std::vector<int> indices;
+    std::vector<float> dists;
+    kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
+    for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
+        if (indices[i] > 0 && dists[i] < searchRadius) { // 距离在0.3m以内
+            setLocalKFs.insert(vKFsAll[indices[i]]);
+            nNewAdd++;
+        }
+    }
+    return nNewAdd;
+}
+
+size_t Map::addLocalGraphThroughKdtree_new(set<PtrKeyFrame, KeyFrame::IdLessThan>& setLocalKFs,
+                                           const Mat& pose, int maxN, float searchRadius)
+{
+    size_t nNewAdd = 0;
+
+    const vector<PtrKeyFrame> vKFsAll = getAllKFs();  // lock global
+    vector<Point3f> vKFPoses(vKFsAll.size());
+    for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
+        Mat Twc = cvu::inv(vKFsAll[i]->getPose());
+        Point3f pose(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f, Twc.at<float>(2, 3) * 0.001f);
+        vKFPoses[i] = pose;
+    }
+
+    cv::flann::KDTreeIndexParams kdtreeParams;
+    cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
+
+    //Mat pose = cvu::inv(mCurrentKF->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
                                 pose.at<float>(2, 3) * 0.001f};
     std::vector<int> indices;

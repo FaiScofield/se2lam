@@ -333,7 +333,7 @@ void GlobalMapper::globalBA()
     double threshFeatEdgeChi2Pre = 1000.0;
 #endif
 
-    vector<PtrKeyFrame> vecKFs = mpMap->getAllKFs();
+    const vector<PtrKeyFrame> vecKFs = mpMap->getAllKFs();
 
     SlamOptimizer optimizer;
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
@@ -351,13 +351,12 @@ void GlobalMapper::globalBA()
     vector<g2o::EdgeSE3Prior*> vpEdgePlane;
 
     for (auto it = vecKFs.begin(); it != vecKFs.end(); ++it) {
-        PtrKeyFrame pKF = (*it);
-
+        const PtrKeyFrame pKF = (*it);
         if (pKF->isNull())
             continue;
 
-        Mat Twc = cvu::inv(pKF->getPose());
-        bool bIfFix = (pKF->mIdKF == 0);
+        const Mat Twc = cvu::inv(pKF->getPose());
+        const bool bIfFix = (pKF->mIdKF == 0);
 
 //        addVertexSE3(optimizer, toIsometry3D(T_w_c), pKF->mIdKF, bIfFix);
         g2o::EdgeSE3Prior* pEdge = addVertexSE3AndEdgePlaneMotion(optimizer, toIsometry3D(Twc), pKF->mIdKF,
@@ -366,7 +365,6 @@ void GlobalMapper::globalBA()
 //        pEdge->setLevel(1);
 
         mapId2pKF[pKF->mIdKF] = pKF;
-
         if (pKF->mIdKF > maxKFid)
             maxKFid = pKF->mIdKF;
     }
@@ -375,14 +373,13 @@ void GlobalMapper::globalBA()
     int numOdoCnstr = 0;
     vector<g2o::EdgeSE3*> vpEdgeOdo;
     for (auto it = vecKFs.begin(); it != vecKFs.end(); ++it) {
-        PtrKeyFrame pKF = (*it);
+        const PtrKeyFrame pKF = (*it);
         if (pKF->isNull())
             continue;
         if (pKF->mOdoMeasureFrom.first == nullptr)
             continue;
 
-        g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
-
+        const g2o::Matrix6d info = toMatrix6d(pKF->mOdoMeasureFrom.second.info);
         g2o::EdgeSE3* pEdgeOdoTmp =
             addEdgeSE3(optimizer, toIsometry3D(pKF->mOdoMeasureFrom.second.measure), pKF->mIdKF,
                        pKF->mOdoMeasureFrom.first->mIdKF, info);
@@ -395,19 +392,19 @@ void GlobalMapper::globalBA()
     int numFtrCnstr = 0;
     vector<g2o::EdgeSE3*> vpEdgeFeat;
     for (auto it = vecKFs.begin(); it != vecKFs.end(); ++it) {
-        PtrKeyFrame ptrKFFrom = (*it);
+        const PtrKeyFrame ptrKFFrom = (*it);
         if (ptrKFFrom->isNull())
             continue;
 
         for (auto it2 = ptrKFFrom->mFtrMeasureFrom.begin(); it2 != ptrKFFrom->mFtrMeasureFrom.end();
              it2++) {
 
-            PtrKeyFrame ptrKFTo = (*it2).first;
+            const PtrKeyFrame ptrKFTo = (*it2).first;
             if (std::find(vecKFs.begin(), vecKFs.end(), ptrKFTo) == vecKFs.end())
                 continue;
 
-            Mat meas = (*it2).second.measure;
-            g2o::Matrix6d info = toMatrix6d((*it2).second.info);
+            const Mat meas = (*it2).second.measure;
+            const g2o::Matrix6d info = toMatrix6d((*it2).second.info);
 
             g2o::EdgeSE3* pEdgeFeatTmp =
                 addEdgeSE3(optimizer, toIsometry3D(meas), ptrKFFrom->mIdKF, ptrKFTo->mIdKF, info);
@@ -495,7 +492,7 @@ void GlobalMapper::globalBA()
         if (pKF->isNull()) {
             continue;
         }
-        Mat Twc = toCvMat(estimateVertexSE3(optimizer, pKF->mIdKF));
+        const Mat Twc = toCvMat(estimateVertexSE3(optimizer, pKF->mIdKF));
         pKF->setPose(cvu::inv(Twc));
     }
 
@@ -503,26 +500,24 @@ void GlobalMapper::globalBA()
     vector<PtrMapPoint> vMPsAll = mpMap->getAllMPs();
     for (auto it = vMPsAll.begin(); it != vMPsAll.end(); ++it) {
         PtrMapPoint pMP = (*it);
-
         if (pMP->isNull()) {
             continue;
         }
 
-        PtrKeyFrame pKF = pMP->getMainKF();
-        Mat Twc = pKF->getPose().inv();
-        Mat Rwc = Twc.rowRange(0, 3).colRange(0, 3);
-        Mat twc = Twc.rowRange(0, 3).colRange(3, 4);
-
-        if (!pKF->hasObservationByPointer(pMP)) {
+        const PtrKeyFrame pKF = pMP->getMainKF();
+        if (!pKF->hasObservationByPointer(pMP))
             continue;
-        }
 
-        int idx = pKF->getFeatureIndex(pMP);
 
-        Point3f Pt3_MP_KF = pKF->getMPPoseInCamareFrame(idx);
-        Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
-        Mat t3_MP_w = Rwc * t3_MP_KF + twc;
-        Point3f Pt3_MP_w(t3_MP_w);
+        const Mat Twc = pKF->getPose().inv();
+        const Mat Rwc = Twc.rowRange(0, 3).colRange(0, 3);
+        const Mat twc = Twc.rowRange(0, 3).colRange(3, 4);
+        const int idx = pKF->getFeatureIndex(pMP);
+
+        const Point3f Pt3_MP_KF = pKF->getMPPoseInCamareFrame(idx);
+        const Mat t3_MP_KF = (Mat_<float>(3, 1) << Pt3_MP_KF.x, Pt3_MP_KF.y, Pt3_MP_KF.z);
+        const Mat t3_MP_w = Rwc * t3_MP_KF + twc;
+        const Point3f Pt3_MP_w(t3_MP_w);
         pMP->setPos(Pt3_MP_w);
     }
 

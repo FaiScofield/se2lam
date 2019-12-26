@@ -184,6 +184,8 @@ Frame::Frame(const Frame& f)
     for (int i = 0; i != GRID_COLS; ++i)
         for (int j = 0; j < GRID_ROWS; ++j)
             mGrid[i][j] = f.mGrid[i][j];
+
+    mPreSE2 = f.mPreSE2;
 }
 
 //! 赋值拷贝, Track中交换前后帧数据使用
@@ -198,6 +200,7 @@ Frame& Frame::operator=(const Frame& f)
     mTimeStamp = f.mTimeStamp;
     id = f.id;
     odom = f.odom;
+    mPreSE2 = f.mPreSE2;
 
     if (bNeedVisualization)
         f.mImage.copyTo(mImage);

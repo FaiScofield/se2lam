@@ -564,7 +564,7 @@ void Track::doTriangulate(PtrKeyFrame& pKF)
                     n22++;
                 } else {  // 情况3.2
                     assert(!pKF->hasObservationByIndex(i));
-                    MPCandidate MPcan(pKF, Pc1, mCurrentFrame.id, mvKPMatchIdx[i], Tc2w);
+                    MPCandidate MPcan(pKF, Pc1, i, mCurrentFrame.id, mvKPMatchIdx[i], Tc2w);
                     mMPCandidates.emplace(i, MPcan);
                     mnMPsCandidate++;
                     n32++;
@@ -1034,6 +1034,7 @@ bool Track::detectLoopClose()
     return bDetected;
 }
 
+//! TODO 回环验证中, 当前帧的初始位姿要用视觉信息来计算. 3D-2D + 2D-2D
 bool Track::verifyLoopClose()
 {
     assert(mpLoopKF != nullptr && !mCurrentFrame.isNull());
@@ -1052,7 +1053,7 @@ bool Track::verifyLoopClose()
     bool bIfMatchMPOnly = false;  // 要看总体匹配点数多不多
     mnKPMatches = mpORBmatcher->SearchByBoW(static_cast<Frame*>(mpLoopKF.get()), &mCurrentFrame, mKPMatchesLoop, bIfMatchMPOnly);
     if (mnKPMatches < nMinKPMatch) {
-        fprintf(stderr, "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与回环帧的KP匹配数过少: %d < %d\n",
+        fprintf(stderr, "[Track][Warni] #%ld-KF#%ld(Loop) 重定位-回环验证失败! 与LoopKF的KP匹配数过少: %d < %d\n",
                 mCurrentFrame.id, mpLoopKF->mIdKF, mnKPMatches, nMinKPMatch);
         return false;
     }
@@ -1075,6 +1076,7 @@ bool Track::verifyLoopClose()
         return false;
     }
     // H.rowRange(0, 2).copyTo(mAffineMatrix);
+
 
     assert(mMPCandidates.empty());
     doTriangulate(mpLoopKF);  //  对MP视差好的会关联

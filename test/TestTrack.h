@@ -55,21 +55,10 @@ private:
 
     void updateFramePoseFromRef();
     int doTriangulate(PtrKeyFrame& pKF, Frame* frame);
-    void resetLocalTrack();
-    bool needNewKF();
-
-    // Relocalization & GlobalMap functions
-    bool doRelocalization();
-    bool detectLoopClose(Frame* frame);
-    bool verifyLoopClose(Frame* frame);
-    bool detectIfLost();
-    bool detectIfLost(Frame& f, const cv::Mat& Tcw_opt);
-    void startNewTrack();
-    void globalBA();
-    int doTriangulate_Global(PtrKeyFrame& pKFLoop, PtrKeyFrame& pKFCurr,
-                             std::vector<int>& vKPMatchIdx);
-    bool detectLoopClose_Global(PtrKeyFrame& pKF);
-    bool verifyLoopClose_Global(PtrKeyFrame& pKF);
+    void newKFDecision();
+    bool needNewKFForLastFrame();
+    bool needNewKFForCurrentFrame();
+    void resetTrackingData(bool newKFInserted);
 
     // LocalMap functions
     void addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCandidates);
@@ -79,6 +68,20 @@ private:
     void removeOutlierChi2();
     void localBA();
     void loadLocalGraph(SlamOptimizer& optimizer);
+
+    // Relocalization & GlobalMap functions
+    bool doRelocalization();
+    bool detectLoopClose(Frame* frame, std::vector<PtrKeyFrame>& vpKFsCand);
+    bool verifyLoopClose(Frame* frame, const std::vector<PtrKeyFrame>& vpKFsCand);
+    bool optimizeLoopClose(Frame* frame, cv::Mat& optPose);
+    bool detectIfLost();
+    bool detectIfLost(Frame& f, const cv::Mat& Tcw_opt);
+    void startNewTrack();
+    void globalBA();
+//    int doTriangulate_Global(PtrKeyFrame& pKFLoop, PtrKeyFrame& pKFCurr,
+//                             std::vector<int>& vKPMatchIdx);
+    bool detectLoopClose_Global(PtrKeyFrame& pKF);
+    bool verifyLoopClose_Global(PtrKeyFrame& pKF);
 
     Map* mpMap;
     MapPublish* mpMapPublisher;
@@ -97,6 +100,7 @@ private:
     int mnKPMatches, mnKPsInline, mnKPMatchesGood;  // KP匹配对数/内点数/具有MP的KP匹配对数
     int mnMPsTracked, mnMPsNewAdded, mnMPsInline;   // 关联上MP数/新增MP数/总MP配对数(前两者之和)
     int mnLostFrames;  // 连续追踪失败的帧数
+    int mnLessMatchFrames; // 连续匹配数量都很低的帧数
     double mLoopScore;
 
     // New KeyFrame rules (according to fps)

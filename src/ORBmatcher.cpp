@@ -134,7 +134,7 @@ int ORBmatcher::DescriptorDistance(const cv::Mat& a, const cv::Mat& b)
  * 通过距离阈值、比例阈值和角度投票进行剔除误匹配
  * @param  pKF1         KeyFrame current
  * @param  pKF2         KeyFrame loop
- * @param  vpMatches12  pKF2中与pKF1匹配的MapPoint，null表示没有匹配
+ * @param  vpMatches12  pKF2中与pKF1匹配的KP索引，null表示没有匹配
  * @PARAM  bIfMPOnly    是否仅在有MP的KP中进行匹配, 默认为true, Localizer下为false
  * @return              成功匹配的数量
  */

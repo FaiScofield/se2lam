@@ -523,8 +523,8 @@ void LocalMapper::printOptInfo(const SlamOptimizer& optimizer)
 void LocalMapper::updateLocalGraphInMap()
 {
     locker lock(mutexMapper);
-//    mpMap->updateLocalGraph(mnSearchLevel, mnMaxLocalFrames, mfSearchRadius);
-    mpMap->updateLocalGraph_new();
+    mpMap->updateLocalGraph(mnSearchLevel, mnMaxLocalFrames, mfSearchRadius);
+//    mpMap->updateLocalGraph_new();
 }
 
 //! 去除冗余关键帧

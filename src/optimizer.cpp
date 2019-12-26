@@ -22,31 +22,32 @@ G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP_PIROR, EdgeSE3ExpmapPrior);
 G2O_REGISTER_TYPE(EDGE_SE3:XYZ_ONLY, EdgeSE3ProjectXYZOnlyPose);
 
 /**
- * @brief 计算KF之间的残差和信息矩阵, 后端优化用
+ * @brief 计算KF之间的残差和信息矩阵, globalBA()用
  * @param dOdo      [Input ]后一帧与前一帧之间的里程计差值
  * @param Tc1c2     [Output]残差
  * @param Info_se3  [Output]信息矩阵
  */
 void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
 {
-    const Mat Tbc = Config::Tbc;
-    const Mat Tcb = Config::Tcb;
+    const Mat& Tbc = Config::Tbc;
+    const Mat& Tcb = Config::Tcb;
     const Mat Tb1b2 = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
     Tc1c2 = Tcb * Tb1b2 * Tbc;
 
+    //! Vector order: [trans, rot] 先平移后旋转
+    // 不确定度(即协方差), 信息矩阵为其逆.
     float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
     float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
     float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
-    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();  // 先旋转后平移
-    // float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta *
-    // dtheta)};
-    float data[6] = {1e4, 1e4, 1.f / (dtheta * dtheta), 1.f / (dx * dx), 1.f / (dy * dy), 1};
+    g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
+    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
+    // float data[6] = {1e4, 1e4, 1.f / (dtheta * dtheta), 1.f / (dx * dx), 1.f / (dy * dy), 1};
     for (int i = 0; i < 6; ++i)
         Info_se3_bTb(i, i) = data[i];
-    // Info_se3 = Info_se3;
+     Info_se3 = Info_se3_bTb;
 
-    g2o::Matrix6d J_bTb_cTc = toSE3Quat(Tbc).adj();
-    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
+//    g2o::Matrix6d J_bTb_cTc = toSE3Quat(Tbc).adj();
+//    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
 }
 
 /**
@@ -75,11 +76,15 @@ void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eige
     float dz1 = dxy2 / sinParallax;
     float dz2 = dxy1 / sinParallax;
 
-    Mat info_xyz1 = (Mat_<float>(3, 3) << 1.f / (dxy1 * dxy1), 0, 0, 0, 1.f / (dxy1 * dxy1), 0, 0,
-                     0, 1.f / (dz1 * dz1));
+    Mat info_xyz1 = (Mat_<float>(3, 3) <<
+                     1.f / (dxy1 * dxy1), 0, 0,
+                     0, 1.f / (dxy1 * dxy1), 0,
+                     0, 0, 1.f / (dz1 * dz1));
 
-    Mat info_xyz2 = (Mat_<float>(3, 3) << 1.f / (dxy2 * dxy2), 0, 0, 0, 1.f / (dxy2 * dxy2), 0, 0,
-                     0, 1.f / (dz2 * dz2));
+    Mat info_xyz2 = (Mat_<float>(3, 3) <<
+                     1.f / (dxy2 * dxy2), 0, 0,
+                     0, 1.f / (dxy2 * dxy2), 0,
+                     0, 0, 1.f / (dz2 * dz2));
 
     Point3f z1 = Point3f(0, 0, length1);
     Point3f z2 = Point3f(0, 0, length2);
@@ -251,132 +256,6 @@ Matrix6d invJJl(const Vector6d& v6d)
     return invJJl;
 }
 
-
-EdgeSE3ExpmapPrior::EdgeSE3ExpmapPrior() : BaseUnaryEdge<6, SE3Quat, VertexSE3Expmap>()
-{
-    setMeasurement(SE3Quat());
-    information().setIdentity();
-}
-
-/**
- * @brief EdgeSE3ExpmapPrior::computeError KF 全局平面运动约束
- * _error:       e = ln([Tm * T^(-1)])^v, 误差函数
- * _measurement: Tcw, 相机位姿测量值, 令 $z=0, \alpha=0, \beta=0$ 作为观测
- * _jacobian:    J = -Jl(-e)^(-1), 左扰动的结果, 如果是右扰动的话还需要乘T.adj()
- */
-void EdgeSE3ExpmapPrior::computeError()
-{
-    VertexSE3Expmap* v = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    SE3Quat err = _measurement * v->estimate().inverse();
-    _error = err.log();
-}
-
-void EdgeSE3ExpmapPrior::setMeasurement(const SE3Quat& m)
-{
-    _measurement = m;  // 测量值Tcw
-}
-
-//! NOTE 0917改成和PPT上一致
-void EdgeSE3ExpmapPrior::linearizeOplus()
-{
-    _jacobianOplusXi = -invJJl(-_error);  // 右扰动的话还要再乘一个Adj(T)
-//    _jacobianOplusXi = -g2o::Matrix6d::Identity();  //?
-}
-
-bool EdgeSE3ExpmapPrior::read(istream& is)
-{
-    Vector7d meas;
-    for (int i = 0; i < 7; i++)
-        is >> meas[i];
-    SE3Quat cam2world;
-    cam2world.fromVector(meas);
-    setMeasurement(cam2world.inverse());
-    for (int i = 0; i < 6; i++) {
-        for (int j = i; j < 6; j++) {
-            is >> information()(i, j);
-            if (i != j)
-                information()(j, i) = information()(i, j);
-        }
-    }
-    return true;
-}
-
-bool EdgeSE3ExpmapPrior::write(ostream& os) const
-{
-    SE3Quat cam2world(measurement().inverse());
-    for (int i = 0; i < 7; i++)
-        os << cam2world[i] << " ";
-    for (int i = 0; i < 6; i++) {
-        for (int j = i; j < 6; j++) {
-            os << " " << information()(i, j);
-        }
-    }
-    return os.good();
-}
-
-void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
-{
-    VertexSE3Expmap* vi = static_cast<VertexSE3Expmap*>(_vertices[0]);
-    Vector3d xyz_trans = vi->estimate().map(Xw);
-
-    double x = xyz_trans[0];
-    double y = xyz_trans[1];
-    double invz = 1.0 / xyz_trans[2];
-    double invz_2 = invz * invz;
-
-    _jacobianOplusXi(0, 0) = x * y * invz_2 * fx;
-    _jacobianOplusXi(0, 1) = -(1 + (x * x * invz_2)) * fx;
-    _jacobianOplusXi(0, 2) = y * invz * fx;
-    _jacobianOplusXi(0, 3) = -invz * fx;
-    _jacobianOplusXi(0, 4) = 0;
-    _jacobianOplusXi(0, 5) = x * invz_2 * fx;
-
-    _jacobianOplusXi(1, 0) = (1 + y * y * invz_2) * fy;
-    _jacobianOplusXi(1, 1) = -x * y * invz_2 * fy;
-    _jacobianOplusXi(1, 2) = -x * invz * fy;
-    _jacobianOplusXi(1, 3) = 0;
-    _jacobianOplusXi(1, 4) = -invz * fy;
-    _jacobianOplusXi(1, 5) = y * invz_2 * fy;
-}
-
-Vector2d EdgeSE3ProjectXYZOnlyPose::cam_project(const Vector3d& trans_xyz) const
-{
-    Vector2d proj = trans_xyz.head<2>() / trans_xyz[2];
-    Vector2d res;
-    res[0] = proj[0] * fx + cx;
-    res[1] = proj[1] * fy + cy;
-    return res;
-}
-
-bool EdgeSE3ProjectXYZOnlyPose::read(istream& is)
-{
-    Vector2d m;
-    is >> m[0] >> m[1];
-    setMeasurement(m);
-
-    is >> Xw[0] >> Xw[1] >> Xw[2];
-    for (int i = 0; i < 2; i++) {
-        for (int j = i; j < 2; j++) {
-            is >> information()(i, j);
-            if (i != j)
-                information()(j, i) = information()(i, j);
-        }
-    }
-    return true;
-}
-
-bool EdgeSE3ProjectXYZOnlyPose::write(ostream& os) const
-{
-    Vector2d m = measurement();
-    os << m[0] << " " << m[1] << " ";
-    os << Xw[0] << " " << Xw[1] << " " << Xw[2] << " ";
-    for (int i = 0; i < 2; i++) {
-        for (int j = i; j < 2; j++) {
-            os << " " << information()(i, j);
-        }
-    }
-    return os.good();
-}
 
 void initOptimizer(SlamOptimizer& opt, bool verbose)
 {
@@ -607,12 +486,12 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
 
     //! Vector order: [trans, rot]
     g2o::Matrix6d Info_wb = g2o::Matrix6d::Zero();
-    Info_wb(3, 3) = Config::PlaneMotionInfoXrot;
-    Info_wb(4, 4) = Config::PlaneMotionInfoYrot;
-    Info_wb(5, 5) = 1e-4;
     Info_wb(0, 0) = 1e-4;
     Info_wb(1, 1) = 1e-4;
     Info_wb(2, 2) = Config::PlaneMotionInfoZ;
+    Info_wb(3, 3) = Config::PlaneMotionInfoXrot;
+    Info_wb(4, 4) = Config::PlaneMotionInfoYrot;
+    Info_wb(5, 5) = 1e-4;
     g2o::Matrix6d J_bb_cc = AdjTR(Tbc);
     g2o::Matrix6d Info_pose = J_bb_cc.transpose() * Info_wb * J_bb_cc;
 

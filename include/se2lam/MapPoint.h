@@ -25,16 +25,18 @@ class KeyFrame;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
 struct MPCandidate {
-    PtrKeyFrame pKF;  //  Reference or Loop KF
+    PtrKeyFrame pKF;  // Reference or Loop KF
     cv::Point3f Pc1;  // Pc in Camera Frame of KF
+    size_t kpIdx1;
 
     unsigned long id2;  // Frame id
     size_t kpIdx2;
     cv::Mat Tc2w;  // Camera pose of Frame
 
     MPCandidate() : pKF(nullptr) {}
-    MPCandidate(const PtrKeyFrame& pkf, const cv::Point3f& PcKF, unsigned long id, size_t idx, const cv::Mat& Tcw)
-        : pKF(pkf), Pc1(PcKF), id2(id), kpIdx2(idx), Tc2w(Tcw)
+    MPCandidate(const PtrKeyFrame& pkf, const cv::Point3f& PcKF, size_t idx1, unsigned long id,
+                size_t idx2, const cv::Mat& Tcw)
+        : pKF(pkf), Pc1(PcKF), kpIdx1(idx1), id2(id), kpIdx2(idx2), Tc2w(Tcw)
     {}
 };
 

@@ -27,6 +27,13 @@ typedef std::shared_ptr<MapPoint> PtrMapPoint;
 
 struct PreSE2 {
 public:
+    PreSE2(): meas(Eigen::Vector3d::Zero()), cov(Eigen::Matrix3d::Zero()) {}
+    PreSE2& operator=(const PreSE2& that) {
+        meas = that.meas;
+        cov = that.cov;
+        return *this;
+    }
+
     Eigen::Vector3d meas; // x, y, theta, measurement
     Eigen::Matrix3d cov;  // 3*3, cov
 };
@@ -108,6 +115,7 @@ public:
     double mTimeStamp;
     unsigned long id;  // 图像序号
     Se2 odom;          // 原始里程计输入
+    PreSE2 mPreSE2;    // 预积分信息
 
     size_t N;        // 特征总数
     cv::Mat mImage;  // bNeedVisualization = false, 图像无数据

@@ -46,26 +46,22 @@ public:
     void setKFPairFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo);
 
     // Create single feature constraint between 2 KFs
-    static int
-    createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, SE3Constraint& SE3CnstrOutput);
+    static int createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, SE3Constraint& SE3CnstrOutput);
     static int createFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo,
                               std::map<int, int>& mapMatch, SE3Constraint& SE3CnstrOutput);
 
     // Do local optimization with chosen KFs and MPs
-    static void
-    optKFPair(const std::vector<PtrKeyFrame>& _vPtrKFs, const std::vector<PtrMapPoint>& _vPtrMPs,
-              std::vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
-              std::vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
-    static void
-    optKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, std::map<int, int>& mapMatch,
-                   std::vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
-                   std::vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
+    static void optKFPair(const std::vector<PtrKeyFrame>& _vPtrKFs, const std::vector<PtrMapPoint>& _vPtrMPs,
+                          std::vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
+                          std::vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
+    static void optKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, std::map<int, int>& mapMatch,
+                               std::vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
+                               std::vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs);
 
     // generate MeasSE3XYZ measurement vector
-    static void
-    createVecMeasSE3XYZ(const std::vector<PtrKeyFrame>& _vpKFs,
-                        const std::vector<PtrMapPoint>& _vpMPs,
-                        std::vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas);
+    static void createVecMeasSE3XYZ(const std::vector<PtrKeyFrame>& _vpKFs,
+                                    const std::vector<PtrMapPoint>& _vpMPs,
+                                    std::vector<MeasSE3XYZ, Eigen::aligned_allocator<MeasSE3XYZ>>& vMeas);
 
     std::vector<std::pair<PtrKeyFrame, PtrKeyFrame>> selectKFPairFeat(const PtrKeyFrame& _pKF);
 
@@ -88,8 +84,7 @@ public:
 
     void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
-    void removeKPMatch(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
-                       std::map<int, int>& mapiMatch);
+    static void removeKPMatch(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop, std::map<int, int>& mapiMatch);
 
     void setBusy(bool v);
     void waitIfBusy();
@@ -97,14 +92,13 @@ public:
     void requestFinish();
     bool isFinished();
 
-//    void drawMatch(const std::map<int, int>& mapiMatch);
-//    void drawMatch(const std::vector<int>& viMatch);
+    //    void drawMatch(const std::map<int, int>& mapiMatch);
+    //    void drawMatch(const std::vector<int>& viMatch);
 
     // DEBUG Functions ... Print SE3Quat
     void printSE3(const g2o::SE3Quat se3);
     void printOptInfo(const SlamOptimizer& _optimizer);
-    void printOptInfo(const std::vector<g2o::EdgeSE3*>& vpEdgeOdo,
-                      const std::vector<g2o::EdgeSE3*>& vpEdgeFeat,
+    void printOptInfo(const std::vector<g2o::EdgeSE3*>& vpEdgeOdo, const std::vector<g2o::EdgeSE3*>& vpEdgeFeat,
                       const std::vector<g2o::EdgeSE3Prior*>& vpEdgePlane, double threshChi2 = 30.0,
                       bool bPrintMatInfo = false);
 

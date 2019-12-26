@@ -88,7 +88,8 @@ private:
     visualization_msgs::Marker mMPsNoGoodPrl;
 
     visualization_msgs::Marker mKFsNeg;
-    visualization_msgs::Marker mKFsAct;
+    visualization_msgs::Marker mKFsAct;  // local
+    visualization_msgs::Marker mKFsFix;  // ref
     visualization_msgs::Marker mKFNow;
 
     visualization_msgs::Marker mCovisGraph;

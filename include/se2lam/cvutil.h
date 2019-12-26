@@ -21,7 +21,14 @@ using cv::Point2f;
 using cv::Point3f;
 using std::vector;
 
-enum eTrackingState { NO_READY_YET = -1, FIRST_FRAME = 0, OK = 1, LOST = 2 };
+enum eTrackingState {
+    NO_READY_YET = -2,
+    FIRST_FRAME = -1,
+    LOST = 0,
+    OK = 1,         // 正常状态, 仅不能从-2变过来
+    TRANSLATE = 2,
+    ROTATE = 3      // 纯旋转, 只可能从1变过来
+};
 
 Mat inv(const Mat& T4x4);
 
