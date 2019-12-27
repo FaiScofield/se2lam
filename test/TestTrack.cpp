@@ -201,7 +201,7 @@ bool TestTrack::trackReferenceKF()
     // 4.三角化生成潜在MP, 由LocalMap线程创造MP
     int nObs = doTriangulate(mpReferenceKF, &mCurrentFrame);  // 更新 mnTrackedOld, mnGoodInliers, mvGoodMatchIdx
 
-    assert(nObs == mCurrentFrame.countObservations());
+    assert(nObs == static_cast<int>(mCurrentFrame.countObservations()));
     if (0 && nObs > 10) { //! 这里不用执行
         WorkTimer timer;
 
@@ -308,7 +308,7 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
     }
 
     // 纯旋转/与参考帧相距太近, 不做三角化但要做MP关联
-    if (mState == cvu::ROTATE || mCurrentFrame.id - mpReferenceKF->id < nMinFrames) {
+    if (mState == cvu::ROTATE || static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) < nMinFrames) {
         mnKPMatchesGood = 0;
         printf("[Track][Info ] #%ld-#%ld 纯旋转/与参考帧相距太近, 不进行三角化, 只进行MP关联. \n",
                mCurrentFrame.id, mLastRefKFid);
@@ -477,9 +477,9 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
     assert(n21 + n31 == mnMPsNewAdded);
     assert(n33 + mnKPMatchesGood == mnKPsInline);
     assert(mnMPsTracked + mnMPsNewAdded == mnMPsInline);
-    assert((n2 - n21 + n32 == mnMPsCandidate) && (mnMPsCandidate == mMPCandidates.size()));
-    assert(nObsCur + mnMPsTracked + mnMPsNewAdded == frame->countObservations());
-    assert(nObsRef + mnMPsNewAdded == pKF->countObservations());
+    assert((n2 - n21 + n32 == mnMPsCandidate) && (mnMPsCandidate == static_cast<int>(mMPCandidates.size())));
+    assert(nObsCur + mnMPsTracked + mnMPsNewAdded == static_cast<int>(frame->countObservations()));
+    assert(nObsRef + mnMPsNewAdded == static_cast<int>(pKF->countObservations()));
 
     return mnMPsInline;
 }
@@ -940,7 +940,7 @@ bool TestTrack::verifyLoopClose(Frame* frame, const vector<PtrKeyFrame>& vpKFsCa
             }
         }
     }
-    assert(frame->countObservations() == mnMPsTracked);
+    assert(static_cast<int>(frame->countObservations()) == mnMPsTracked);
 
     if (mnMPsTracked < nMinMPMatch) {
         fprintf(stderr, "[Track][Warni] #%ld 重定位ing, 回环验证失败! 与回环候选帧的总关联MP数过少: %d < %d\n",
@@ -956,7 +956,7 @@ bool TestTrack::verifyLoopClose(Frame* frame, const vector<PtrKeyFrame>& vpKFsCa
     mnKPsInline = removeOutliers(mpLoopKF, frame, mvKPMatchIdx, mAffineMatrix);
     if (mnKPsInline < nMinKPMatch * 0.5) {
         fprintf(stderr, "[Track][Warni] #%ld 重定位ing, 回环验证失败! 与回环帧的KP匹配内点数(%d/%d)少于匹配阈值的一半!\n",
-               frame->id, mnKPsInline, nMinKPMatch * 0.5);
+               frame->id, mnKPsInline, nMinKPMatch >> 1);
         return false;
     }
 
@@ -1013,7 +1013,7 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
     mpNewKF->setOdoMeasureTo(pKFLast, measure, toCvMat6f(info));
 
     double t2 = timer.count();
-    printf("[Track][Timer] #%ld(KF#%ld) L2.更新共视关系耗时: %.2fms, 共获得%ld个共视KF, MP观测数: %ld\n",
+    printf("[Track][Timer] #%ld(KF#%ld) L2.更新共视关系耗时: %.2fms, 共获得共视KF数量: %ld, MP观测数: %ld\n",
            pKF->id, pKF->mIdKF, t2, pKF->countCovisibleKFs(), pKF->countObservations());
 
     // 3.将KF插入地图
@@ -1128,7 +1128,7 @@ void TestTrack::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
     double t1 = timer.count();
     printf("[Track][Info ] #%ld(KF#%ld) L1.1.关联地图点1/3, 可视MP添加信息矩阵数/KF可视MP数: %d/%d, 耗时: %.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, nAddInfo, nObs, t1);
-    assert(nObs == mpNewKF->countObservations());
+    assert(nObs == static_cast<int>(mpNewKF->countObservations()));
 
     // 2.局部地图中非newKF的MPs投影到newKF, 新投影的MP可能会把MP候选的坑占了
     //! NOTE 视差不好的不要投
@@ -1225,7 +1225,7 @@ void TestTrack::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
            mpMap->countMPs(), mpNewKF->countObservations(), t3);
 
     assert(nReplacedCands <= nProjLocalMPs);
-    assert(nAddNewMP + nReplacedCands == MPCandidates.size());
+    assert(nAddNewMP + nReplacedCands == static_cast<int>(MPCandidates.size()));
 }
 
 void TestTrack::updateLocalGraph()

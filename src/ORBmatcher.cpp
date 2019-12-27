@@ -252,25 +252,25 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
     }
 
     // 旋转一致性验证, 根据方向剔除误匹配的点
-    if (mbCheckOrientation) {
-        int ind1 = -1;
-        int ind2 = -1;
-        int ind3 = -1;
+//    if (mbCheckOrientation) {
+//        int ind1 = -1;
+//        int ind2 = -1;
+//        int ind3 = -1;
 
-        //! 计算rotHist中最大的三个的index
-        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
+//        //! 计算rotHist中最大的三个的index
+//        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-        for (int i = 0; i < HISTO_LENGTH; ++i) {
-            //! 如果特征点的旋转角度变化量属于这三个组，则保留
-            if (i == ind1 || i == ind2 || i == ind3)
-                continue;
-            //! 将除了ind1 ind2 ind3以外的匹配点去掉
-            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
-                mapMatches12.erase(rotHist[i][j]);
-                nmatches--;
-            }
-        }
-    }
+//        for (int i = 0; i < HISTO_LENGTH; ++i) {
+//            //! 如果特征点的旋转角度变化量属于这三个组，则保留
+//            if (i == ind1 || i == ind2 || i == ind3)
+//                continue;
+//            //! 将除了ind1 ind2 ind3以外的匹配点去掉
+//            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
+//                mapMatches12.erase(rotHist[i][j]);
+//                nmatches--;
+//            }
+//        }
+//    }
 
     return nmatches;
 }

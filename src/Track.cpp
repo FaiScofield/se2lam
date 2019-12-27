@@ -435,7 +435,7 @@ Mat Track::computeA12(const PtrKeyFrame &pKFRef, const Frame *pFCur, std::vector
  */
 void Track::doTriangulate(PtrKeyFrame& pKF)
 {
-    if (mvKPMatchIdx.empty() || mCurrentFrame.id - mpReferenceKF->id < nMinFrames)
+    if (mvKPMatchIdx.empty() || mCurrentFrame.id - mpReferenceKF->id < static_cast<size_t>(nMinFrames))
         return;
 
     // 以下成员变量在这个函数中会被修改
@@ -597,9 +597,9 @@ void Track::doTriangulate(PtrKeyFrame& pKF)
     assert(n33 == mnKPMatchesBad);
     assert(nKPMatchesGood + mnKPMatchesBad == mnKPsInline);
     assert(mnMPsTracked + mnMPsNewAdded == mnMPsInline);
-    assert((n2 - n21 + n32 == mnMPsCandidate) && (mnMPsCandidate == mMPCandidates.size()));
-    assert(nObsCur + mnMPsTracked + mnMPsNewAdded == mCurrentFrame.countObservations());
-    assert(nObsRef + mnMPsNewAdded == pKF->countObservations());
+    assert((n2 - n21 + n32 == mnMPsCandidate) && (mnMPsCandidate == static_cast<int>(mMPCandidates.size())));
+    assert(nObsCur + mnMPsTracked + mnMPsNewAdded == static_cast<int>(mCurrentFrame.countObservations()));
+    assert(nObsRef + mnMPsNewAdded == static_cast<int>(pKF->countObservations()));
 }
 
 void Track::resetLocalTrack()

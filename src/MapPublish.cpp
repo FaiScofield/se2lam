@@ -302,7 +302,7 @@ void MapPublish::publishKeyFrames()
         vKFsFix = mpMap->getRefKFs();
     }
 
-    //! vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
+    // vKFsAll是从Map里获取的，在LocalizeOnly模式下是固定的
     for (int i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         const PtrKeyFrame& pKFi = vKFsAll[i];
         if (!pKFi || pKFi->isNull())

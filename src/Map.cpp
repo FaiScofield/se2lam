@@ -338,7 +338,7 @@ void Map::updateLocalGraph(int maxLevel, int maxN, float searchRadius)
                 vector<PtrKeyFrame> pKFs = pKF->getAllCovisibleKFs();
                 setLocalKFs.insert(pKFs.begin(), pKFs.end());
             }
-            if (setLocalKFs.size() >= maxN)
+            if (static_cast<int>(setLocalKFs.size()) >= maxN)
                 break;
             searchLevel--;
         }
@@ -401,12 +401,18 @@ void Map::updateLocalGraph_new(const cv::Mat& pose, int maxLevel, int maxN, floa
         locker lock(mMutexGlobalGraph);
         setLocalKFs.insert(mspKFs.begin(), mspKFs.end());
     } else {
-        setLocalKFs.insert(mCurrentKF);
-        int toAdd = maxN - 1;
+        {  // 先保证时间上最新的5帧KF是LocalKFs
+            locker lock(mMutexGlobalGraph);
+            auto iter = mspKFs.rbegin();
+            int k = 5;
+            while (k-- > 0)
+                setLocalKFs.insert((*iter++));
+        }
+        int toAdd = maxN - setLocalKFs.size();
         if (toAdd > 0)   // LocalKF不够maxN个则补全
             toAdd -= addLocalGraphThroughKdtree_new(setLocalKFs, pose, toAdd, searchRadius);  // lock
         if (toAdd > 0) {
-            assert(setLocalKFs.size() < maxN);
+            assert(static_cast<int>(setLocalKFs.size()) < maxN);
             int searchLevel = maxLevel;  // 2
             while (searchLevel > 0) {
                 set<PtrKeyFrame, KeyFrame::IdLessThan> currentLocalKFs = setLocalKFs;
@@ -417,7 +423,7 @@ void Map::updateLocalGraph_new(const cv::Mat& pose, int maxLevel, int maxN, floa
                     vector<PtrKeyFrame> pKFs = pKF->getAllCovisibleKFs();
                     setLocalKFs.insert(pKFs.begin(), pKFs.end());
                 }
-                if (setLocalKFs.size() >= maxN)
+                if (static_cast<int>(setLocalKFs.size()) >= maxN)
                     break;
                 searchLevel--;
             }

@@ -101,6 +101,7 @@ void MapPoint::addObservation(const PtrKeyFrame& pKF, size_t idx)
 
     updateMainKFandDescriptor();
     updateParallax(pKF);
+    //updateParallaxAndPose();
 
     // 更新平均观测方向
     Point3f newObs = pKF->getMPPoseInCamareFrame(idx);
@@ -442,5 +443,48 @@ bool MapPoint::updateParallaxCheck(const PtrKeyFrame& pKF1, const PtrKeyFrame& p
     return true;
 }
 
+void MapPoint::updateParallaxAndPose()
+{
+    const size_t n = mObservations.size();
+    if (n < 2)
+        return;
+
+    const float fx = Config::fx;
+    const float fy = Config::fy;
+    const float cx = Config::cx;
+    const float cy = Config::cy;
+
+    Mat H = Mat::zeros(2 * n, 4, CV_64FC1);
+    size_t i = 0;
+    for (auto it = mObservations.begin(), iend = mObservations.end(); it != iend; ++it) {
+        const PtrKeyFrame pKFi = it->first;
+        const size_t idxi = it->second;
+        const Mat Tcwi = pKFi->getPose();  // 4x4
+        const double ui = fx * pKFi->mvKeyPoints[idxi].pt.x + cx;
+        const double vi = fy * pKFi->mvKeyPoints[idxi].pt.y + cy;
+
+        H.row(i) = ui * Tcwi.row(2) - Tcwi.row(0);
+        H.row(i + 1) = vi * Tcwi.row(2) - Tcwi.row(1);
+        i += 2;
+    }
+//    double s;
+//    minMaxLoc(H, 0, &s);
+//    s = 1. / s;
+//    Mat S = s * Mat::ones(4, 4, CV_64FC1);
+//    H *= S;
+
+    Mat W, U, Vt;
+    SVDecomp((H.t() * H), W, U, Vt);
+    cout << "[MapPoint] #" << mId << " 更新视差. 总观测数为: " << n << ", SVD分解奇异值为: " << W.t() << endl;
+    cout << "[MapPoint] #" << mId << " 更新视差. H = " << endl << H  << endl;
+
+//    U = S * U;
+    Mat p = U.rowRange(0, 3).col(3) / U.at<double>(3, 3);
+    Point3f pose(p.at<double>(0, 0), p.at<double>(1, 0), p.at<double>(2, 0));
+
+    cout << "[MapPoint] #" << mId << " 更新视差. 原坐标为: " << Mat(mPos).t() << ", 更新后的坐标为: " << Mat(pose).t() << endl;
+
+    mPos = pose;
+}
 
 }  // namespace se2lam
