@@ -12,8 +12,9 @@
 namespace se2lam
 {
 
-#define DO_LOCAL_BA  0
-#define DO_GLOBAL_BA 0
+#define RELOCALIZATION  0
+#define DO_LOCAL_BA     0
+#define DO_GLOBAL_BA    1
 
 using namespace std;
 using namespace cv;
@@ -82,6 +83,7 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
         t1 = timer.count();
 
         timer.start();
+#if RELOCALIZATION
         if (mState == cvu::FIRST_FRAME) {
             processFirstFrame();
             return;
@@ -101,6 +103,7 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
             }
 
             bOK = trackReferenceKF();
+
             if (!bOK)
                 bOK = trackLocalMap();  // 刚丢的还可以再抢救一下
         } else if (mState == cvu::LOST) {
@@ -110,6 +113,28 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
                 mState = cvu::OK;
             }
         }
+#else
+        if (mState == cvu::FIRST_FRAME) {
+            processFirstFrame();
+            return;
+        } else {
+            mLastRefKFid = mpReferenceKF->id;  // 这里仅用于输出log
+
+            // 每次Tracikng前先判断是否处于纯旋转状态
+            const Se2 dOdom = mCurrentFrame.odom - mLastFrame.odom;
+            const Point2f dxy(dOdom.x, dOdom.y);
+            const bool bPureRotation = cv::norm(dxy) < 10.f || abs(dOdom.theta) > 0.1;  // [mm/rad]
+            if (bPureRotation) {
+                mState = cvu::ROTATE;
+                printf("[Track][Info ] #%ld-#%ld 当前处于纯旋转状态! dx = %.2f, dtheta = %.2f\n",
+                       mCurrentFrame.id, mLastRefKFid, cv::norm(dxy), dOdom.theta);
+            } else {
+                mState = cvu::OK;
+            }
+
+            bOK = trackReferenceKF();
+        }
+#endif
         t2 = timer.count();
     }
 
@@ -176,18 +201,19 @@ bool TestTrack::trackReferenceKF()
     bool bLessKPmatch = false;
     if (mState == cvu::OK && mnKPMatches < 20) {// 纯旋转时不要考虑匹配点数
         bLessKPmatch = true;
-//        fprintf(stderr, "[Track][Warni] #%ld-#%ld 与参考帧匹配总点数过少(%ld), Less即将+1\n",
-//               mCurrentFrame.id, mLastRefKFid, mnKPMatches);
+        fprintf(stderr, "[Track][Warni] #%ld-#%ld 与参考帧匹配总点数过少(%d), Less即将+1\n",
+               mCurrentFrame.id, mLastRefKFid, mnKPMatches);
     }
 
     // 3.利用仿射矩阵A计算KP匹配的内点，内点数大于10才能继续
     mnKPsInline = removeOutliers(mpReferenceKF, &mCurrentFrame, mvKPMatchIdx, mAffineMatrix);
     if (mState == cvu::OK && mnKPsInline < 15) { // 纯旋转时不要考虑匹配点数
         bLessKPmatch = true;
-//        fprintf(stderr, "[Track][Warni] #%ld-#%ld 与参考帧匹配内点数过少(%ld), Less即将+1\n",
-//               mCurrentFrame.id, mLastRefKFid, mnKPsInline);
+        fprintf(stderr, "[Track][Warni] #%ld-#%ld 与参考帧匹配内点数过少(%d), Less即将+1\n",
+               mCurrentFrame.id, mLastRefKFid, mnKPsInline);
     }
 
+#if RELOCALIZATION
     assert(mnLessMatchFrames < 5);
     if (bLessKPmatch) {
         if (++mnLessMatchFrames >= 5) {
@@ -197,6 +223,12 @@ bool TestTrack::trackReferenceKF()
             return false;
         }
     }
+#endif
+
+    double midDis(-1), meanDis(-1), stdevDis(-1);
+    getAveDisparty(midDis, meanDis, stdevDis);
+    printf("[Track][Info ] #%ld-#%ld KP匹配对内点数 = %d, 视差的中值/均值/标准差 = %.2f/%.2f/%.2f\n",
+           mCurrentFrame.id, mLastRefKFid, mnKPsInline, midDis, meanDis, stdevDis);
 
     // 4.三角化生成潜在MP, 由LocalMap线程创造MP
     int nObs = doTriangulate(mpReferenceKF, &mCurrentFrame);  // 更新 mnTrackedOld, mnGoodInliers, mvGoodMatchIdx
@@ -320,7 +352,7 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
             mnKPMatchesGood++;
             const bool bObserved = pKF->hasObservationByIndex(i);  // 是否有对应MP观测
             if (bObserved) {
-                PtrMapPoint pObservedMP = pKF->getObservation(i);
+                const PtrMapPoint pObservedMP = pKF->getObservation(i);
                 if (pObservedMP->isGoodPrl()) {
                     frame->setObservation(pObservedMP, mvKPMatchIdx[i]);
                     mnMPsTracked++;
@@ -334,8 +366,8 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
 
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
     int n2 = mnMPsCandidate;
-    int nObsCur = frame->countObservations();
-    int nObsRef = pKF->countObservations();
+    const int nObsCur = frame->countObservations();
+    const int nObsRef = pKF->countObservations();
     assert(nObsCur == 0);  // 当前帧应该还没有观测!
 
     // 相机1和2的投影矩阵
@@ -612,6 +644,7 @@ bool TestTrack::needNewKFForCurrentFrame()
 {
     // 刚重定位成功需要建立新的KF
     if (mState > 0 && mLastState == cvu::LOST) {
+        assert(mpLoopKF);
         printf("[Track][Info ] #%ld-KF#%ld(Loop) 成为了新的KF(#%ld), 因为其刚重定位成功.\n",
                mCurrentFrame.id, mpLoopKF->id, KeyFrame::mNextIdKF);
         return true;
@@ -631,7 +664,7 @@ bool TestTrack::needNewKFForCurrentFrame()
         if (abs(dOdo.theta) >= mMaxAngle) {
             printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其旋转角度(%.2f)达到上限.\n",
                    mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, abs(dOdo.theta));
-            mCurrentFrame.mPreSE2.cov(2, 2) *= 0.1;  // 增大旋转时的置信度.
+            mCurrentFrame.mPreSE2.cov(2, 2) *= 1e-3;  // 增大旋转时的置信度.
             return true;
         } else {
             return false;
@@ -703,6 +736,7 @@ void TestTrack::copyForPub()
     mpMapPublisher->mvMatchIdx = mvKPMatchIdx;
     mpMapPublisher->mvMatchIdxGood = mvKPMatchIdxGood;
     mpMapPublisher->mAffineMatrix = mAffineMatrix.clone();
+    assert(!mAffineMatrix.empty());
 
     char strMatches[64];
     if (mLastState > 0) {  // 正常情况和刚丢失情况
@@ -1063,6 +1097,8 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
 #if DO_GLOBAL_BA
     // 刚重定位成功不需要全局优化
     if (mLastState == cvu::LOST && mState > 0)
+        return;
+    if (mpNewKF->mIdKF < Config::MinKFidOffset)
         return;
 
     bool bFeatGraphRenewed = false, bLoopCloseDetected = false, bLoopCloseVerified = false;
@@ -1445,8 +1481,9 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
         }
     }
 
-    printf("[Track][Timer] #%ld(KF#%ld) L8.localBA()规模: KFs/RefKFs/MPs = %ld/%ld/%ld, Edges = %ld\n",
-           mpNewKF->id, mpNewKF->mIdKF, nLocalKFs, nRefKFs, nLocalMPs, optimizer.edges().size());
+    printf("[Track][Timer] #%ld(KF#%ld) L8.localBA()规模: KFs/RefKFs/MPs = %ld/%ld/%ld, "
+           "Vertices = %ld, Edges = %ld\n", mpNewKF->id, mpNewKF->mIdKF,
+           nLocalKFs, nRefKFs, nLocalMPs, optimizer.vertices().size(), optimizer.edges().size());
 }
 
 Mat TestTrack::poseOptimize(Frame* pFrame)
@@ -1922,5 +1959,35 @@ int TestTrack::doTriangulate_Global(PtrKeyFrame& pKF, PtrKeyFrame& frame, vector
     return n11 + n121 + n21;  // nMPsInline
 }
 */
+
+void TestTrack::getAveDisparty(double& mid, double& mean, double& stdev)
+{
+    const size_t N = mCurrentFrame.N;
+    vector<double> vDisparties;
+    vDisparties.reserve(N);
+
+    size_t m = 0;
+    for (size_t i = 0; i < N; ++i) {
+        if (mvKPMatchIdx[i] < 0)
+            continue;
+        const Point2f ptr = mpReferenceKF->mvKeyPoints[i].pt;
+        const Point2f ptc = mCurrentFrame.mvKeyPoints[mvKPMatchIdx[i]].pt;
+        vDisparties.push_back(Vector2d(ptr.x - ptc.x, ptr.y - ptc.y).norm());
+        m++;
+    }
+
+    if (m == 0)
+        return;
+
+    auto iter = vDisparties.begin() + floor(m / 2);
+    nth_element(vDisparties.begin(), iter, vDisparties.end());
+    mid = *iter;
+
+    double sum = std::accumulate(vDisparties.begin(), vDisparties.end(), 0.0);
+    mean = sum / vDisparties.size();
+
+    double sq_sum = std::inner_product(vDisparties.begin(), vDisparties.end(), vDisparties.begin(), 0.0);
+    stdev = std::sqrt(sq_sum / vDisparties.size() - mean * mean);
+}
 
 }  // namespace se2lam

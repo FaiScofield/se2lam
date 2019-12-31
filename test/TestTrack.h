@@ -83,6 +83,8 @@ private:
     bool detectLoopClose_Global(PtrKeyFrame& pKF);
     bool verifyLoopClose_Global(PtrKeyFrame& pKF);
 
+    void getAveDisparty(double& mid, double& mean, double& stdev);
+
     Map* mpMap;
     MapPublish* mpMapPublisher;
     ORBextractor* mpORBextractor;  // 这三个有new

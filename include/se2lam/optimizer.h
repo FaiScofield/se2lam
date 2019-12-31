@@ -65,6 +65,7 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond& q_)
 g2o::Matrix3D Jl(const g2o::Vector3D& v3d);
 g2o::Matrix3D invJl(const g2o::Vector3D& v3d);
 g2o::Matrix6d invJJl(const g2o::Vector6d& v6d);
+g2o::Matrix6d AdjTR(const g2o::SE3Quat& pose);
 
 /**
  * @brief  全局平面运动约束

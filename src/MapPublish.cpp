@@ -751,6 +751,7 @@ Mat MapPublish::drawCurrentFrameMatches()
     if (!mvReferenceKPs.empty() && !imgRef.empty()) {
         drawKeypoints(imgRef, mvReferenceKPs, imgRef, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
 
+        assert(!mAffineMatrix.empty());
         // 取逆得到A12
         invertAffineTransform(mAffineMatrix, A12);
         warpAffine(imgCur, imgWarp, A12, imgCur.size());

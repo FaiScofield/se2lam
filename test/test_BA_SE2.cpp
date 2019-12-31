@@ -21,9 +21,9 @@
 
 using namespace std;
 
-const std::string outPointCloudFile = "/home/vance/output/test_BA.ply";
-size_t nKFVertices = 0;  // num of camera pose
-
+const std::string g_outPointCloudFile = "/home/vance/output/test_BA_SE2.ply";
+size_t g_nKFVertices = 0;  // num of camera pose
+const double g_scale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
 
 bool inBoard(const Eigen::Vector2d& uv)
 {
@@ -35,9 +35,9 @@ bool inBoard(const Eigen::Vector2d& uv)
 
 void writeToPlyFile(SlamOptimizer* optimizer)
 {
-    ofstream of(outPointCloudFile.c_str());
+    ofstream of(g_outPointCloudFile.c_str());
     if (!of.is_open()) {
-        cerr << "Error on openning the output file: " << outPointCloudFile << endl;
+        cerr << "Error on openning the output file: " << g_outPointCloudFile << endl;
         return;
     }
 
@@ -56,7 +56,7 @@ void writeToPlyFile(SlamOptimizer* optimizer)
        << "end_header" << std::endl;
 
     for (size_t i = 0; i < nPose; ++i) {
-        if (i < nKFVertices) {
+        if (i < g_nKFVertices) {
             auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 0 255 0" << '\n';
@@ -72,9 +72,9 @@ void writeToPlyFile(SlamOptimizer* optimizer)
 
 void writeToPlyFileAppend(SlamOptimizer* optimizer)
 {
-    ofstream of(outPointCloudFile.c_str(), ios::app);
+    ofstream of(g_outPointCloudFile.c_str(), ios::app);
     if (!of.is_open()) {
-        cerr << "Error on openning the output file: " << outPointCloudFile << endl;
+        cerr << "Error on openning the output file: " << g_outPointCloudFile << endl;
         return;
     }
 
@@ -82,7 +82,7 @@ void writeToPlyFileAppend(SlamOptimizer* optimizer)
     const size_t nPose = vertices.size();
 
     for (size_t i = 0; i < nPose; ++i) {
-        if (i < nKFVertices) {
+        if (i < g_nKFVertices) {
             auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 255 0 0" << '\n';
@@ -122,7 +122,7 @@ int main(int argc, char** argv)
         rec.close();
         exit(-1);
     }
-    const double scale = 0.1;
+
     vector<g2o::SE2> vOdomData;
     vOdomData.reserve(2000);
     while (rec.peek() != EOF) {
@@ -131,8 +131,8 @@ int main(int argc, char** argv)
         istringstream iss(line);
         g2o::Vector3D lineData;
         iss >> lineData[0] >> lineData[1] >> lineData[2];
-        lineData[0] *= scale;  // mm换成cm
-        lineData[1] *= scale;
+        lineData[0] *= g_scale;  // mm换成cm
+        lineData[1] *= g_scale;
         vOdomData.push_back(g2o::SE2(lineData));
     }
     const int skip = 100;
@@ -145,10 +145,7 @@ int main(int argc, char** argv)
     cv::RNG rng;  // OpenCV随机数产生器
     const double noiseX = Config::OdoNoiseX * 5;
     const double noiseY = Config::OdoNoiseY * 5;
-    const double noiseT = Config::OdoNoiseTheta * 10;
-    // const double uncerX = Config::OdoUncertainX ;
-    // const double uncerY = Config::OdoUncertainY;
-    // const double uncerT = Config::OdoUncertainTheta;
+    const double noiseT = Config::OdoNoiseTheta * 8;
 
     // preintergation
     PreSE2 preInfo;
@@ -162,9 +159,9 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < nMPs; ++i) {
         double dx = rng.uniform(0., 0.99999);
         double dy = rng.uniform(0., 0.99999);
-        const double x = (dx * 5000. - 1000.) * scale;
-        const double y = (dy * 5000.) * scale;
-        const double z = (5000.0 + rng.gaussian(200.)) * scale;
+        const double x = (dx * 5000. - 1000.) * g_scale;
+        const double y = (dy * 5000.) * g_scale;
+        const double z = (5000.0 + rng.gaussian(200.)) * g_scale;
         vPoints.push_back(Eigen::Vector3d(x, y, z));
     }
 
@@ -176,6 +173,7 @@ int main(int argc, char** argv)
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
 #ifdef USE_LM
     SlamAlgorithmLM* algo = new SlamAlgorithmLM(blockSolver);
+    algo->setMaxTrialsAfterFailure(5);
 #else
     SlamAlgorithmGN* algo = new SlamAlgorithmGN(blockSolver);
 #endif
@@ -219,7 +217,7 @@ int main(int argc, char** argv)
             v->setFixed(fixed);
             v->setEstimate(vOdomData[i] * noise);
             optimizer.addVertex(v);
-            nKFVertices++;
+            g_nKFVertices++;
 
             // reset preInfo
             vPreInfos.push_back(preInfo);  // 有效值从1开始
@@ -239,7 +237,7 @@ int main(int argc, char** argv)
 
         Eigen::Vector3d& m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
         const g2o::SE2 meas(m[0], m[1], m[2]);
-        Eigen::Matrix3d& info = vPreInfos[vertexIDTo].cov;
+        const Eigen::Matrix3d info = vPreInfos[vertexIDTo].cov.inverse();
         // bool isSymmetric = info.transpose() == info;
         // if (!isSymmetric) {
         //     cerr << "非对称信息矩阵: " << endl << info << endl;
@@ -258,7 +256,10 @@ int main(int argc, char** argv)
         e->setVertex(0, v1);
         e->setVertex(1, v2);
         e->setInformation(info/*Eigen::Matrix3d::Identity()*/);
+#ifdef ONLY_EDGEXYZ
+#else
         optimizer.addEdge(e);
+#endif
 
         e->computeError();
         cout << "EdgeSE2 from " << v1->id() << " to " << v2->id() << " , chi2 = "
@@ -268,7 +269,7 @@ int main(int argc, char** argv)
 
     // vertices/edges of MPs
     const g2o::SE3Quat Tbc = toSE3Quat(Config::Tbc);
-    size_t MPVertexId = nKFVertices;
+    size_t MPVertexId = g_nKFVertices;
     for (size_t j = 0; j < nMPs; ++j) {
         // vetex
         const Eigen::Vector3d& lw = vPoints[j];
@@ -280,7 +281,7 @@ int main(int argc, char** argv)
         optimizer.addVertex(vj);
 
         // edge
-        for (size_t i = 0; i < nKFVertices; ++i) {
+        for (size_t i = 0; i < g_nKFVertices; ++i) {
             const auto vi = static_cast<g2o::VertexSE2*>(optimizer.vertex(i));
             const int idx = vi->id() * delta + skip;
             const g2o::SE3Quat Tcw = Tbc.inverse() * SE2ToSE3_(vOdomData[idx].inverse());
@@ -315,7 +316,7 @@ int main(int argc, char** argv)
     }
     double t1 = timer.count();
 
-    optimizer.save("/home/vance/output/test_BA_before.g2o");
+    optimizer.save("/home/vance/output/test_BA_SE2_before.g2o");
     writeToPlyFile(&optimizer);
 
     timer.start();
@@ -344,7 +345,7 @@ int main(int argc, char** argv)
     }
 #endif
 
-    optimizer.save("/home/vance/output/test_BA_after.g2o");
+    optimizer.save("/home/vance/output/test_BA_SE2_after.g2o");
     writeToPlyFileAppend(&optimizer);
 
     return 0;

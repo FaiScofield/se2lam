@@ -3,6 +3,8 @@
 #include "MapPublish.h"
 #include "MapStorage.h"
 
+# define USE_RK_DATASET 0
+
 string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 
@@ -26,13 +28,19 @@ int main(int argc, char** argv)
     //! initialization
     Config::readConfig(string(argv[1]));
 
+#if USE_RK_DATASET
     string dataFolder = Config::DataPath + "slamimg";
     vector<RK_IMAGE> allImages;
     readImagesRK(dataFolder, allImages);
+#else
+    string dataFolder = Config::DataPath + "image";
+    vector<RK_IMAGE> allImages;
+    readImagesRK(dataFolder, allImages);
+#endif
 
     string odomRawFile = Config::DataPath + "odo_raw.txt";
     vector<Se2> allOdoms;
-    readOdomsRK(odomRawFile, allOdoms);
+    readOdomDatas(odomRawFile, allOdoms);
     if (allOdoms.empty())
         exit(-1);
 
@@ -67,7 +75,6 @@ int main(int argc, char** argv)
         delete pTracker;
         exit(-1);
     }
-
 
     //! main loop
     const int skipFrames = Config::ImgStartIndex;

@@ -333,6 +333,11 @@ Se2 Se2::operator-(const Se2& that) const
     return Se2(c * dx + s * dy, -s * dx + c * dy, dth);
 }
 
+Se2 Se2::operator *(double scale) const
+{
+    return Se2(x*scale, y*scale, theta, timeStamp);
+}
+
 Se2& Se2::operator=(const Se2& that)
 {
     x = that.x;

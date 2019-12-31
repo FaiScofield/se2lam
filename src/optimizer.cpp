@@ -31,7 +31,7 @@ void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
 {
     const Mat& Tbc = Config::Tbc;
     const Mat& Tcb = Config::Tcb;
-    const Mat Tb1b2 = Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3();
+    const Mat Tb1b2 = dOdo.toCvSE3();
     Tc1c2 = Tcb * Tb1b2 * Tbc;
 
     //! Vector order: [trans, rot] 先平移后旋转
@@ -40,14 +40,16 @@ void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
     float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
     float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
-    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e-4, 1e-4, 1e-4, 1.f / (dtheta * dtheta)};
-    // float data[6] = {1e4, 1e4, 1.f / (dtheta * dtheta), 1.f / (dx * dx), 1.f / (dy * dy), 1};
+
+    // 信息矩阵
+    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e4, 1e4, 1e4, 1.f / (dtheta * dtheta)};
     for (int i = 0; i < 6; ++i)
         Info_se3_bTb(i, i) = data[i];
      Info_se3 = Info_se3_bTb;
 
-//    g2o::Matrix6d J_bTb_cTc = toSE3Quat(Tbc).adj();
-//    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
+    // g2o::Matrix6d J_bTb_cTc = toSE3Quat(Tbc).adj();
+    g2o::Matrix6d J_bTb_cTc = AdjTR(toSE3Quat(Tbc));
+    Info_se3 = J_bTb_cTc.transpose() * Info_se3_bTb * J_bTb_cTc;
 }
 
 /**

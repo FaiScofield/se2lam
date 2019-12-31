@@ -43,14 +43,22 @@ bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
     return r1.timeStamp < r2.timeStamp;
 }
 
-void readImagesSe2(const string& dataFolder, vector<string>& files)
+void readImagesSe2(const string& dataFolder, vector<RK_IMAGE>& files)
 {
-    vector<string> allImages;
+    vector<RK_IMAGE> allImages;
     allImages.reserve(3108);
     for (int i = 0; i < 3108; ++i) {
         string ni = dataFolder + to_string(i) + ".bmp";
-        allImages.push_back(ni);
+        allImages.emplace_back(ni, 0);
     }
+
+    if (allImages.empty()) {
+        cerr << "[ERROR] Not image data in the folder! " << dataFolder << endl;
+        return;
+    } else {
+        cout << "[INFO ] Read " << allImages.size() << " files in the folder." << endl;
+    }
+
     files = allImages;
 }
 
@@ -73,7 +81,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
             auto i = s.find_last_of('w');
             auto j = s.find_last_of('.');
             double t = atoll(s.substr(i + 1, j - i - 1).c_str()) * 1e-6;
-            allImages.push_back(RK_IMAGE(s, t));
+            allImages.emplace_back(s, t);
         }
     }
 
@@ -89,7 +97,7 @@ void readImagesRK(const string& dataFolder, vector<RK_IMAGE>& files)
     files = allImages;
 }
 
-void readOdomsRK(const string& odomFile, vector<Se2>& odoData)
+void readOdomDatas(const string& odomFile, vector<Se2>& odoData)
 {
     ifstream rec(odomFile);
     if (!rec.is_open()) {

@@ -49,6 +49,7 @@ struct Se2 {
     Se2 inv() const;
     Se2 operator-(const Se2& that) const;
     Se2 operator+(const Se2& that) const;
+    Se2 operator*(double scale) const;
     Se2& operator=(const Se2& that);
     cv::Mat toCvSE3() const;
     Se2& fromCvSE3(const cv::Mat& mat);
