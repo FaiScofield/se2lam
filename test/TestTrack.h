@@ -38,6 +38,7 @@ public:
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
     cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
     void copyForPub();
+    cv::Mat drawLoopMatch(Frame*, Frame*, const std::map<int, int>&, const std::map<int, int>&);
 
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
@@ -78,12 +79,10 @@ private:
     bool detectIfLost(Frame& f, const cv::Mat& Tcw_opt);
     void startNewTrack();
     void globalBA();
-//    int doTriangulate_Global(PtrKeyFrame& pKFLoop, PtrKeyFrame& pKFCurr,
-//                             std::vector<int>& vKPMatchIdx);
-    bool detectLoopClose_Global(PtrKeyFrame& pKF);
-    bool verifyLoopClose_Global(PtrKeyFrame& pKF);
+    bool verifyLoopClose_Global(PtrKeyFrame& frame, const std::vector<PtrKeyFrame>& vpKFsCan);
 
     void getAveDisparty(double& mid, double& mean, double& stdev);
+
 
     Map* mpMap;
     MapPublish* mpMapPublisher;

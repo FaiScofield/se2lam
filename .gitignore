@@ -16,4 +16,4 @@ dependencies/
 rviz.rviz
 *.so
 *.a
-*.rviz
+rviz.rviz

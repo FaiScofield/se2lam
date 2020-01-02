@@ -88,7 +88,7 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
         PtrKeyFrame pKF = *it;
         //!@Vance: 有一KF能同时观测到这两个MP就返回，Why?
         if (pKF->hasObservationByPointer(toKeep) && pKF->hasObservationByPointer(toDelete)) {
-            cerr << "[ Map ][Warni] Return for a kF(toKeep) has same observation." << endl;
+            cerr << "[ Map ][Warni] Return for a KF(toKeep) has same observation." << endl;
             return;  //! TODO 应该是break？
         }
     }
@@ -96,7 +96,7 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
     for (auto it = pKFs.begin(), itend = pKFs.end(); it != itend; ++it) {
         PtrKeyFrame pKF = *it;
         if (pKF->hasObservationByPointer(toKeep) && pKF->hasObservationByPointer(toDelete)) {
-            cerr << "[ Map ][Warni] Return for a kF(toDelete) has same observation." << endl;
+            cerr << "[ Map ][Warni] Return for a KF(toDelete) has same observation." << endl;
             return;  //! TODO 应该是break？
         }
     }
@@ -401,16 +401,19 @@ void Map::updateLocalGraph_new(const cv::Mat& pose, int maxLevel, int maxN, floa
         locker lock(mMutexGlobalGraph);
         setLocalKFs.insert(mspKFs.begin(), mspKFs.end());
     } else {
-        {  // 先保证时间上最新的5帧KF是LocalKFs
+        // 邻域内的KF先加入
+        addLocalGraphThroughKdtree_new(setLocalKFs, pose, maxN, searchRadius);  // lock
+        // 再保证时间上最新的5帧KF是LocalKFs
+        {
             locker lock(mMutexGlobalGraph);
             auto iter = mspKFs.rbegin();
             int k = 5;
             while (k-- > 0)
-                setLocalKFs.insert((*iter++));
+                setLocalKFs.insert(*iter++);
         }
+
+        // LocalKF不够maxN个则补全
         int toAdd = maxN - setLocalKFs.size();
-        if (toAdd > 0)   // LocalKF不够maxN个则补全
-            toAdd -= addLocalGraphThroughKdtree_new(setLocalKFs, pose, toAdd, searchRadius);  // lock
         if (toAdd > 0) {
             assert(static_cast<int>(setLocalKFs.size()) < maxN);
             int searchLevel = maxLevel;  // 2
@@ -477,6 +480,8 @@ void Map::updateLocalGraph_new(const cv::Mat& pose, int maxLevel, int maxN, floa
  */
 void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFCurr, PtrKeyFrame& pKFLoop)
 {
+    assert(pKFCurr->id != pKFLoop->id);
+
     {
         locker lock1(mMutexLocalGraph);
         locker lock2(mMutexGlobalGraph);
@@ -488,8 +493,8 @@ void Map::mergeLoopClose(const std::map<int, int>& mapMatchMP, PtrKeyFrame& pKFC
             pKFLoop->mIdKF);
 
     for (auto iter = mapMatchMP.begin(), itend = mapMatchMP.end(); iter != itend; iter++) {
-        size_t idKPCurr = iter->first;
-        size_t idKPLoop = iter->second;
+        const size_t idKPCurr = iter->first;
+        const size_t idKPLoop = iter->second;
 
         if (pKFCurr->hasObservationByIndex(idKPCurr) && pKFLoop->hasObservationByIndex(idKPLoop)) {
             PtrMapPoint pMPCurr = pKFCurr->getObservation(idKPCurr);
@@ -876,7 +881,7 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
             const Matrix2D Sigma_all =
                 Sigma_rotxy * J_rotxy * J_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
 
-            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, campr, toSE3Quat(Config::Tbc),
+            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
                           Sigma_all.inverse(), delta);
         }
     }
@@ -1017,7 +1022,7 @@ void Map::loadLocalGraph_test(SlamOptimizer& optimizer)
             const Matrix2D Sigma_all =
                 Sigma_rotxy * J_rotxy * J_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
 
-            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, campr, toSE3Quat(Config::Tbc),
+            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
                           Sigma_all.inverse(), delta);
         }
     }
@@ -1432,14 +1437,14 @@ size_t Map::addLocalGraphThroughKdtree(set<PtrKeyFrame, KeyFrame::IdLessThan>& s
     vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());
-        Point3f pose(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f, Twc.at<float>(2, 3) * 0.001f);
-        vKFPoses[i] = pose;
+        Point3f posei(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f, Twc.at<float>(2, 3) * 0.001f);
+        vKFPoses[i] = posei;
     }
 
     cv::flann::KDTreeIndexParams kdtreeParams;
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
-    Mat pose = cvu::inv(mCurrentKF->getPose());
+    const Mat pose = cvu::inv(mCurrentKF->getPose());
     std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
                                 pose.at<float>(2, 3) * 0.001f};
     std::vector<int> indices;
@@ -1463,21 +1468,22 @@ size_t Map::addLocalGraphThroughKdtree_new(set<PtrKeyFrame, KeyFrame::IdLessThan
     vector<Point3f> vKFPoses(vKFsAll.size());
     for (size_t i = 0, iend = vKFsAll.size(); i != iend; ++i) {
         Mat Twc = cvu::inv(vKFsAll[i]->getPose());
-        Point3f pose(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f, Twc.at<float>(2, 3) * 0.001f);
-        vKFPoses[i] = pose;
+        Point3f posei(Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f,
+                      Twc.at<float>(2, 3) * 0.001f);
+        vKFPoses[i] = posei;
     }
 
     cv::flann::KDTreeIndexParams kdtreeParams;
     cv::flann::Index kdtree(Mat(vKFPoses).reshape(1), kdtreeParams);
 
-    //Mat pose = cvu::inv(mCurrentKF->getPose());
-    std::vector<float> query = {pose.at<float>(0, 3) * 0.001f, pose.at<float>(1, 3) * 0.001f,
-                                pose.at<float>(2, 3) * 0.001f};
+    const Mat Twc = cvu::inv(pose);  // Twc
+    std::vector<float> query = {Twc.at<float>(0, 3) * 0.001f, Twc.at<float>(1, 3) * 0.001f,
+                                Twc.at<float>(2, 3) * 0.001f};
     std::vector<int> indices;
     std::vector<float> dists;
     kdtree.radiusSearch(query, indices, dists, searchRadius, maxN, cv::flann::SearchParams());
     for (size_t i = 0, iend = indices.size(); i != iend; ++i) {
-        if (indices[i] > 0 && dists[i] < searchRadius) { // 距离在0.3m以内
+        if (indices[i] > 0 && dists[i] < searchRadius) {
             setLocalKFs.insert(vKFsAll[indices[i]]);
             nNewAdd++;
         }

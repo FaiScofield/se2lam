@@ -16,6 +16,8 @@
 namespace se2lam
 {
 
+//#define WEIGHT_COVISIBLITIES
+
 struct SE3Constraint {
 public:
     cv::Mat measure;
@@ -62,15 +64,18 @@ public:
 
     //! 共视关系的维护函数
     std::vector<std::shared_ptr<KeyFrame>> getAllCovisibleKFs();
-    // std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
-    // std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
-    // std::map<std::shared_ptr<KeyFrame>, int> getAllCovisibleKFsAndWeights();
-    // void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
-    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
     void eraseCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
-    // void sortCovisibleKFs();
-    // void updateCovisibleGraph();
+    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF);
     size_t countCovisibleKFs();
+#ifdef WEIGHT_COVISIBLITIES
+    std::vector<std::shared_ptr<KeyFrame>> getBestCovisibleKFs(size_t n = 0);
+    std::vector<std::shared_ptr<KeyFrame>> getCovisibleKFsByWeight(int w);
+    std::map<std::shared_ptr<KeyFrame>, int> getAllCovisibleKFsAndWeights();
+    void addCovisibleKF(const std::shared_ptr<KeyFrame>& pKF, int weight);
+    void sortCovisibleKFs();
+    void updateCovisibleGraph();
+#endif
+
 
     //! MP观测的维护函数
     int getFeatureIndex(const PtrMapPoint& pMP); // 返回MP对应的KP的索引
@@ -109,10 +114,13 @@ public:
 protected:
     Map* mpMap;
 
+#ifdef WEIGHT_COVISIBLITIES
+    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
+    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
+    std::vector<int> mvOrderedWeights;
+#else
     std::set<std::shared_ptr<KeyFrame>> mspCovisibleKFs;
-//    std::map<std::shared_ptr<KeyFrame>, int> mCovisibleKFsWeight;
-//    std::vector<std::shared_ptr<KeyFrame>> mvpCovisibleKFsSorted;
-//    std::vector<int> mvOrderedWeights;
+#endif
     std::mutex mMutexCovis;
 
 //    std::mutex mMutexObs;

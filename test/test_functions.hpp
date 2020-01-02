@@ -46,8 +46,8 @@ bool lessThen(const RK_IMAGE& r1, const RK_IMAGE& r2)
 void readImagesSe2(const string& dataFolder, vector<RK_IMAGE>& files)
 {
     vector<RK_IMAGE> allImages;
-    allImages.reserve(3108);
-    for (int i = 0; i < 3108; ++i) {
+    allImages.reserve(Config::ImgCount);
+    for (int i = 0; i < Config::ImgCount; ++i) {
         string ni = dataFolder + to_string(i) + ".bmp";
         allImages.emplace_back(ni, 0);
     }

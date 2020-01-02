@@ -4,6 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
+#include "MapPublish.h"
 #include "GlobalMapper.h"
 #include "LocalMapper.h"
 #include "Map.h"
@@ -126,6 +127,7 @@ void GlobalMapper::run()
 
         //! Draw Matches
 //        drawMatch(mapMatchGood);
+        copyForPub(mapMatchGood, bIfLoopCloseVerified);
 
         timer.stop();
         double t4 = timer.time;
@@ -1196,22 +1198,20 @@ void GlobalMapper::computeBowVecAll()
 void GlobalMapper::removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurr, const PtrKeyFrame& _pKFLoop,
                                             map<int, int>& mapMatch)
 {
-    int numMinMatch = 10;
-
-    // Initialize
-    int numMatch = mapMatch.size();
-    if (numMatch < numMinMatch) {
+    const int numMatch = mapMatch.size();
+    if (numMatch < 10) {
         mapMatch.clear();
         return;  // return when small number of matches
     }
 
+    // Initialize
     map<int, int> mapMatchGood;
     vector<int> vIdxCurr, vIdxLoop;
     vector<Point2f> vPtCurr, vPtLoop;
 
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
-        int idxCurr = iter->first;
-        int idxLoop = iter->second;
+        const int idxCurr = iter->first;
+        const int idxLoop = iter->second;
 
         vIdxCurr.push_back(idxCurr);
         vIdxLoop.push_back(idxLoop);
@@ -1225,15 +1225,14 @@ void GlobalMapper::removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurr, const P
     //findFundamentalMat(vPtCurr, vPtLoop, FM_RANSAC, 3.0, 0.99, vInlier);
     findHomography(vPtCurr, vPtLoop, FM_RANSAC, 3.0, vInlier); // 11.18改
     for (size_t i = 0, iend = vInlier.size(); i < iend; ++i) {
-        int idxCurr = vIdxCurr[i];
-        int idxLoop = vIdxLoop[i];
-        if (vInlier[i] == true) {
-            mapMatchGood[idxCurr] = idxLoop;
-        }
+        const int idxCurr = vIdxCurr[i];
+        const int idxLoop = vIdxLoop[i];
+        if (vInlier[i] > 0)
+            mapMatchGood.emplace(idxCurr, idxLoop);
     }
 
     // Return good Matches
-    mapMatch = mapMatchGood;
+    mapMatch.swap(mapMatchGood);
 }
 
 // Remove match pair with KP. 去掉只有KP匹配但是没有对应MP的匹配, 回环验证时调用
@@ -1364,6 +1363,27 @@ vector<pair<PtrKeyFrame, PtrKeyFrame>> GlobalMapper::selectKFPairFeat(const PtrK
     }
 
     return _vKFPairs;
+}
+
+
+void GlobalMapper::copyForPub(const map<int, int>& mapMatch, bool closed)
+{
+    //! Renew images
+    if (mpKFCurr == nullptr || mpKFCurr->isNull())
+        return;
+    if (mpKFLoop == nullptr || mpKFLoop->isNull())
+        return;
+
+    unique_lock<mutex> lock(mpMapPublisher->mMutexPub);
+
+    mpMapPublisher->mpKFCurr = mpKFCurr;
+    mpMapPublisher->mpKFLoop = mpKFLoop;
+    mpMapPublisher->mMatchLoop = mapMatch;
+    char str[64];
+    std::snprintf(str, 64, "CurrKF: %ld(%ld), LoopKF: %ld(%ld), Succ: %d, M: %ld", mpKFCurr->id,
+                  mpKFCurr->mIdKF, mpKFLoop->id, mpKFLoop->mIdKF, closed, mapMatch.size());
+    mpMapPublisher->mBackImageText = str;
+    mpMapPublisher->mbBackEndUpdated = true;
 }
 
 void GlobalMapper::setBusy(bool v)

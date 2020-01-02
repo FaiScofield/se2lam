@@ -8,6 +8,7 @@
 #ifndef EDGE_SE2_XYZ_H
 #define EDGE_SE2_XYZ_H
 
+#include <opencv2/core/core.hpp>
 #include <Eigen/Dense>
 #include "Thirdparty/g2o/g2o/core/base_binary_edge.h"
 #include "Thirdparty/g2o/g2o/core/base_vertex.h"
@@ -50,9 +51,11 @@ public:
     virtual void linearizeOplus();
 #endif
 
-    inline void setCameraParameter(CameraParameters* _cam) { cam = _cam; }
+    g2o::Vector2D cameraProject(const g2o::Vector3D& xyz) const;
 
-    inline void setExtParameter(const SE3Quat& _Tbc)
+    void setCameraParameter(const cv::Mat& K);
+
+    void setExtParameter(const SE3Quat& _Tbc)
     {
         Tbc = _Tbc;
         Tcb = Tbc.inverse();
@@ -62,7 +65,7 @@ private:
     SE3Quat Tbc;
     SE3Quat Tcb;
 
-    CameraParameters* cam;
+    double fx, fy, cx, cy;
 };
 
 //! 2元边

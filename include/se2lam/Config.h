@@ -161,6 +161,7 @@ public:
     // visulization
     static bool NeedVisualization;
     static int MappubScaleRatio;  // 地图可视化比例
+    static float CameraSize, PointSize;
 
     //! other
     static cv::Mat PrjMtrxEye;

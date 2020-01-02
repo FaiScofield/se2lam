@@ -112,12 +112,12 @@ void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eige
 
 
 EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
-                          CamPara* campara, const SE3Quat& Tbc, const Matrix2D& info, double thHuber)
+                          const cv::Mat& K, const SE3Quat& Tbc, const Matrix2D& info, double thHuber)
 {
     EdgeSE2XYZ* e = new EdgeSE2XYZ;
     e->vertices()[0] = opt.vertex(id0);  // KF id
     e->vertices()[1] = opt.vertex(id1);  // MP id
-    e->setCameraParameter(campara);
+    e->setCameraParameter(K);
     e->setExtParameter(Tbc);
     e->setMeasurement(meas);
     e->setInformation(info);
@@ -140,7 +140,7 @@ VertexSE2* addVertexSE2(SlamOptimizer& opt, const SE2& pose, int id, bool fixed)
 
 SE2 estimateVertexSE2(SlamOptimizer& opt, int id)
 {
-    VertexSE2* v = static_cast<VertexSE2*>(opt.vertex(id));
+    VertexSE2* v = dynamic_cast<VertexSE2*>(opt.vertex(id));
     return v->estimate();
 }
 
@@ -513,6 +513,52 @@ g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o:
     return planeConstraint;
 }
 
+
+g2o::VertexSE3* addVertexSE3AndEdgeSE3Prior(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
+                                            const cv::Mat& extPara, int paraSE3OffsetId, bool fixed)
+{
+    g2o::VertexSE3* v = new g2o::VertexSE3();
+    v->setEstimate(pose);
+    v->setFixed(fixed);
+    v->setId(id);
+
+    g2o::SE3Quat Tbc = toSE3Quat(extPara);
+    g2o::SE3Quat Twc = toSE3Quat(pose);
+    g2o::SE3Quat Twb = Twc * Tbc.inverse();
+    Eigen::AngleAxisd AngleAxis_bw(Twb.rotation());
+    Eigen::Vector3d Log_Rbw = AngleAxis_bw.angle() * AngleAxis_bw.axis();
+    AngleAxis_bw = Eigen::AngleAxisd(Log_Rbw[2], Eigen::Vector3d::UnitZ());
+    Twb.setRotation(Eigen::Quaterniond(AngleAxis_bw));
+
+    Eigen::Vector3d xyz_wb = Twb.translation();
+    xyz_wb[2] = 0;
+    Twb.setTranslation(xyz_wb);
+    Twc = Twb * Tbc;
+
+    //! Vector order: [trans, rot]
+    g2o::Matrix6d Info_wb = g2o::Matrix6d::Zero();
+    Info_wb(0, 0) = 1e-4;
+    Info_wb(1, 1) = 1e-4;
+    Info_wb(2, 2) = Config::PlaneMotionInfoZ;
+    Info_wb(3, 3) = Config::PlaneMotionInfoXrot;
+    Info_wb(4, 4) = Config::PlaneMotionInfoYrot;
+    Info_wb(5, 5) = 1e-4;
+    g2o::Matrix6d J_bb_cc = AdjTR(Tbc);
+    g2o::Matrix6d Info_pose = J_bb_cc.transpose() * Info_wb * J_bb_cc;
+    Isometry3D Iso_w_c = Twc;
+
+    g2o::EdgeSE3Prior* planeConstraint = new g2o::EdgeSE3Prior();
+    planeConstraint->setInformation(Info_pose);
+    planeConstraint->setMeasurement(Iso_w_c);
+    planeConstraint->vertices()[0] = v;
+    planeConstraint->setParameterId(0, paraSE3OffsetId);
+
+    opt.addVertex(v);
+    opt.addEdge(planeConstraint);
+
+    return v;
+}
+
 // 地图点观测节点
 g2o::VertexPointXYZ* addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, int id, bool marginal)
 {
@@ -621,25 +667,25 @@ g2o::EdgeSE3PointXYZ* addEdgeSE3XYZ(SlamOptimizer& opt, const g2o::Vector3D& mea
 
 g2o::Vector3D estimateVertexSBAXYZ(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSBAPointXYZ* v = static_cast<g2o::VertexSBAPointXYZ*>(opt.vertex(id));
+    const  g2o::VertexSBAPointXYZ* v = dynamic_cast<g2o::VertexSBAPointXYZ*>(opt.vertex(id));
     return v->estimate();
 }
 
 g2o::SE3Quat estimateVertexSE3Expmap(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSE3Expmap* v = static_cast<g2o::VertexSE3Expmap*>(opt.vertex(id));
+    const  g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(opt.vertex(id));
     return v->estimate();
 }
 
 g2o::Isometry3D estimateVertexSE3(SlamOptimizer& opt, int id)
 {
-    g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(opt.vertex(id));
+    const g2o::VertexSE3* v = dynamic_cast<g2o::VertexSE3*>(opt.vertex(id));
     return v->estimate();
 }
 
 g2o::Vector3D estimateVertexXYZ(SlamOptimizer& opt, int id)
 {
-    g2o::VertexPointXYZ* v = static_cast<g2o::VertexPointXYZ*>(opt.vertex(id));
+    const  g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(opt.vertex(id));
     return v->estimate();
 }
 
@@ -655,7 +701,7 @@ bool verifyInfo(const g2o::Matrix6d& info)
 
 bool verifyInfo(const Eigen::Matrix3d& info)
 {
-    double th = 0.0001;
+    const double th = 0.0001;
     return (std::abs(info(0, 1) - info(1, 0)) < th && std::abs(info(0, 2) - info(2, 0)) < th &&
             std::abs(info(1, 2) - info(2, 1)) < th);
 }
@@ -795,7 +841,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     }
 
     // Recover optimized pose and return number of inliers
-    g2o::VertexSE3Expmap* vSE3_recov = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
+    g2o::VertexSE3Expmap* vSE3_recov = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
     Mat Tcw = toCvMat(vSE3_recov->estimate());
     pFrame->setPose(Tcw);
 

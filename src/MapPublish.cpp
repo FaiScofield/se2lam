@@ -23,8 +23,9 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(0.075f), mCameraSize(0.1f), // 0.2
-      mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(Config::PointSize),
+      mCameraSize(Config::CameraSize), mScaleRatio(Config::MappubScaleRatio),
+      mbFinishRequested(false), mbFinished(false)
 {
     const char* MAP_FRAME_ID = "/se2lam/World";
     const double kfScale = 0.05;  // 0.1
@@ -142,13 +143,13 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.id = 8;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
     mFeatGraph.action = visualization_msgs::Marker::ADD;
-    mFeatGraph.scale.x = 0.03;
-    mFeatGraph.scale.y = 0.03;
+    mFeatGraph.scale.x = 0.1;
+    mFeatGraph.scale.y = 0.1;
     mFeatGraph.pose.orientation.w = 1.0;
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
     mFeatGraph.color.b = 1.0;
-    mFeatGraph.color.a = 0.5;
+    mFeatGraph.color.a = 1.0;
 
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
@@ -195,7 +196,8 @@ MapPublish::MapPublish(Map* pMap)
 
     tf::Transform tfT;
     tfT.setIdentity();
-    tfb.sendTransform(tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
+    tfb.sendTransform(
+        tf::StampedTransform(tfT, ros::Time::now(), "/se2lam/World", "/se2lam/Camera"));
 
     publisher = nh.advertise<visualization_msgs::Marker>("se2lam/Map", 10);
 
@@ -216,7 +218,8 @@ MapPublish::MapPublish(Map* pMap)
     publisher.publish(mOdomRawGraph);
 }
 
-MapPublish::~MapPublish() {}
+MapPublish::~MapPublish()
+{}
 
 void MapPublish::run()
 {
@@ -224,8 +227,10 @@ void MapPublish::run()
 
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
-    image_transport::Publisher pubImgMatches = it.advertise("/camera/imageMatches", 1);
 
+    Size s = Config::ImgSize;
+    s.width *= 2;
+    Mat imgLoop = Mat::zeros(s, CV_8UC3);
     ros::Rate rate(Config::FPS * 3);
     while (nh.ok()) {
         if (checkFinish())
@@ -236,16 +241,22 @@ void MapPublish::run()
             continue;
         }
 
-        if (!mbUpdated) {  // Tracker/Localizer 更新此标志
+        if (!mbFrontEndUpdated) {  // Tracker/Localizer 更新此标志
             rate.sleep();
             continue;
         }
-        mbUpdated = false;
+        mbFrontEndUpdated = false;
 
         Mat imgMatch = drawCurrentFrameMatches();
-        sensor_msgs::ImagePtr msgMatch =
-                cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgMatch).toImageMsg();
-        pubImgMatches.publish(msgMatch);
+        if (mbBackEndUpdated && mpKFLoop != nullptr && !mpKFLoop->isNull() && !mpKFCurr->isNull()) {
+            imgLoop = drawLoopCloseMatches();
+            mbBackEndUpdated = false;
+            mpKFLoop.reset();
+        }
+        Mat imgShow;
+        vconcat(imgMatch, imgLoop, imgShow);
+        sensor_msgs::ImagePtr msgShow = cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
+        pub.publish(msgShow);
 
         // debug 存下match图片
         if (Config::SaveMatchImage) {
@@ -440,7 +451,7 @@ void MapPublish::publishKeyFrames()
             msgs_b2.x = Twb2.at<float>(0, 3) / mScaleRatio;
             msgs_b2.y = Twb2.at<float>(1, 3) / mScaleRatio;
             msgs_b2.z = Twb2.at<float>(2, 3) / mScaleRatio;
-            mVIGraph.points.push_back(msgs_b);  // 当前帧的位姿(odo坐标系)
+            mVIGraph.points.push_back(msgs_b);   // 当前帧的位姿(odo坐标系)
             mVIGraph.points.push_back(msgs_b2);  // 下一帧的位姿
         }
     }
@@ -448,7 +459,8 @@ void MapPublish::publishKeyFrames()
     //! Visual Odometry Graph for Localize only case
     //! 注意位姿访问要带锁, Localizer里对位姿改变时也要上锁, 否则数据不一定会对应上
     if (mbIsLocalize) {
-        static geometry_msgs::Point msgsLast;  // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
+        static geometry_msgs::Point
+            msgsLast;  // 这个必须要静态变量, 要保证在下一帧时可以保存上一帧的位姿
         geometry_msgs::Point msgsCurr;
 
         auto currState = mpLocalizer->getTrackingState();
@@ -528,7 +540,7 @@ void MapPublish::publishMapPoints()
     }
     vpMPAct.swap(vpMPActGood);  // MPsAct 去掉 MPsNow
 
-    mMPsNeg.points.reserve(vpMPNeg.size() * 0.6);
+    mMPsNeg.points.reserve(vpMPNeg.size() * 0.8);
     mMPsNoGoodPrl.points.reserve(vpMPNeg.size() * 0.6);
     for (size_t i = 0, iend = vpMPNeg.size(); i != iend; ++i) {
         if (!vpMPNeg[i] || vpMPNeg[i]->isNull())
@@ -595,7 +607,8 @@ void MapPublish::publishCameraCurr(const Mat& Twc)
     tf::Vector3 t(Twc.at<float>(0, 3) / mScaleRatio, Twc.at<float>(1, 3) / mScaleRatio,
                   Twc.at<float>(2, 3) / mScaleRatio);
     tf::Transform tfwTc(R, t);
-    tfb.sendTransform(tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
+    tfb.sendTransform(
+        tf::StampedTransform(tfwTc, ros::Time::now(), "se2lam/World", "se2lam/Camera"));
 
     const float d = mCameraSize;
 
@@ -659,7 +672,7 @@ void MapPublish::publishOdomInformation()
     static geometry_msgs::Point msgsLast;
     geometry_msgs::Point msgsCurr;
 
-//    Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
+    //    Se2 currOdom = mpTracker->getCurrentFrameOdo(); // odo全部显示
     Se2 currOdom = mpMap->getCurrentKF()->odom;  // 只显示KF的odo
     if (!mbIsLocalize) {
         //! 这里要对齐到首帧的Odom, 位姿从原点开始
@@ -682,7 +695,7 @@ void MapPublish::publishOdomInformation()
             static Mat Tb0w = cvu::inv(pKF->odom.toCvSE3());
 
             Mat Twbi = (pKF->odom).toCvSE3();
-            Mat Tb0bi = Tb0w * Twbi;  // 先变换到首帧的odom坐标系原点下
+            Mat Tb0bi = Tb0w * Twbi;              // 先变换到首帧的odom坐标系原点下
             Mat Twc_bi = (Twc_b * Tb0bi).col(3);  // 再变换到首帧的pose坐标系原点下
             msgsCurr.x = Twc_bi.at<float>(0, 0) / mScaleRatio;
             msgsCurr.y = Twc_bi.at<float>(1, 0) / mScaleRatio;
@@ -782,12 +795,94 @@ Mat MapPublish::drawCurrentFrameMatches()
         imgRef = Mat::zeros(imgCur.size(), CV_8UC3);
         hconcat(imgCur, imgRef, imgOut);
     }
+
+#if USE_RK_DATASET
     putText(imgOut, mImageText, Point(50, 20), 1, 1, Scalar(0, 0, 255), 2);
     Mat imgScalar;
-    resize(imgOut, imgScalar, Size2i(imgOut.cols * 2, imgOut.rows * 2));
-
+    resize(imgOut, imgScalar, Size2i(imgOut.cols * 1.5, imgOut.rows * 1.5));
     return imgScalar.clone();
+#else
+    putText(imgOut, mFrontImageText, Point(50, 40), 1, 2, Scalar(0, 0, 255), 2);
+    return imgOut;
+#endif
 }
 
+Mat MapPublish::drawLoopCloseMatches()
+{
+    locker lock(mMutexPub);
+
+    assert(mpKFLoop != nullptr);
+
+    Mat imgCurr, imgLoop, imgOut;
+    cvtColor(mpKFCurr->mImage, imgCurr, CV_GRAY2BGR);
+    cvtColor(mpKFLoop->mImage, imgLoop, CV_GRAY2BGR);
+    hconcat(imgCurr, imgLoop, imgOut);
+
+    // Draw Features
+    for (size_t i = 0, iend = mpKFCurr->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[i].pt;
+        const bool ifMPCurr = bool(mpKFCurr->hasObservationByIndex(i));
+        Scalar colorCurr;
+        if (ifMPCurr) {
+            colorCurr = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorCurr = Scalar(255, 0, 0);  // 否则标蓝色
+        }
+        circle(imgOut, ptCurr, 5, colorCurr, 1);
+    }
+
+    for (size_t i = 0, iend = mpKFLoop->mvKeyPoints.size(); i < iend; i++) {
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[i].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(imgCurr.cols, 0);
+
+        const bool ifMPLoop = bool(mpKFLoop->hasObservationByIndex(i));
+        Scalar colorLoop;
+        if (ifMPLoop) {
+            colorLoop = Scalar(0, 255, 0);  // KP有对应MP则标绿色
+        } else {
+            colorLoop = Scalar(255, 0, 0);  // 否则标蓝色
+        }
+        circle(imgOut, ptLoopMatch, 5, colorLoop, 1);
+    }
+
+    // Draw Matches
+    for (const auto& m : mMatchLoop) {
+        const int idxCurr = m.first;
+        const int idxLoop = m.second;
+
+        const Point2f& ptCurr = mpKFCurr->mvKeyPoints[idxCurr].pt;
+        const Point2f& ptLoop = mpKFLoop->mvKeyPoints[idxLoop].pt;
+        const Point2f ptLoopMatch = ptLoop + Point2f(imgCurr.cols, 0);
+
+        const bool ifMPCurr = bool(mpKFCurr->hasObservationByIndex(idxCurr));
+        const bool ifMPLoop = bool(mpKFLoop->hasObservationByIndex(idxLoop));
+
+        Scalar colorCurr, colorLoop;
+        if (ifMPCurr) {
+            colorCurr = Scalar(0, 255, 0);
+        } else {
+            colorCurr = Scalar(255, 0, 0);
+        }
+        if (ifMPLoop) {
+            colorLoop = Scalar(0, 255, 0);
+        } else {
+            colorLoop = Scalar(255, 0, 0);
+        }
+
+        circle(imgOut, ptCurr, 5, colorCurr, 1);
+        circle(imgOut, ptLoopMatch, 5, colorLoop, 1);
+        if (ifMPCurr && ifMPLoop) {
+            line(imgOut, ptCurr, ptLoopMatch, Scalar(0, 0, 255), 2);
+        } else {
+            line(imgOut, ptCurr, ptLoopMatch, Scalar(87, 0, 255), 1);
+        }
+    }
+#if USE_RK_DATASET
+    putText(imgOut, mBackImageText, Point(50, 20), 1, 1, Scalar(0, 0, 255), 2);
+#else
+    putText(imgOut, mBackImageText, Point(50, 40), 1, 2, Scalar(0, 0, 255), 2);
+#endif
+    return imgOut.clone();
+}
 
 }  // namespace se2lam

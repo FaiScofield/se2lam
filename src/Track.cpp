@@ -819,8 +819,8 @@ void Track::copyForPub()
         }
     }
 
-    mpMapPublisher->mImageText = string(strMatches);
-    mpMapPublisher->mbUpdated = true;
+    mpMapPublisher->mFrontImageText = string(strMatches);
+    mpMapPublisher->mbFrontEndUpdated = true;
 }
 
 

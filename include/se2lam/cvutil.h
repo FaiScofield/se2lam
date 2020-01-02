@@ -25,9 +25,9 @@ enum eTrackingState {
     NO_READY_YET = -2,
     FIRST_FRAME = -1,
     LOST = 0,
-    OK = 1,         // 正常状态, 仅不能从-2变过来
-    TRANSLATE = 2,
-    ROTATE = 3      // 纯旋转, 只可能从1变过来
+    OK = 1,             // 正常状态, 仅不能从-2变过来
+    PURE_ROTATE = 2,    // 纯旋转, 可能从1,3变过来
+    STOP = 3
 };
 
 Mat inv(const Mat& T4x4);

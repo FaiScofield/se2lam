@@ -47,6 +47,7 @@ public:
     void publishOdomInformation();
 
     cv::Mat drawCurrentFrameMatches();
+    cv::Mat drawLoopCloseMatches();
 
     bool isFinished();
     void requestFinish();
@@ -64,14 +65,19 @@ public:
 #endif
 
     // for visulization
-    bool mbUpdated;
+    bool mbFrontEndUpdated;
     unsigned long mnCurrentFrameID;
     cv::Mat mCurrentFramePose;
     cv::Mat mCurrentImage, mReferenceImage;
     cv::Mat mAffineMatrix, mHomography;
     std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
     std::vector<int> mvMatchIdx, mvMatchIdxGood;
-    std::string mImageText;
+    std::string mFrontImageText;
+
+    bool mbBackEndUpdated;
+    PtrKeyFrame mpKFCurr, mpKFLoop;
+    std::map<int, int> mMatchLoop;
+    std::string mBackImageText;
     std::mutex mMutexPub;
 
 private:

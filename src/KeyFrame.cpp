@@ -46,7 +46,7 @@ KeyFrame::KeyFrame(const Frame& frame) : Frame(frame), mIdKF(mNextIdKF++), mpMap
 
 KeyFrame::~KeyFrame()
 {
-    //fprintf(stderr, "[KeyFrame] KF#%ld(#%ld) 已被析构!\n", mIdKF, id);
+    fprintf(stderr, "[KeyFrame] KF#%ld(#%ld) 已被析构!\n", mIdKF, id);
 }
 
 // Please handle odometry based constraints after calling this function
@@ -119,15 +119,24 @@ void KeyFrame::setNull()
     fprintf(stderr, "[KeyFrame] KF#%ld 取消MP观测后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     // Handle Covisibility, 取消其他KF对此KF的共视关系
+#ifdef WEIGHT_COVISIBLITIES
+    assert(mvpCovisibleKFsSorted.size() == mCovisibleKFsWeight.size());
+    fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系前(%ld)引用计数 = %ld\n", mIdKF,
+            mvpCovisibleKFsSorted.size(), pThis.use_count());
+    for (auto it = mvpCovisibleKFsSorted.begin(), iend = mvpCovisibleKFsSorted.end(); it != iend; ++it) {
+        (*it)->eraseCovisibleKF(pThis);
+    }
+    mCovisibleKFsWeight.clear();
+    mvpCovisibleKFsSorted.clear();
+    mvOrderedWeights.clear();
+#else
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系前(%ld)引用计数 = %ld\n", mIdKF,
             mspCovisibleKFs.size(), pThis.use_count());
     for (auto it = mspCovisibleKFs.begin(), iend = mspCovisibleKFs.end(); it != iend; ++it) {
         (*it)->eraseCovisibleKF(pThis);
     }
-//    mCovisibleKFsWeight.clear();
-//    mvpCovisibleKFsSorted.clear();
-//    mvOrderedWeights.clear();
     mspCovisibleKFs.clear();
+#endif
     fprintf(stderr, "[KeyFrame] KF#%ld 取消共视关系后引用计数 = %ld\n", mIdKF, pThis.use_count());
 
     if (mpMap != nullptr) {
@@ -142,54 +151,30 @@ void KeyFrame::setNull()
 vector<shared_ptr<KeyFrame>> KeyFrame::getAllCovisibleKFs()
 {
     locker lock(mMutexCovis);
-    // return mvpCovisibleKFsSorted;
+#ifdef WEIGHT_COVISIBLITIES
+    return mvpCovisibleKFsSorted;
+#else
     return vector<shared_ptr<KeyFrame>>(mspCovisibleKFs.begin(), mspCovisibleKFs.end());
-}
-/*
-vector<shared_ptr<KeyFrame>> KeyFrame::getBestCovisibleKFs(size_t n)
-{
-    locker lock(mMutexCovis);
-    if (n > 0 && n <= mvpCovisibleKFsSorted.size())
-        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
-    else
-        return mvpCovisibleKFsSorted;
+#endif
 }
 
-vector<shared_ptr<KeyFrame>> KeyFrame::getCovisibleKFsByWeight(int w)
+void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
-    locker lock(mMutexCovis);
-    vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(), mvOrderedWeights.end(), w,
-                                           [](int a, int b) { return a > b; });
-    if (it == mvOrderedWeights.end() && *mvOrderedWeights.rbegin() < w)
-        return vector<PtrKeyFrame>();
-    else {
-        int n = it - mvOrderedWeights.begin();
-        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
-    }
-}
-
-map<shared_ptr<KeyFrame>, int> KeyFrame::getAllCovisibleKFsAndWeights()
-{
-    locker lock(mMutexCovis);
-    return mCovisibleKFsWeight;
-}
-
-void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
-{
+#ifdef WEIGHT_COVISIBLITIES
     {
         locker lock(mMutexCovis);
-        // mCovisibleKFsWeight.emplace(pKF, weight);
-        mCovisibleKFsWeight[pKF] = weight;
+        mCovisibleKFsWeight.erase(pKF);
     }
     sortCovisibleKFs();
+#else
+    locker lock(mMutexCovis);
+    mspCovisibleKFs.erase(pKF);
+#endif
 }
-*/
-//! 没啥必要
+
 void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
 {
-    locker lock(mMutexCovis);
-    mspCovisibleKFs.insert(pKF);
-/*
+#ifdef WEIGHT_COVISIBLITIES
     vector<PtrMapPoint> vpMPs;
     {
         locker lockMPs(mMutexObs);
@@ -209,125 +194,21 @@ void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF)
     }
 
     addCovisibleKF(pKF, weight);
-*/
-}
-
-void KeyFrame::eraseCovisibleKF(const shared_ptr<KeyFrame>& pKF)
-{
+#else
     locker lock(mMutexCovis);
-    mspCovisibleKFs.erase(pKF);
-    /*
-    {
-        locker lock(mMutexCovis);
-        mCovisibleKFsWeight.erase(pKF);
-    }
-    sortCovisibleKFs();
-    */
+    mspCovisibleKFs.insert(pKF);
+#endif
 }
-/*
-void KeyFrame::sortCovisibleKFs()
-{
-    locker lock(mMutexCovis);
-
-    vector<pair<PtrKeyFrame, int>> vpCovisbleKFsWeight(mCovisibleKFsWeight.begin(),
-                                                       mCovisibleKFsWeight.end());
-    std::sort(vpCovisbleKFsWeight.begin(), vpCovisbleKFsWeight.end(), SortByValueGreater());
-
-    size_t n = vpCovisbleKFsWeight.size();
-    mvpCovisibleKFsSorted.clear();
-    mvpCovisibleKFsSorted.resize(n);
-    mvOrderedWeights.clear();
-    mvOrderedWeights.resize(n);
-    for (size_t i = 0; i < n; ++i) {
-        mvpCovisibleKFsSorted[i] = vpCovisbleKFsWeight[i].first;
-        mvOrderedWeights[i] = vpCovisbleKFsWeight[i].second;
-    }
-}
-
-//! 没啥用. 本场景下KF之间共视关系并不会很好
-void KeyFrame::updateCovisibleGraph()
-{
-    WorkTimer timer;
-
-    map<PtrKeyFrame, int> KFcounter;  // TODO  这个变量待考究
-    vector<PtrMapPoint> vpMPs = getObservations(true, false);  // lock
-
-    // 1.通过3D点间接统计可以观测到这些3D点的所有关键帧之间的共视程度
-    // 即统计每一个关键帧都有多少关键帧与它存在共视关系，统计结果放在KFcounter
-    for (auto vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
-        PtrMapPoint pMP = (*vit);
-        if (!pMP || pMP->isNull())
-            continue;
-
-        vector<PtrKeyFrame> thisObsKFs = pMP->getObservations();
-        for (auto mit = thisObsKFs.begin(), mend = thisObsKFs.end(); mit != mend; mit++) {
-            if ((*mit)->mIdKF == mIdKF)  // 除去自身，自己与自己不算共视
-                continue;
-            KFcounter[(*mit)]++;  // TODO. 待确认插入新的key时value值为1
-        }
-    }
-
-    // This should not happen
-    if (KFcounter.empty())
-        return;
-
-    // 2.次数超过阈值则添加共视关系, 防止次数整体过少, 将把次数最多的KF添加为共视关系
-    int nmax = 0;
-    int th = 0.3 * vpMPs.size();  // 共同观测MP点数阈值30%
-    PtrKeyFrame pKFmax = nullptr;
-
-    // vPairs记录与其它关键帧共视帧数大于th的关键帧
-    vector<pair<int, PtrKeyFrame>> vPairs;
-    vPairs.reserve(KFcounter.size());
-    for (auto mit = KFcounter.begin(), mend = KFcounter.end(); mit != mend; mit++) {
-        if (mit->second > nmax) {
-            nmax = mit->second;
-            pKFmax = mit->first;
-        }
-        if (mit->second >= th) {
-            // 对应权重需要大于阈值，对这些关键帧建立连接
-            vPairs.push_back(make_pair(mit->second, mit->first));
-            (mit->first)->addCovisibleKF(shared_from_this(), mit->second);
-        }
-    }
-
-    // 如果没有超过阈值的权重，则对权重最大的关键帧建立连接, 这是对之前th这个阈值可能过高的一个补丁
-    if (vPairs.empty()) {
-        vPairs.emplace_back(nmax, pKFmax);
-        pKFmax->addCovisibleKF(shared_from_this(), nmax);
-    }
-
-    // vPairs里存的都是相互共视程度符合阈值(5)的关键帧和共视权重，由大到小
-    sort(vPairs.begin(), vPairs.end(), [](const pair<int, PtrKeyFrame>& lhs, const pair<int, PtrKeyFrame>& rhs) {
-        return lhs.first > rhs.first;
-    });
-
-
-    size_t n = vPairs.size();
-    vector<PtrKeyFrame> vKFs(n);
-    vector<int> vWs(n);
-    map<PtrKeyFrame, int> mKFadnW;
-    for (size_t i = 0; i < vPairs.size(); i++) {
-        vKFs[i] = vPairs[i].second;
-        vWs[i] = vPairs[i].first;
-        mKFadnW.emplace(vPairs[i].second, vPairs[i].first);
-    }
-
-    {
-        unique_lock<mutex> lockCon(mMutexCovis);
-        mCovisibleKFsWeight = mKFadnW;
-        mvpCovisibleKFsSorted = vKFs;
-        mvOrderedWeights = vWs;
-    }
-    printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超30%%), 共耗时%.2fms\n",
-           id, mIdKF, vpMPs.size(), mKFadnW.size(), timer.count());
-}
-*/
 
 size_t KeyFrame::countCovisibleKFs()
 {
     locker lock(mMutexCovis);
+#ifdef WEIGHT_COVISIBLITIES
+    assert(mvpCovisibleKFsSorted.size() == mCovisibleKFsWeight.size());
+    return mvpCovisibleKFsSorted.size();
+#else
     return mspCovisibleKFs.size();
+#endif
 }
 
 
@@ -414,5 +295,141 @@ void KeyFrame::setOdoMeasureTo(const shared_ptr<KeyFrame>& pKF, const Mat& _mea,
     mOdoMeasureTo = make_pair(pKF, SE3Constraint(_mea, _info));
 }
 
+#ifdef WEIGHT_COVISIBLITIES
+vector<shared_ptr<KeyFrame>> KeyFrame::getBestCovisibleKFs(size_t n)
+{
+    locker lock(mMutexCovis);
+    if (n > 0 && n <= mvpCovisibleKFsSorted.size())
+        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
+    else
+        return mvpCovisibleKFsSorted;
+}
+
+vector<shared_ptr<KeyFrame>> KeyFrame::getCovisibleKFsByWeight(int w)
+{
+    locker lock(mMutexCovis);
+    vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(), mvOrderedWeights.end(), w,
+                                           [](int a, int b) { return a > b; });
+    if (it == mvOrderedWeights.end() && *mvOrderedWeights.rbegin() < w)
+        return vector<PtrKeyFrame>();
+    else {
+        int n = it - mvOrderedWeights.begin();
+        return vector<PtrKeyFrame>(mvpCovisibleKFsSorted.begin(), mvpCovisibleKFsSorted.begin() + n);
+    }
+}
+
+map<shared_ptr<KeyFrame>, int> KeyFrame::getAllCovisibleKFsAndWeights()
+{
+    locker lock(mMutexCovis);
+    return mCovisibleKFsWeight;
+}
+
+void KeyFrame::addCovisibleKF(const shared_ptr<KeyFrame>& pKF, int weight)
+{
+    {
+        locker lock(mMutexCovis);
+        // mCovisibleKFsWeight.emplace(pKF, weight);
+        mCovisibleKFsWeight[pKF] = weight;
+    }
+    sortCovisibleKFs();
+}
+
+void KeyFrame::sortCovisibleKFs()
+{
+    locker lock(mMutexCovis);
+
+    vector<pair<PtrKeyFrame, int>> vpCovisbleKFsWeight(mCovisibleKFsWeight.begin(),
+                                                       mCovisibleKFsWeight.end());
+    std::sort(vpCovisbleKFsWeight.begin(), vpCovisbleKFsWeight.end(), SortByValueGreater());
+
+    size_t n = vpCovisbleKFsWeight.size();
+    mvpCovisibleKFsSorted.clear();
+    mvpCovisibleKFsSorted.resize(n);
+    mvOrderedWeights.clear();
+    mvOrderedWeights.resize(n);
+    for (size_t i = 0; i < n; ++i) {
+        mvpCovisibleKFsSorted[i] = vpCovisbleKFsWeight[i].first;
+        mvOrderedWeights[i] = vpCovisbleKFsWeight[i].second;
+    }
+}
+
+//? 没啥用. 本场景下KF之间共视关系并不会很好
+void KeyFrame::updateCovisibleGraph()
+{
+    WorkTimer timer;
+
+    map<PtrKeyFrame, int> KFcounter;  // TODO  这个变量待考究
+    vector<PtrMapPoint> vpMPs = getObservations(true, false);  // lock
+
+    // 1.通过3D点间接统计可以观测到这些3D点的所有关键帧之间的共视程度
+    // 即统计每一个关键帧都有多少关键帧与它存在共视关系，统计结果放在KFcounter
+    for (auto vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
+        PtrMapPoint pMP = (*vit);
+        if (!pMP || pMP->isNull())
+            continue;
+
+        vector<PtrKeyFrame> thisObsKFs = pMP->getObservations();
+        for (auto mit = thisObsKFs.begin(), mend = thisObsKFs.end(); mit != mend; mit++) {
+            if ((*mit)->mIdKF == mIdKF)  // 除去自身，自己与自己不算共视
+                continue;
+            KFcounter[(*mit)]++;  // TODO. 待确认插入新的key时value值为1
+        }
+    }
+
+    // This should not happen
+    if (KFcounter.empty())
+        return;
+
+    // 2.次数超过阈值则添加共视关系, 防止次数整体过少, 将把次数最多的KF添加为共视关系
+    int nmax = 0;
+    int th = 0.2 * vpMPs.size();  // 共同观测MP点数阈值20%
+    PtrKeyFrame pKFmax = nullptr;
+
+    // vPairs记录与其它关键帧共视帧数大于th的关键帧
+    vector<pair<int, PtrKeyFrame>> vPairs;
+    vPairs.reserve(KFcounter.size());
+    for (auto mit = KFcounter.begin(), mend = KFcounter.end(); mit != mend; mit++) {
+        if (mit->second > nmax) {
+            nmax = mit->second;
+            pKFmax = mit->first;
+        }
+        if (mit->second >= th) {
+            // 对应权重需要大于阈值，对这些关键帧建立连接
+            vPairs.push_back(make_pair(mit->second, mit->first));
+            (mit->first)->addCovisibleKF(shared_from_this(), mit->second);
+        }
+    }
+
+    // 如果没有超过阈值的权重，则对权重最大的关键帧建立连接, 这是对之前th这个阈值可能过高的一个补丁
+    if (vPairs.empty()) {
+        vPairs.emplace_back(nmax, pKFmax);
+        pKFmax->addCovisibleKF(shared_from_this(), nmax);
+    }
+
+    // vPairs里存的都是相互共视程度符合阈值(5)的关键帧和共视权重，由大到小
+    sort(vPairs.begin(), vPairs.end(), [](const pair<int, PtrKeyFrame>& lhs, const pair<int, PtrKeyFrame>& rhs) {
+        return lhs.first > rhs.first;
+    });
+
+    size_t n = vPairs.size();
+    vector<PtrKeyFrame> vKFs(n);
+    vector<int> vWs(n);
+    map<PtrKeyFrame, int> mKFadnW;
+    for (size_t i = 0; i < vPairs.size(); i++) {
+        vKFs[i] = vPairs[i].second;
+        vWs[i] = vPairs[i].first;
+        mKFadnW.emplace(vPairs[i].second, vPairs[i].first);
+    }
+
+    {
+        unique_lock<mutex> lockCon(mMutexCovis);
+        mCovisibleKFsWeight = mKFadnW;
+        mvpCovisibleKFsSorted = vKFs;
+        mvOrderedWeights = vWs;
+    }
+    printf("[KeyFrame][Co] #%ld(KF#%ld) 更新共视关系成功, 针对%ld个MP观测, 更新了%ld个共视KF(共视超20%%), 共耗时%.2fms\n",
+           id, mIdKF, vpMPs.size(), mKFadnW.size(), timer.count());
+}
+#endif
 
 }  // namespace se2lam

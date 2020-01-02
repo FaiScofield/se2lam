@@ -33,9 +33,9 @@ int main(int argc, char** argv)
     vector<RK_IMAGE> allImages;
     readImagesRK(dataFolder, allImages);
 #else
-    string dataFolder = Config::DataPath + "image";
+    string dataFolder = Config::DataPath + "image/"; // end with '/'
     vector<RK_IMAGE> allImages;
-    readImagesRK(dataFolder, allImages);
+    readImagesSe2(dataFolder, allImages);
 #endif
 
     string odomRawFile = Config::DataPath + "odo_raw.txt";
@@ -79,6 +79,7 @@ int main(int argc, char** argv)
     //! main loop
     const int skipFrames = Config::ImgStartIndex;
     num = std::min(num, static_cast<int>(allImages.size()));
+    cout << " - real number_frames_to_process = " << num << endl;
     ros::Rate rate(Config::FPS);
     for (int i = skipFrames; i < num; ++i) {
         Mat imgGray = imread(allImages[i].fileName, CV_LOAD_IMAGE_GRAYSCALE);
@@ -94,7 +95,6 @@ int main(int argc, char** argv)
 
         rate.sleep();
     }
-    pMapPub->requestFinish();
 
     if (Config::SaveNewMap) {
         MapStorage* pMapStorage = new MapStorage();
@@ -103,10 +103,13 @@ int main(int argc, char** argv)
         pMapStorage->saveMap();
     }
 
+    pMapPub->requestFinish();
+
+    cv::waitKey(1000);
     delete pMatcher;
     delete pVocabulary;
     delete pMap;
-    delete pMapPub;
+    //delete pMapPub;
     delete pTracker;
     return 0;
 }

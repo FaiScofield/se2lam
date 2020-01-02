@@ -83,6 +83,8 @@ std::string Config::WriteTrajFileName = "se2lam.traj";
 
 bool Config::NeedVisualization = true;
 int Config::MappubScaleRatio = 300;
+float Config::CameraSize = 0.3;
+float Config::PointSize = 0.15;
 
 cv::Mat Config::PrjMtrxEye;
 float Config::ThDepthFilter;  //! TODO
@@ -199,6 +201,8 @@ void Config::readConfig(const std::string& path)
 
     settings["need_visulization"] >> NeedVisualization;
     settings["mappub_scale_ratio"] >> MappubScaleRatio;
+    settings["camera_size"] >> CameraSize;
+    settings["point_size"] >> PointSize;
 
     PrjMtrxEye = Kcam * cv::Mat::eye(3, 4, CV_32FC1);
     settings["depth_filter_thresh"] >> ThDepthFilter;
@@ -232,6 +236,7 @@ void Config::checkParamValidity()
               << " - Camera extrinsic Tbc (Body to Camera): " << std::endl
               << " " << Tbc << std::endl
               << std::endl;
+
     std::cout << "[confi][Info ] Setting paramters below:" << std::endl
               << " - FPS: " << FPS << std::endl
               << " - Image start index: " << ImgStartIndex << std::endl
@@ -249,22 +254,31 @@ void Config::checkParamValidity()
               << " - Max local frame num: " << MaxLocalFrameNum << std::endl
               << " - Local KF search level: " << LocalFrameSearchLevel << std::endl
               << " - Local KF search radius[m]: " << LocalFrameSearchRadius << std::endl
+              << " - Loopclose min score best: " << MinScoreBest << std::endl
+              << " - Loopclose min MP match ratio: " << MinMPMatchRatio << std::endl
+              << " - Loopclose min MP matches: " << MinMPMatchNum << std::endl
+              << " - Loopclose min KP matches: " << MinKPMatchNum << std::endl
+              << " - Loopclose min KF offset: " << MinKFidOffset << std::endl
               << " - Use prev map: " << UsePrevMap << std::endl
               << " - Save new map: " << SaveNewMap << std::endl
               << " - Map file store path: " << MapFileStorePath << std::endl
               << " - Map file name(read): " << ReadMapFileName << std::endl
               << " - Map file name(write): " << WriteMapFileName << std::endl
               << " - Trajectory file name(write): " << WriteTrajFileName << std::endl
-              << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
               << " - Need visulization: " << NeedVisualization << std::endl
+              << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
+              << " - Camera size for visulization: " << CameraSize << std::endl
+              << " - Point size for visulization: " << PointSize << std::endl
               << " - Local print(debug): " << LocalPrint << std::endl
               << " - Global print(debug): " << GlobalPrint << std::endl
               << " - Save match images(debug): " << SaveMatchImage << std::endl
               << std::endl;
+
     if (SaveMatchImage) {
         std::cout << " - Match images Store Path(debug): " << MatchImageStorePath << std::endl
                   << " - G2O results Store Path(debug): " << G2oResultsStorePath << std::endl;
     }
+    std::cout << std::endl;
 
     assert(Kcam.data);
     assert(Kcam.rows == 3 && Kcam.cols == 3);
@@ -288,7 +302,14 @@ void Config::checkParamValidity()
     assert(MaxLocalFrameNum >= 0);
     assert(LocalFrameSearchLevel > 0);
     assert(LocalFrameSearchRadius > 0.f);
+    assert(MinScoreBest > 0.f);
+    assert(MinMPMatchRatio > 0.f);
+    assert(MinMPMatchNum > 0);
+    assert(MinKPMatchNum > 0);
+    assert(MinKFidOffset > 0);
     assert(MappubScaleRatio >= 1);
+    assert(CameraSize > 0.f);
+    assert(PointSize > 0.f);
 }
 
 Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.)
@@ -333,7 +354,7 @@ Se2 Se2::operator-(const Se2& that) const
     return Se2(c * dx + s * dy, -s * dx + c * dy, dth);
 }
 
-Se2 Se2::operator *(double scale) const
+Se2 Se2::operator*(double scale) const
 {
     return Se2(x*scale, y*scale, theta, timeStamp);
 }

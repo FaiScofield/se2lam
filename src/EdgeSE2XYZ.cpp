@@ -4,6 +4,7 @@
 * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
 */
 
+#include "Config.h"
 #include "EdgeSE2XYZ.h"
 #include "Thirdparty/g2o/g2o/core/factory.h"
 #include "Thirdparty/g2o/g2o/types/slam3d/isometry3d_mappings.h"
@@ -76,26 +77,42 @@ bool EdgeSE2XYZ::write(ostream& os) const
 //! 计算重投影误差，2维
 void EdgeSE2XYZ::computeError()
 {
-    VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
-    VertexSBAPointXYZ* v2 = static_cast<VertexSBAPointXYZ*>(_vertices[1]);
+    const VertexSE2* v1 = dynamic_cast<VertexSE2*>(_vertices[0]);
+    const VertexSBAPointXYZ* v2 = dynamic_cast<VertexSBAPointXYZ*>(_vertices[1]);
 
     // v1是Twb，所以这里要用逆
-    SE3Quat Tbw = SE2ToSE3(v1->estimate().inverse());
-    SE3Quat Tcw = Tcb * Tbw;
+    const SE3Quat Tbw = SE2ToSE3(v1->estimate().inverse());
+    const SE3Quat Tcw = Tcb * Tbw;
 
     // 地图点的观测在相机坐标系下的坐标
-    Vector3D lc = Tcw.map(v2->estimate());
+    const Vector3D lc = Tcw.map(v2->estimate());
 
     // 误差=观测-投影, 这里是 投影-观测, 效果一样
     // cam_map()把相机坐标系下三维点用内参转换为图像坐标输出
-    _error = cam->cam_map(lc) - Vector2D(_measurement);
+    _error = cameraProject(lc) - Vector2D(_measurement);
+}
+
+Vector2D EdgeSE2XYZ::cameraProject(const Vector3D& xyz) const
+{
+    Vector2D res;
+    res[0] = xyz[0] / xyz[2] * fx + cx;
+    res[1] = xyz[1] / xyz[2] * fy + cy;
+    return res;
+}
+
+void EdgeSE2XYZ::setCameraParameter(const cv::Mat& K)
+{
+    fx = K.at<float>(0, 0);
+    fy = K.at<float>(1, 1);
+    cx = K.at<float>(0, 2);
+    cy = K.at<float>(1, 2);
 }
 
 #ifdef CUSTOMIZE_JACOBIAN_SE2XYZ
 void EdgeSE2XYZ::linearizeOplus()
 {
-    VertexSE2* v1 = static_cast<VertexSE2*>(_vertices[0]);
-    VertexSBAPointXYZ* v2 = static_cast<VertexSBAPointXYZ*>(_vertices[1]);
+    const VertexSE2* v1 = dynamic_cast<VertexSE2*>(_vertices[0]);
+    const VertexSBAPointXYZ* v2 = dynamic_cast<VertexSBAPointXYZ*>(_vertices[1]);
 
     const Vector3D vwb = v1->estimate().toVector();
     const Vector3D pi(vwb[0], vwb[1], 0);
@@ -108,9 +125,6 @@ void EdgeSE2XYZ::linearizeOplus()
     const double zc = lc(2);
     const double zc_inv = 1. / zc;
     const double zc_inv2 = zc_inv * zc_inv;
-
-    const double& fx = cam->focal_length;
-    const double& fy = fx;
 
     Matrix23D de_dlc;  // 误差对lc的偏导
     de_dlc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;

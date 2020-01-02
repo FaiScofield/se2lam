@@ -303,7 +303,7 @@ int main(int argc, char** argv)
                 e->setVertex(1, vj);
                 e->setMeasurement(uv);
                 e->setInformation(Eigen::Matrix2d::Identity());
-                e->setCameraParameter(cam);
+                e->setCameraParameter(Config::Kcam);
                 e->setExtParameter(Tbc);
                 e->setRobustKernel(kernel);
                 optimizer.addEdge(e);

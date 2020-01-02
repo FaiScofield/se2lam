@@ -253,7 +253,8 @@ g2o::VertexPointXYZ* addVertexXYZ(SlamOptimizer& opt, const g2o::Vector3D& xyz, 
 g2o::EdgeSE3Prior* addVertexSE3AndEdgePlaneMotion(SlamOptimizer& opt, const g2o::Isometry3D& pose,
                                                   int id, const cv::Mat& extPara,
                                                   int paraSE3OffsetId, bool fixed = false);
-
+g2o::VertexSE3* addVertexSE3AndEdgeSE3Prior(SlamOptimizer& opt, const g2o::Isometry3D& pose, int id,
+                                       const cv::Mat& extPara, int paraSE3OffsetId, bool fixed = false);
 
 EdgeSE3ExpmapPrior* addEdgeSE3ExpmapPlaneConstraint(SlamOptimizer& opt, const g2o::SE3Quat& pose,
                                                     int vId, const cv::Mat& extPara);
@@ -266,7 +267,7 @@ g2o::EdgeProjectXYZ2UV* addEdgeXYZ2UV(SlamOptimizer& opt, const Eigen::Vector2d&
                                       double thHuber);
 
 g2o::EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const g2o::Vector2D& meas, int id0, int id1,
-                               CamPara* campara, const g2o::SE3Quat& _Tbc,
+                               const cv::Mat& K, const g2o::SE3Quat& _Tbc,
                                const g2o::Matrix2D& info, double thHuber);
 
 g2o::PreEdgeSE2* addPreEdgeSE2(SlamOptimizer& opt, const g2o::Vector3D& meas, int id0, int id1,

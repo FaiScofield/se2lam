@@ -82,7 +82,7 @@ public:
 
     void globalBA();
 
-    void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
+    static void removeMatchOutlierRansac(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop,
                                   std::map<int, int>& mapiMatch);
     static void removeKPMatch(const PtrKeyFrame& _pKFCurrent, const PtrKeyFrame& _pKFLoop, std::map<int, int>& mapiMatch);
 
@@ -94,6 +94,7 @@ public:
 
     //    void drawMatch(const std::map<int, int>& mapiMatch);
     //    void drawMatch(const std::vector<int>& viMatch);
+    void copyForPub(const std::map<int, int>& mapMatch, bool closed);
 
     // DEBUG Functions ... Print SE3Quat
     void printSE3(const g2o::SE3Quat se3);
@@ -116,6 +117,7 @@ protected:
 
     Map* mpMap;
     LocalMapper* mpLocalMapper;
+    MapPublish* mpMapPublisher;
 
     PtrKeyFrame mpKFCurr;
     PtrKeyFrame mpKFLoop;

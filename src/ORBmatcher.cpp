@@ -152,12 +152,12 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
 
     vector<cv::KeyPoint> vKeysUn1 = pF1->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec1 = pF1->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints1 = pF1->getObservations();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints1 = pF1->getObservations();
     cv::Mat Descriptors1 = pF1->mDescriptors;
 
     vector<cv::KeyPoint> vKeysUn2 = pF2->mvKeyPoints;
     DBoW2::FeatureVector vFeatVec2 = pF2->mFeatVec;
-    vector<PtrMapPoint> vpMapPoints2 = pF2->getObservations();  // Localizer下无MP
+    vector<PtrMapPoint> vpMapPoints2 = pF2->getObservations();
     cv::Mat Descriptors2 = pF2->mDescriptors;
 
     int nmatches = 0;
@@ -178,9 +178,7 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
                 const size_t idx1 = f1it->second[i1];
                 const PtrMapPoint& pMP1 = vpMapPoints1[idx1];
                 if (bIfMPOnly) {
-                    if (!pMP1)
-                        continue;
-                    if (pMP1->isNull())
+                    if (!pMP1 || pMP1->isNull())
                         continue;
                 }
 
@@ -195,9 +193,7 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
                     const size_t idx2 = f2it->second[i2];
                     const PtrMapPoint& pMP2 = vpMapPoints2[idx2];
                     if (bIfMPOnly) {
-                        if (!pMP2)
-                            continue;
-                        if (pMP2->isNull())
+                        if (!pMP2 || pMP2->isNull())
                             continue;
                     }
 
@@ -252,25 +248,25 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
     }
 
     // 旋转一致性验证, 根据方向剔除误匹配的点
-//    if (mbCheckOrientation) {
-//        int ind1 = -1;
-//        int ind2 = -1;
-//        int ind3 = -1;
+    if (mbCheckOrientation) {
+        int ind1 = -1;
+        int ind2 = -1;
+        int ind3 = -1;
 
-//        //! 计算rotHist中最大的三个的index
-//        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
+        //! 计算rotHist中最大的三个的index
+        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
 
-//        for (int i = 0; i < HISTO_LENGTH; ++i) {
-//            //! 如果特征点的旋转角度变化量属于这三个组，则保留
-//            if (i == ind1 || i == ind2 || i == ind3)
-//                continue;
-//            //! 将除了ind1 ind2 ind3以外的匹配点去掉
-//            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
-//                mapMatches12.erase(rotHist[i][j]);
-//                nmatches--;
-//            }
-//        }
-//    }
+        for (int i = 0; i < HISTO_LENGTH; ++i) {
+            //! 如果特征点的旋转角度变化量属于这三个组，则保留
+            if (i == ind1 || i == ind2 || i == ind3)
+                continue;
+            //! 将除了ind1 ind2 ind3以外的匹配点去掉
+            for (size_t j = 0, jend = rotHist[i].size(); j < jend; ++j) {
+                mapMatches12.erase(rotHist[i][j]);
+                nmatches--;
+            }
+        }
+    }
 
     return nmatches;
 }
@@ -281,7 +277,7 @@ int ORBmatcher::SearchByBoW(Frame* pF1, Frame* pF2, map<int, int>& mapMatches12,
  *
  * @param frame1        参考帧F1
  * @param frame2        当前帧F2
- * @param vbPrevMatched 参考帧F1特征点的位置[update]
+ * @param vbPrevMatched 参考帧F1特征点的位置[update](应该要乘以参考帧到上一帧的仿射变换)
  * @param winSize       cell尺寸
  * @param vnMatches12   匹配情况[output]
  * @param levelOffset   最大金字塔层差
@@ -534,7 +530,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
                                   std::map<int, int>& matches12, const int winSize)
 {
     assert(HA21.type() == CV_64FC1);
-    if (!HA21.data)
+    if (HA21.empty())
         std::cerr << "[Match][Warni] Input argument error for empty H!" << std::endl;
 
     Mat H21 = Mat::eye(3, 3, CV_64FC1);
