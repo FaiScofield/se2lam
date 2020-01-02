@@ -6,8 +6,7 @@ Makefile
 odoslam.cbp
 CMakeLists.txt.user
 Makefile
-Thirdparty/DBoW2/build/
-Thirdparty/DBoW2/lib/*
+Thirdparty/
 *.bag
 **/*voc.bin
 _clang-format

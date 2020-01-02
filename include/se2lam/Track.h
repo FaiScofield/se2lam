@@ -80,7 +80,7 @@ private:
     LocalMapper* mpLocalMapper;
     GlobalMapper* mpGlobalMapper;
     MapPublish* mpMapPublisher;
-    ORBextractor* mpORBextractor;  // 这里有new
+    ORBextractor* mpORBextractor;
     ORBmatcher* mpORBmatcher;
 
     std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;
@@ -92,10 +92,15 @@ private:
     PtrKeyFrame mpReferenceKF, mpLoopKF;
     std::vector<cv::Point2f> mPrevMatched;
 
-    int mnKPMatches, mnKPsInline, mnKPMatchesGood;
-    int mnMPsTracked;
-    cv::Mat mAffineMatrix;
+    int mnKPMatches, mnKPMatchesGood, mnKPsInline;
+    int mnMPsTracked, mnMPsNewAdded, mnMPsInline;
+    int mnLessMatchFrames, mnLostFrames;
 
+    // New KeyFrame rules (according to fps)
+    int nMinFrames, nMaxFrames, nMinMatches;
+    float mMaxAngle, mMinDistance;
+
+    cv::Mat mAffineMatrix;
     PreSE2 preSE2;
     Se2 lastOdom;
 };

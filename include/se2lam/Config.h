@@ -44,6 +44,7 @@ struct Se2 {
     Se2 operator-(const Se2& that) const;
     Se2 operator+(const Se2& that) const;
     Se2& operator=(const Se2& that);
+    Se2 operator*(double scale) const;
     cv::Mat toCvSE3() const;
     Se2& fromCvSE3(const cv::Mat& mat);
 
@@ -153,10 +154,11 @@ public:
     // visulization
     static bool NeedVisualization;
     static int MappubScaleRatio;
+    static float CameraSize, PointSize;
 
     //! other
     static cv::Mat PrjMtrxEye;
-    static float ThDepthFilter;  //! TODO 深度滤波阈值
+    static float ThDepthFilter;  //! TODO 深度滤波阈值    
 
     //! debug
     static bool ShowGroundTruth;

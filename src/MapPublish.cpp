@@ -295,7 +295,7 @@ void MapPublish::run()
         if (mbBackUpdated && mpKFLoop != nullptr && !mpKFLoop->isNull() && !mpKFCurr->isNull()) {
             mLoopImageMatch = drawLoopCloseMatches();
             mbBackUpdated = false;
-            mpKFLoop = nullptr;
+            mpKFLoop.reset();
         }
         vconcat(imgUp, mLoopImageMatch, imgShow);
         sensor_msgs::ImagePtr msgShow = cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
