@@ -70,3 +70,13 @@ target_link_libraries(test_BA_SE3
     se2lam
     ${G2O_LIBS}
 )
+
+add_executable(test_BA_Full
+    test_BA_Full.cpp
+    test_functions.hpp
+    test_optimizer.hpp
+)
+target_link_libraries(test_BA_Full
+    se2lam
+    ${G2O_LIBS}
+)

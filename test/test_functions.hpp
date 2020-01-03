@@ -544,5 +544,12 @@ cv::Mat calculateAffineMatrix(const Se2& dOdom)
     return R1.rowRange(0, 2).clone();
 }
 
+Eigen::Vector2d camera_map(const Eigen::Vector3d& Pc)
+{
+    Eigen::Vector2d uv(Pc[0]/Pc[2], Pc[1]/Pc[2]);
+    uv[0] = Config::fx * uv[0] + Config::cx;
+    uv[1] = Config::fy * uv[1] + Config::cy;
+    return uv;
+}
 
 #endif  // TEST_FUNCTIONS_HPP

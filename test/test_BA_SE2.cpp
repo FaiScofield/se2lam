@@ -153,7 +153,7 @@ int main(int argc, char** argv)
         const double z = (5000.0 + rng.gaussian(200.));
         vPoints.push_back(Eigen::Vector3d(x, y, z));
 
-        const int level = rng.uniform(1, 6);  // level 1-5
+        const int level = rng.uniform(0, 5);
         vSigma2.push_back(std::pow(1.2, level));
     }
 
