@@ -5,7 +5,6 @@
 
 # define USE_RK_DATASET 0
 
-string g_configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 
 int main(int argc, char** argv)
@@ -15,18 +14,18 @@ int main(int argc, char** argv)
 
     //! check input
     if (argc < 2) {
-        fprintf(stderr, "Usage: test_MapPointManager <rk_dataPath> [number_frames_to_process]");
+        fprintf(stderr, "Usage: test_MapPointManager <dataPath> [number_frames_to_process]");
         ros::shutdown();
         exit(-1);
     }
+
+    //! initialization
+    Config::readConfig(string(argv[1]));
     int num = Config::ImgCount;
     if (argc == 3) {
         num = atoi(argv[2]);
         cout << " - set number_frames_to_process = " << num << endl << endl;
     }
-
-    //! initialization
-    Config::readConfig(string(argv[1]));
 
 #if USE_RK_DATASET
     string dataFolder = Config::DataPath + "slamimg";
@@ -38,7 +37,7 @@ int main(int argc, char** argv)
     readImagesSe2(dataFolder, allImages);
 #endif
 
-    string odomRawFile = Config::DataPath + "odo_raw.txt";
+    string odomRawFile = Config::DataPath + "odo_raw.txt";  // [mm]
     vector<Se2> allOdoms;
     readOdomDatas(odomRawFile, allOdoms);
     if (allOdoms.empty())

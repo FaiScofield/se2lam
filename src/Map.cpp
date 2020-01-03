@@ -1309,6 +1309,8 @@ void Map::optimizeLocalGraph(SlamOptimizer& optimizer)
         PtrMapPoint& pMP = mvLocalGraphMPs[j];
         if (pMP->isNull() || !pMP->isGoodPrl())
             continue;
+        if (pMP->countObservations() < 2)
+            continue;
 
         Point3f pos = toCvPt3f(estimateVertexSBAXYZ(optimizer, j + maxKFid));
         pMP->setPos(pos);

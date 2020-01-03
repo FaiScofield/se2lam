@@ -9,15 +9,17 @@
 #include "Thirdparty/g2o/g2o/types/slam2d/vertex_se2.h"
 #include "Thirdparty/g2o/g2o/types/slam3d/dquat2mat.h"
 #include "Thirdparty/g2o/g2o/types/slam3d/types_slam3d.h"
-//#include "Thirdparty/g2o/g2o/core/hyper_graph.h"
 #include "optimizer.h"
 #include "test_functions.hpp"
 #include "test_optimizer.hpp"
 
-//#define USE_PRESE2  // else use g2o::SE2
-//#define USE_XYZCUSTOM  // else use EdgeSE2XYZ
-#define USE_LM    // else use GN algorithm
-//#define ONLY_EDGEXYZ // else EDGExyz + EdgeSE2
+//#define USE_PRESE2          0 // else use g2o::SE2
+//#define USE_XYZCUSTOM       0 // else use EdgeSE2XYZ
+
+#define USE_EDGEXYZ_ONLY    0 // else EDGExyz + EdgeSE2
+#define EDGEXYZ_FULL_INFO   0
+#define SAVE_BA_RESULT      1
+#define PRINT_DEBUG_INFO    0
 
 using namespace std;
 
@@ -57,11 +59,11 @@ void writeToPlyFile(SlamOptimizer* optimizer)
 
     for (size_t i = 0; i < nPose; ++i) {
         if (i < g_nKFVertices) {
-            auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
+            auto v = dynamic_cast<g2o::VertexSE2*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 0 255 0" << '\n';
         } else {
-            auto v = static_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
+            auto v = dynamic_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << pose[2] << " 0 255 0" << '\n';
         }
@@ -83,11 +85,11 @@ void writeToPlyFileAppend(SlamOptimizer* optimizer)
 
     for (size_t i = 0; i < nPose; ++i) {
         if (i < g_nKFVertices) {
-            auto v = static_cast<g2o::VertexSE2*>(optimizer->vertex(i));
+            auto v = dynamic_cast<g2o::VertexSE2*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << 0 << " 255 0 0" << '\n';
         } else {
-            auto v = static_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
+            auto v = dynamic_cast<g2o::VertexSBAPointXYZ*>(optimizer->vertex(i));
             auto pose = v->estimate();
             of << pose[0] << ' ' << pose[1] << ' ' << pose[2] << " 255 0 0" << '\n';
         }
@@ -104,47 +106,32 @@ int main(int argc, char** argv)
         cerr << "Usage: test_pointDetection <dataPath> [number_frames_to_process]" << endl;
         exit(-1);
     }
-    int num = INT_MAX;
-    if (argc == 3) {
-        num = atoi(argv[2]);
-        cerr << "set number_frames_to_process = " << num << endl << endl;
-    }
 
     // initialization
-    string configPath = "/home/vance/dataset/rk/dibeaDataSet/se2_config/";
-    Config::readConfig(configPath);
+    Config::readConfig(string(argv[1]));
+    int num = Config::ImgCount;
+    if (argc == 3) {
+        num = atoi(argv[2]);
+        cerr << "set number_frames_to_process = " << num << endl;
+    }
 
     // read data
-    string odomRawFile = string(argv[1]) + "odo_raw.txt";  // [mm]
-    ifstream rec(odomRawFile);
-    if (!rec.is_open()) {
-        cerr << "[Main ][Error] Please check if the odo_raw file exists!" << endl;
-        rec.close();
+    string odomRawFile = Config::DataPath + "odo_raw.txt";  // [mm]
+    vector<Se2> vOdomData;
+    readOdomDatas(odomRawFile, vOdomData);
+    if (vOdomData.empty())
         exit(-1);
-    }
 
-    vector<g2o::SE2> vOdomData;
-    vOdomData.reserve(2000);
-    while (rec.peek() != EOF) {
-        string line;
-        getline(rec, line);
-        istringstream iss(line);
-        g2o::Vector3D lineData;
-        iss >> lineData[0] >> lineData[1] >> lineData[2];
-        lineData[0] *= g_scale;  // mm换成cm
-        lineData[1] *= g_scale;
-        vOdomData.push_back(g2o::SE2(lineData));
-    }
-    const int skip = 100;
+    const int skip = Config::ImgStartIndex;
     const int delta = 20;
     const int N = min((int)vOdomData.size(), num);
     cout << "Use " << N << " odom data (size of vertices) in the file to test BA. " << endl;
-    cout << "skip = " << skip << ", delta = " << delta << endl;
+    cout << "skip = " << skip << ", delta = " << delta << endl << endl;
 
     // random noise
     cv::RNG rng;  // OpenCV随机数产生器
-    const double noiseX = Config::OdoNoiseX * 5;
-    const double noiseY = Config::OdoNoiseY * 5;
+    const double noiseX = Config::OdoNoiseX * 10;
+    const double noiseY = Config::OdoNoiseY * 10;
     const double noiseT = Config::OdoNoiseTheta * 8;
 
     // preintergation
@@ -155,29 +142,31 @@ int main(int argc, char** argv)
     // generate observations
     size_t nMPs = 200;
     vector<Eigen::Vector3d> vPoints;
+    vector<double> vSigma2;
     vPoints.reserve(nMPs);
+    vSigma2.reserve(nMPs);
     for (size_t i = 0; i < nMPs; ++i) {
         double dx = rng.uniform(0., 0.99999);
         double dy = rng.uniform(0., 0.99999);
-        const double x = (dx * 5000. - 1000.) * g_scale;
-        const double y = (dy * 5000.) * g_scale;
-        const double z = (5000.0 + rng.gaussian(200.)) * g_scale;
+        const double x = (dx * 5000. - 1000.);
+        const double y = (dy * 5000.);
+        const double z = (5000.0 + rng.gaussian(200.));
         vPoints.push_back(Eigen::Vector3d(x, y, z));
+
+        const int level = rng.uniform(1, 6);  // level 1-5
+        vSigma2.push_back(std::pow(1.2, level));
     }
 
     WorkTimer timer;
 
     // g2o solver construction
-    SlamOptimizer optimizer;
+    SlamOptimizer optimizer, optSaver;
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-#ifdef USE_LM
     SlamAlgorithmLM* algo = new SlamAlgorithmLM(blockSolver);
     algo->setMaxTrialsAfterFailure(5);
-#else
-    SlamAlgorithmGN* algo = new SlamAlgorithmGN(blockSolver);
-#endif
     optimizer.setAlgorithm(algo);
+
     CamPara* cam = new CamPara(Config::fx, g2o::Vector2D(Config::cx, Config::cy), 0);
     cam->setId(0);
     optimizer.addParameter(cam);
@@ -188,7 +177,7 @@ int main(int argc, char** argv)
         // update preInfo
         if (i != skip) {
             Eigen::Vector3d& meas = preInfo.meas;
-            g2o::SE2 odok = vOdomData[i - 1].inverse() * vOdomData[i];
+            g2o::SE2 odok = toG2OSE2(vOdomData[i - 1]).inverse() * toG2OSE2(vOdomData[i]);
             Eigen::Vector2d odork = odok.translation();
             Eigen::Matrix2d Phi_ik = Eigen::Rotation2Dd(meas[2]).toRotationMatrix();
             meas.head<2>() += Phi_ik * odork;
@@ -209,13 +198,16 @@ int main(int argc, char** argv)
 
         if ((i - skip) % delta == 0) {
             const int vertexID = (i - skip) / delta;
-            g2o::SE2 noise(rng.gaussian(noiseX * noiseX), rng.gaussian(noiseY * noiseY),
-                           rng.gaussian(noiseT * noiseT));
+            Se2 noisePose = vOdomData[i];
+            noisePose.x += rng.gaussian(noiseX * noiseX);
+            noisePose.y += rng.gaussian(noiseY * noiseY);
+            noisePose.theta += rng.gaussian(noiseT * noiseT);
+
             g2o::VertexSE2* v = new g2o::VertexSE2();
-            const bool fixed = vertexID < 1 ? true : false;
+            const bool fixed = (vertexID == 0);
             v->setId(vertexID);
             v->setFixed(fixed);
-            v->setEstimate(vOdomData[i] * noise);
+            v->setEstimate(toG2OSE2(noisePose));
             optimizer.addVertex(v);
             g_nKFVertices++;
 
@@ -226,66 +218,64 @@ int main(int argc, char** argv)
         }
     }
 
+#if USE_EDGEXYZ_ONLY == 0
     // edges of odo
     for (int i = skip + delta; i < N; ++i) {
         if ((i - skip) % delta != 0)
             continue;
 
         const int vertexIDTo = (i - skip) / delta;
-        const auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
-        const auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
+        const auto v1 = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
+        const auto v2 = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
 
         Eigen::Vector3d& m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
         const g2o::SE2 meas(m[0], m[1], m[2]);
         const Eigen::Matrix3d info = vPreInfos[vertexIDTo].cov.inverse();
-        // bool isSymmetric = info.transpose() == info;
-        // if (!isSymmetric) {
-        //     cerr << "非对称信息矩阵: " << endl << info << endl;
-        // }
 
-#ifdef USE_PRESE2
+#if USE_PRESE2
         // EdgePreSE2
         g2o::PreEdgeSE2* e = new g2o::PreEdgeSE2();
         e->setMeasurement(m);
 #else
         // Edge SE2
         g2o::EdgeSE2* e = new g2o::EdgeSE2();
-//        EdgeSE2Custom* e = new EdgeSE2Custom();
+        // EdgeSE2Custom* e = new EdgeSE2Custom();
         e->setMeasurement(meas);
 #endif
         e->setVertex(0, v1);
         e->setVertex(1, v2);
         e->setInformation(info/*Eigen::Matrix3d::Identity()*/);
-#ifdef ONLY_EDGEXYZ
-#else
         optimizer.addEdge(e);
-#endif
-
+#if PRINT_DEBUG_INFO
         e->computeError();
         cout << "EdgeSE2 from " << v1->id() << " to " << v2->id() << " , chi2 = "
-             << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
+             << e->chi2() << ", error = [" << e->error().transpose() << "], info = "
+             << endl << info << endl;
+#endif
     }
-    cout << endl << endl;
+    cout << endl;
+#endif
 
     // vertices/edges of MPs
     const g2o::SE3Quat Tbc = toSE3Quat(Config::Tbc);
     size_t MPVertexId = g_nKFVertices;
     for (size_t j = 0; j < nMPs; ++j) {
-        // vetex
-        const Eigen::Vector3d& lw = vPoints[j];
+        // vetices
+        Eigen::Vector3d noise(rng.gaussian(10), rng.gaussian(10), rng.gaussian(200));
+        const Eigen::Vector3d& lw = vPoints[j] + noise;
         g2o::VertexSBAPointXYZ* vj = new g2o::VertexSBAPointXYZ();
         vj->setEstimate(lw);
         vj->setId(MPVertexId++);
         vj->setMarginalized(true);
-        // vj->setFixed(true); // pose optimization
+        vj->setFixed(false);
         optimizer.addVertex(vj);
 
         // edge
         for (size_t i = 0; i < g_nKFVertices; ++i) {
-            const auto vi = static_cast<g2o::VertexSE2*>(optimizer.vertex(i));
+            g2o::VertexSE2* vi = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(i));
             const int idx = vi->id() * delta + skip;
-            const g2o::SE3Quat Tcw = Tbc.inverse() * SE2ToSE3_(vOdomData[idx].inverse());
-            const Eigen::Vector3d lc = Tcw.map(lw);
+            const g2o::SE3Quat Tcw = Tbc.inverse() * SE2ToSE3_(toG2OSE2(vOdomData[idx]).inverse());
+            const Eigen::Vector3d lc = Tcw.map(vPoints[j]);
             if (lc(2) < 0)
                 continue;
 
@@ -294,7 +284,33 @@ int main(int argc, char** argv)
                 g2o::RobustKernelCauchy* kernel = new g2o::RobustKernelCauchy();
                 kernel->setDelta(1);
 
-#ifdef USE_XYZCUSTOM
+                const Eigen::Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * vSigma2[j];
+#if EDGEXYZ_FULL_INFO
+                const double zc = lc(2);
+                const double zc_inv = 1. / zc;
+                const double zc_inv2 = zc_inv * zc_inv;
+                const float& fx = Config::fx;
+                const float& fy = Config::fy;
+                g2o::Matrix23D J_lc;
+                J_lc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;
+                const Eigen::Matrix3d Rcw = Tcw.rotation().toRotationMatrix();
+                const g2o::Matrix23D J_MPi = J_lc * Rcw;
+
+                const g2o::SE2 Twb = vi->estimate();
+                const Eigen::Vector3d pi(Twb[0], Twb[1], 0);
+                const Eigen::Matrix2d J_KFj_rotxy = (J_MPi * g2o::skew(lw - pi)).block<2, 2>(0, 0);
+
+                const Eigen::Vector2d J_z = -J_MPi.block<2, 1>(0, 2);
+
+                const float Sigma_rotxy = 1.f / Config::PlaneMotionInfoXrot;
+                const float Sigma_z = 1.f / Config::PlaneMotionInfoZ;
+                const Eigen::Matrix2d cov = Sigma_rotxy * J_KFj_rotxy * J_KFj_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
+                const Eigen::Matrix2d info = cov.inverse();
+#else
+                const Eigen::Matrix2d info = Sigma_u.inverse();
+#endif
+
+#if USE_XYZCUSTOM
                 EdgeSE2XYZCustom* e = new EdgeSE2XYZCustom();
 #else
                 g2o::EdgeSE2XYZ* e = new g2o::EdgeSE2XYZ();
@@ -302,51 +318,68 @@ int main(int argc, char** argv)
                 e->setVertex(0, vi);
                 e->setVertex(1, vj);
                 e->setMeasurement(uv);
-                e->setInformation(Eigen::Matrix2d::Identity());
+
+                e->setInformation(info);
                 e->setCameraParameter(Config::Kcam);
                 e->setExtParameter(Tbc);
                 e->setRobustKernel(kernel);
                 optimizer.addEdge(e);
-
-//                e->computeError();
-//                cout << "EdgeSE2XYZ from " << vi->id() << " to " << vj->id() << " , chi2 = "
-//                     << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
+#if PRINT_DEBUG_INFO
+                e->computeError();
+                cout << "EdgeSE2XYZ from " << vi->id() << " to " << vj->id() << " , chi2 = "
+                     << e->chi2() << ", error = [" << e->error().transpose() << "], info = "
+                     << endl << info << endl;
+                cout << "Sigma_u inv = " << endl << Sigma_u.inverse() << endl;
+#endif
             }
         }
     }
     double t1 = timer.count();
+    cout << "Load " << optimizer.vertices().size() << " vertices and " << optimizer.edges().size()
+         << " edges tatal." << endl;
 
-    optimizer.save("/home/vance/output/test_BA_SE2_before.g2o");
+
+#if SAVE_BA_RESULT
+    for (size_t i = 0; i < g_nKFVertices; ++i) {
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
+        const g2o::SE2 est = vi->estimate();
+        g2o::SE2 scaledEstimate(est[0] * g_scale, est[1] * g_scale, est[2]);
+
+        g2o::VertexSE2* v_scale = new g2o::VertexSE2();
+        v_scale->setId(i);
+        v_scale->setEstimate(scaledEstimate);
+        optSaver.addVertex(v_scale);
+
+        if (i > 0) {
+            g2o::EdgeSE2* e_tmp = new g2o::EdgeSE2();
+            e_tmp->setVertex(0, dynamic_cast<g2o::VertexSE2*>(optSaver.vertex(i - 1)));
+            e_tmp->setVertex(1, v_scale);
+            optSaver.addEdge(e_tmp);
+        }
+    }
+    optSaver.save("/home/vance/output/test_BA_SE2_before.g2o");
     writeToPlyFile(&optimizer);
+#endif
 
     timer.start();
-    optimizer.initializeOptimization();
-    // optimizer.verifyInformationMatrices(true);
-#ifdef USE_LM
+    optimizer.initializeOptimization(0);
     optimizer.optimize(15);
-#else
-    optimizer.optimize(5);
-#endif
     cout << "optimizaiton time cost in (building system/optimization): " << t1 << "/"
          << timer.count() << "ms. " << endl;
 
-#ifdef ONLY_EDGEXYZ
-    // 如果只有EdgeXYZ, 则在优化结束后添加SE2边用于可视化轨迹效果
-    for (int i = skip + delta; i < N; ++i) {
-        if ((i - skip) % delta != 0)
-            continue;
-        const int vertexIDTo = (i - skip) / delta;
-        const auto v1 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
-        const auto v2 = static_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
-        g2o::EdgeSE2* e = new g2o::EdgeSE2();
-        e->setVertex(0, v1);
-        e->setVertex(1, v2);
-        optimizer.addEdge(e);
-    }
-#endif
+#if SAVE_BA_RESULT
+    // update optimization result
+    for (size_t i = 0; i < g_nKFVertices; ++i) {
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
+        const g2o::SE2 est = vi->estimate();
+        g2o::SE2 scaledEstimate(est[0] * g_scale, est[1] * g_scale, est[2]);
 
-    optimizer.save("/home/vance/output/test_BA_SE2_after.g2o");
+        g2o::VertexSE2* vi_scale = dynamic_cast<g2o::VertexSE2*>(optSaver.vertex(i));
+        vi_scale->setEstimate(scaledEstimate);
+    }
+    optSaver.save("/home/vance/output/test_BA_SE2_after.g2o");
     writeToPlyFileAppend(&optimizer);
+#endif
 
     return 0;
 }

@@ -17,6 +17,8 @@
 namespace se2lam
 {
 
+#define USE_RK_DATASET 0
+
 using namespace cv;
 using namespace std;
 
@@ -143,8 +145,8 @@ MapPublish::MapPublish(Map* pMap)
     mFeatGraph.id = 8;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
     mFeatGraph.action = visualization_msgs::Marker::ADD;
-    mFeatGraph.scale.x = 0.1;
-    mFeatGraph.scale.y = 0.1;
+    mFeatGraph.scale.x = 0.08;
+    mFeatGraph.scale.y = 0.08;
     mFeatGraph.pose.orientation.w = 1.0;
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
@@ -797,10 +799,10 @@ Mat MapPublish::drawCurrentFrameMatches()
     }
 
 #if USE_RK_DATASET
-    putText(imgOut, mImageText, Point(50, 20), 1, 1, Scalar(0, 0, 255), 2);
-    Mat imgScalar;
-    resize(imgOut, imgScalar, Size2i(imgOut.cols * 1.5, imgOut.rows * 1.5));
-    return imgScalar.clone();
+    putText(imgOut, mFrontImageText, Point(50, 20), 1, 1, Scalar(0, 0, 255), 2);
+//    Mat imgScalar;
+//    resize(imgOut, imgScalar, Size2i(imgOut.cols * 1.5, imgOut.rows * 1.5));
+    return imgOut;
 #else
     putText(imgOut, mFrontImageText, Point(50, 40), 1, 2, Scalar(0, 0, 255), 2);
     return imgOut;
@@ -859,19 +861,19 @@ Mat MapPublish::drawLoopCloseMatches()
 
         Scalar colorCurr, colorLoop;
         if (ifMPCurr) {
-            colorCurr = Scalar(0, 255, 0);
+            colorCurr = Scalar(0, 255, 255);
         } else {
             colorCurr = Scalar(255, 0, 0);
         }
         if (ifMPLoop) {
-            colorLoop = Scalar(0, 255, 0);
+            colorLoop = Scalar(0, 255, 255);
         } else {
             colorLoop = Scalar(255, 0, 0);
         }
 
         circle(imgOut, ptCurr, 5, colorCurr, 1);
         circle(imgOut, ptLoopMatch, 5, colorLoop, 1);
-        if (ifMPCurr && ifMPLoop) {
+        if (ifMPCurr || ifMPLoop) {
             line(imgOut, ptCurr, ptLoopMatch, Scalar(0, 0, 255), 2);
         } else {
             line(imgOut, ptCurr, ptLoopMatch, Scalar(87, 0, 255), 1);

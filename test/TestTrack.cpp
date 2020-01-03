@@ -13,12 +13,13 @@
 namespace se2lam
 {
 
-//#define WEIGHT_COVISIBLITIES
-
+//#define WEIGHT_COVISIBLITIES  // TODO
+#define USE_RK_DATASET      0
 #define DO_RELOCALIZATION   0
 #define DO_LOCAL_BA         1
 #define DO_GLOBAL_BA        0
 #define DO_GLOBAL_BA_Vertify_NEW 0  // TODO
+#define SAVE_BA_RESULT      1   // for g2o_viewer
 
 using namespace std;
 using namespace cv;
@@ -155,7 +156,7 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
         //    startNewTrack();
     }
 
-    // copyForPub();
+    pubCurrentFrame();
 
     newKFDecision();  // KF判断在这里
 
@@ -251,7 +252,9 @@ bool TestTrack::trackReferenceKF()
            mCurrentFrame.id, mLastRefKFid, mnKPsInline, midDis, meanDis, stdevDis);
 
     // 4.三角化生成潜在MP, 由LocalMap线程创造MP
-    int nObs = doTriangulate(mpReferenceKF, &mCurrentFrame);  // 更新 mnTrackedOld, mnGoodInliers, mvGoodMatchIdx
+    int nObs = 0;
+//    if (!bLessKPmatch)
+        nObs = doTriangulate(mpReferenceKF, &mCurrentFrame);  // 更新一些数据
 
     assert(nObs == static_cast<int>(mCurrentFrame.countObservations()));
     if (0 && nObs > 10) { //! 这里不用执行
@@ -359,29 +362,29 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
         return 0;
     }
 
-    // 纯旋转/静止/与参考帧相距太近, 不做三角化但要做MP关联
-    if (mState > 1 || static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) < nMinFrames) {
-        mnKPMatchesGood = 0;
-        printf("[Track][Info ] #%ld-#%ld 纯旋转/静止/与参考帧相距太近, 不进行三角化, 只进行MP关联. \n",
-               mCurrentFrame.id, mLastRefKFid);
+    //! 纯旋转/静止/与参考帧相距太近, 不做三角化只做MP关联
+//    if (mState > 1 || static_cast<int>(mCurrentFrame.id - mpReferenceKF->id) < nMinFrames) {
+//        mnKPMatchesGood = 0;
+//        printf("[Track][Info ] #%ld-#%ld 纯旋转/静止/与参考帧相距太近, 不进行三角化, 只进行MP关联. \n",
+//               mCurrentFrame.id, mLastRefKFid);
 
-        for (size_t i = 0, iend = pKF->N; i < iend; ++i) {
-            if (mvKPMatchIdx[i] < 0)
-                continue;
+//        for (size_t i = 0, iend = pKF->N; i < iend; ++i) {
+//            if (mvKPMatchIdx[i] < 0)
+//                continue;
 
-            mnKPMatchesGood++;
-            const bool bObserved = pKF->hasObservationByIndex(i);  // 是否有对应MP观测
-            if (bObserved) {
-                const PtrMapPoint pObservedMP = pKF->getObservation(i);
-                if (pObservedMP->isGoodPrl()) {
-                    frame->setObservation(pObservedMP, mvKPMatchIdx[i]);
-                    mnMPsTracked++;
-                    mnMPsInline++;
-                }
-            }
-        }
-        return mnMPsInline;
-    }
+//            mnKPMatchesGood++;
+//            const bool bObserved = pKF->hasObservationByIndex(i);  // 是否有对应MP观测
+//            if (bObserved) {
+//                const PtrMapPoint pObservedMP = pKF->getObservation(i);
+//                if (pObservedMP->isGoodPrl()) {
+//                    frame->setObservation(pObservedMP, mvKPMatchIdx[i]);
+//                    mnMPsTracked++;
+//                    mnMPsInline++;
+//                }
+//            }
+//        }
+//        return mnMPsInline;
+//    }
 
 
     int n11 = 0, n121 = 0, n21 = 0, n22 = 0, n31 = 0, n32 = 0, n33 = 0;
@@ -518,12 +521,12 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
         }
     }
 
-    printf("[Track][Info ] #%ld-#%ld KP匹配结果: KP好匹配数/总内点数/总匹配数: %d/%d/%d, "
-           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n", frame->id, pKF->id,
-           mnKPMatchesGood, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
-    printf("[Track][Info ] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
-           "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
-           frame->id, pKF->id, n2, n21, n22, n32, mnMPsCandidate, n31, n32, n33, mnMPsNewAdded);
+//    printf("[Track][Info ] #%ld-#%ld KP匹配结果: KP好匹配数/总内点数/总匹配数: %d/%d/%d, "
+//           "MP总观测数(Ref)/关联数/视差好的/更新到好的: %d/%d/%d/%d\n", frame->id, pKF->id,
+//           mnKPMatchesGood, mnKPsInline, mnKPMatches, nObsRef, mnMPsTracked, n11, n121);
+//    printf("[Track][Info ] #%ld-#%ld 三角化结果: 候选MP原总数/转正数/更新数/增加数/现总数: %d/%d/%d/%d/%d, "
+//           "三角化新增MP数/新增候选数/剔除匹配数: %d/%d/%d, 新生成MP数: %d\n",
+//           frame->id, pKF->id, n2, n21, n22, n32, mnMPsCandidate, n31, n32, n33, mnMPsNewAdded);
 
     assert(n11 + n121 == mnMPsTracked);
     assert(n21 + n31 == mnMPsNewAdded);
@@ -593,8 +596,9 @@ void TestTrack::newKFDecision()
 
         addNewKF(pNewKF, mMPCandidates);
 
-        copyForPub();
-
+#if DO_GLOBAL_BA
+        pubLoopFrame();
+#endif
         mpReferenceKF = pNewKF;
 
         resetTrackingData(true);
@@ -622,8 +626,9 @@ void TestTrack::newKFDecision()
 
             addNewKF(pNewKF, mMPCandidates);  // 新的KF观测和共视关系在LocalMap里更新
 
-            copyForPub();
-
+#if DO_GLOBAL_BA
+            pubLoopFrame();
+#endif
             mpReferenceKF = pNewKF;
 
             resetTrackingData(true);
@@ -636,7 +641,7 @@ void TestTrack::newKFDecision()
     // 处于丢失的状态则直接交换前后帧数据
     assert(mState == cvu::LOST);
     assert(mLastState == cvu::LOST);
-    copyForPub();
+    pubCurrentFrame();
     if (mState == cvu::LOST && mLastState == cvu::LOST) {
         resetTrackingData(true);
     }
@@ -686,14 +691,15 @@ bool TestTrack::needNewKFForCurrentFrame()
 
     // 1. 如果在旋转, 则只看旋转角度是否达到上限
     if (mState == cvu::PURE_ROTATE) {
-        if (abs(dOdo.theta) >= mMaxAngle) {
-            printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其旋转角度(%.2f)达到上限.\n",
-                   mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, abs(dOdo.theta));
-            mCurrentFrame.mPreSE2.cov(2, 2) *= 1e-3;  // 增大旋转时的置信度.
-            return true;
-        } else {
-            return false;
-        }
+        return false;
+//        if (abs(dOdo.theta) >= mMaxAngle) {
+//            printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其旋转角度(%.2f)达到上限.\n",
+//                   mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, abs(dOdo.theta));
+//            mCurrentFrame.mPreSE2.cov(2, 2) *= 1e-3;  // 增大旋转时的置信度.
+//            return true;
+//        } else {
+//            return false;
+//        }
     }
 
     // 2. 如果在平移, 则尽量选择和参考帧视差最好的那一帧
@@ -706,7 +712,7 @@ bool TestTrack::needNewKFForCurrentFrame()
     const cv::Mat xy = cTc.rowRange(0, 2).col(3);
 #if USE_RK_DATASET
     const bool c1 = cv::norm(xy) >= mMinDistance;  // 相机的平移量足够大, 视差才好
-    const bool c2 = mnMPsNewAdded > 20 || mnMPsInline > 45;  // 关联/新增MP数量够多, 说明这时候比较理想 60
+    const bool c2 = mnMPsNewAdded > 20 || mnMPsInline > 50;  // 关联/新增MP数量够多, 说明这时候比较理想 60
     if (c1 && c2) {
         printf("[Track][Info ] #%ld-#%ld 成为了新的KF(#%ld), 因为其平移适中(%.2f>%.2f)且新增MP多(%d>20 || %d>45)\n",
                mCurrentFrame.id, mLastRefKFid, KeyFrame::mNextIdKF, cv::norm(xy), mMinDistance, mnMPsNewAdded, mnMPsInline);
@@ -763,7 +769,7 @@ void TestTrack::resetTrackingData(bool newKFInserted)
     }
 }
 
-void TestTrack::copyForPub()
+void TestTrack::pubCurrentFrame()
 {
     locker lock1(mMutexForPub);
     locker lock2(mpMapPublisher->mMutexPub);
@@ -772,7 +778,7 @@ void TestTrack::copyForPub()
     assert(!mvKPMatchIdxGood.empty());
 
     mpMapPublisher->mnCurrentFrameID = mCurrentFrame.id;
-    mpMapPublisher->mCurrentFramePose = mCurrentFrame.getPose()/*.clone()*/;
+    mpMapPublisher->mCurrentFramePose = mCurrentFrame.getPose();
     mpMapPublisher->mCurrentImage = mCurrentFrame.mImage.clone();
     mpMapPublisher->mvCurrentKPs = mCurrentFrame.mvKeyPoints;
     mpMapPublisher->mvMatchIdx = mvKPMatchIdx;
@@ -808,8 +814,10 @@ void TestTrack::copyForPub()
 
     mpMapPublisher->mFrontImageText = string(strMatches);
     mpMapPublisher->mbFrontEndUpdated = true;
+}
 
-#if DO_GLOBAL_BA
+void TestTrack::pubLoopFrame()
+{
     if (mpNewKF == nullptr || mpNewKF->isNull())
         return;
     if (mpLoopKF == nullptr || mpLoopKF->isNull())
@@ -826,7 +834,6 @@ void TestTrack::copyForPub()
 
     mpLoopKF.reset();
     mKPMatchesLoop.clear();
-#endif
 }
 
 bool TestTrack::detectIfLost(Frame& f, const Mat& Tcw_opt)
@@ -1378,6 +1385,9 @@ void TestTrack::removeOutlierChi2()
 
 void TestTrack::localBA()
 {
+    if (mpMap->countKFs() < 2 || mpMap->countMPs() < 20)
+        return;
+
     WorkTimer timer;
 
     printf("[Local][Info ] #%ld(KF#%ld) L8.正在执行localBA()...\n", mpNewKF->id, mpNewKF->mIdKF);
@@ -1385,12 +1395,11 @@ void TestTrack::localBA()
 
     SlamOptimizer optimizer;
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
-//    SlamLinearSolverCSparse* linearSolver = new SlamLinearSolverCSparse();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
     solver->setMaxTrialsAfterFailure(5);
     optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(false);
+    optimizer.setVerbose(Config::LocalVerbose);
 
     loadLocalGraph(optimizer);
     if (optimizer.edges().empty()) {
@@ -1400,12 +1409,32 @@ void TestTrack::localBA()
     }
     double t1 = timer.count();
 
-    const string g2oFile1 = Config::G2oResultsStorePath + to_string(mpNewKF->mIdKF) + "-local-1.g2o";
-    optimizer.save(g2oFile1.c_str());
+#if SAVE_BA_RESULT
+    SlamOptimizer optSaver;
+    const double g2o_scale = 0.01;
+    const size_t N = mpMap->countLocalKFs();
+    for (size_t i = 0; i < N; ++i) {
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
+        const g2o::SE2 esti = vi->estimate();
+        g2o::SE2 esti_scale(esti[0] * g2o_scale, esti[1] * g2o_scale, esti[2]);
+
+        g2o::VertexSE2* vi_scale = new g2o::VertexSE2();
+        vi_scale->setId(i);
+        vi_scale->setEstimate(esti_scale);
+        optSaver.addVertex(vi_scale);
+
+        if (i > 0) {
+            g2o::EdgeSE2* ej = new g2o::EdgeSE2();
+            ej->setVertex(0, dynamic_cast<g2o::VertexSE2*>(optSaver.vertex(i - 1)));
+            ej->setVertex(1, vi_scale);
+            optSaver.addEdge(ej);
+        }
+    }
+#endif
 
     timer.start();
     optimizer.initializeOptimization(0);
-    optimizer.optimize(Config::LocalIterNum);
+    optimizer.optimize(Config::LocalIterNum*2);
     double t2 = timer.count();
 
     if (solver->currentLambda() > 100.0) {
@@ -1425,8 +1454,27 @@ void TestTrack::localBA()
     printf("[Track][Info ] #%ld(KF#%ld) L8.localBA()优化成功, 优化前后位姿为: [%.2f, %.2f, %.2f] ==> [%.2f, %.2f, %.2f]\n",
            mpNewKF->id, mpNewKF->mIdKF, Twb1.x, Twb1.y, Twb1.theta, Twb2.x, Twb2.y, Twb2.theta);
 
-    const string g2oFile2 = Config::G2oResultsStorePath + to_string(mpNewKF->mIdKF) + "-local-2.g2o";
-    optimizer.save(g2oFile2.c_str());
+#if SAVE_BA_RESULT
+    for (size_t i = 0; i < N; ++i) {
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
+        const g2o::SE2 esti = vi->estimate();
+        g2o::SE2 esti_scale(esti[0] * g2o_scale, esti[1] * g2o_scale, esti[2]);
+
+        g2o::VertexSE2* vi_scale = new g2o::VertexSE2();
+        vi_scale->setId(N + i);
+        vi_scale->setEstimate(esti_scale);
+        optSaver.addVertex(vi_scale);
+
+        if (i > 0) {
+            g2o::EdgeSE2* ej = new g2o::EdgeSE2();
+            ej->setVertex(0, dynamic_cast<g2o::VertexSE2*>(optSaver.vertex(N + i - 1)));
+            ej->setVertex(1, vi_scale);
+            optSaver.addEdge(ej);
+        }
+    }
+    const string g2oFile = Config::G2oResultsStorePath + "local-" + to_string(mpNewKF->mIdKF) + ".g2o";
+    optSaver.save(g2oFile.c_str());
+#endif
 }
 
 void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
@@ -1503,6 +1551,9 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
         const PtrMapPoint& pMP = vpLocalMPs[i];
         assert(!pMP->isNull());
 
+        if (pMP->countObservations() < 2)
+            continue;
+
         const int vertexIdMP = i + maxVertexIdKF;
         const Eigen::Vector3d lw = toVector3d(pMP->getPos());
         addVertexSBAXYZ(optimizer, lw, vertexIdMP);
@@ -1535,6 +1586,7 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
                 continue;
 
             // compute covariance/information
+            /*
             const Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * Sigma2;
             const Vector3d lc = toVector3d(pKFj->getMPPoseInCamareFrame(ftrIdx));
 
@@ -1542,8 +1594,9 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
             const double zc_inv = 1. / zc;
             const double zc_inv2 = zc_inv * zc_inv;
             const float& fx = Config::fx;
+            const float& fy = Config::fy;
             g2o::Matrix23D J_lc;
-            J_lc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fx * zc_inv, -fx * lc(1) * zc_inv2;
+            J_lc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;
             const Matrix3d Rcw = toMatrix3d(pKFj->getPose().rowRange(0, 3).colRange(0, 3));
             const Se2 Twb = pKFj->getTwb();
             const Vector3d pi(Twb.x, Twb.y, 0);
@@ -1559,6 +1612,11 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
 
             addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
                           Sigma_all.inverse(), delta);
+            */
+
+            const float invSigma2 = pKFj->mvInvLevelSigma2[octave];  // 单层时都是1.0
+            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
+                          Eigen::Matrix2d::Identity() * invSigma2, delta);
         }
     }
 
@@ -1789,13 +1847,14 @@ void TestTrack::globalBA()
     printf("[Globa][Info ] #%ld(KF#%ld) G4.正在执行globalBA(), 加载了KF/odo约束/特征图约束数为: %ld/%d/%d\n",
            mpNewKF->id, mpNewKF->mIdKF, vAllKFs.size(), numOdoCnstr, numFtrCnstr);
 
-    // for g2o_viewer
-    const float g2o_scale = 0.1;  // for g2o_viewer
+#if SAVE_BA_RESULT
     SlamOptimizer optSaver;
-    for (int i = 0, iend = vAllKFs.size(); i < iend; ++i) {
+    const float g2o_scale = 0.001;
+    const int N = vAllKFs.size();
+    for (int i = 0; i < N; ++i) {
         const g2o::VertexSE3* vi = dynamic_cast<const g2o::VertexSE3*>(optimizer.vertex(i));
         g2o::Isometry3D pose = vi->estimate();
-        pose.translate(pose.translation() * g2o_scale);
+        pose.pretranslate(pose.translation() * g2o_scale);
 
         g2o::VertexSE3* vi_scaled = new g2o::VertexSE3();
         vi_scaled->setEstimate(pose);
@@ -1804,30 +1863,20 @@ void TestTrack::globalBA()
 
         if (i > 0) {
             g2o::EdgeSE3* e_tmp = new g2o::EdgeSE3();
-            e_tmp->setVertex(0, dynamic_cast<g2o::VertexSE3*>(optimizer.vertex(i - 1)));
+            e_tmp->setVertex(0, dynamic_cast<g2o::VertexSE3*>(optSaver.vertex(i - 1)));
             e_tmp->setVertex(1, vi_scaled);
+            e_tmp->setMeasurement(g2o::Isometry3D::Identity());
             optSaver.addEdge(e_tmp);
         }
     }
-    string file1 = Config::G2oResultsStorePath + to_string(mpNewKF->mIdKF) + "-1.g2o";
-    optSaver.save(file1.c_str());
+    const string g2oFile1 = Config::G2oResultsStorePath + "global-" + to_string(mpNewKF->mIdKF) + "-1.g2o";
+    optSaver.save(g2oFile1.c_str());
+#endif
 
     // optimization
-    optimizer.setVerbose(true);
+    optimizer.setVerbose(Config::GlobalVerbose);
     optimizer.initializeOptimization(0);
-    optimizer.optimize(15);
-
-    // for g2o_viewer
-    for (int i = 0, iend = vAllKFs.size(); i < iend; ++i) {
-        const g2o::VertexSE3* vi = dynamic_cast<const g2o::VertexSE3*>(optimizer.vertex(i));
-        g2o::Isometry3D pose = vi->estimate();
-        pose.translate(pose.translation() * g2o_scale);
-
-        g2o::VertexSE3* vi_scaled = dynamic_cast<g2o::VertexSE3*>(optSaver.vertex(i));
-        vi_scaled->setEstimate(pose);
-    }
-    string file2 = Config::G2oResultsStorePath + to_string(mpNewKF->mIdKF) + "-2.g2o";
-    optSaver.save(file2.c_str());
+    optimizer.optimize(30);
 
     double t2 = timer.count();
     timer.start();
@@ -1867,6 +1916,27 @@ void TestTrack::globalBA()
     double t4 = t1 + t2 + t3;
     printf("[Globa][Timer] #%ld(KF#%ld) G4.globalBA()加载/优化/更新/总耗时: %.2f/%.2f/%.2f/%.2fms\n",
            mpNewKF->id, mpNewKF->mIdKF, t1, t2, t3, t4);
+
+#if SAVE_BA_RESULT
+    for (int i = 0, iend = vAllKFs.size(); i < iend; ++i) {
+        const g2o::VertexSE3* vi = dynamic_cast<const g2o::VertexSE3*>(optimizer.vertex(i));
+        g2o::Isometry3D pose = vi->estimate();
+        pose.pretranslate(pose.translation() * g2o_scale);
+
+        g2o::VertexSE3* vi_scaled = new g2o::VertexSE3();
+        vi_scaled->setEstimate(pose);
+        vi_scaled->setId(N + i);
+        optSaver.addVertex(vi_scaled);
+
+        if (i > 0) {
+            g2o::EdgeSE3* e_tmp = new g2o::EdgeSE3();
+            e_tmp->setMeasurement(g2o::Isometry3D::Identity());
+            e_tmp->setVertex(0, dynamic_cast<g2o::VertexSE3*>(optSaver.vertex(N + i - 1)));
+            e_tmp->setVertex(1, vi_scaled);
+            optSaver.addEdge(e_tmp);
+        }
+    }
+#endif
 }
 
 bool TestTrack::verifyLoopClose_Global(PtrKeyFrame& pKF, const vector<PtrKeyFrame>& vpKFsCandidate)
@@ -1898,10 +1968,14 @@ bool TestTrack::verifyLoopClose_Global(PtrKeyFrame& pKF, const vector<PtrKeyFram
                pKF->id, mpLoopKF->mIdKF, nKPsInline, nMinKPMatch, nKPMatches);
         return false;
     }
-//    Mat tmp = drawLoopMatch(dynamic_cast<Frame*>(pKF.get()), dynamic_cast<Frame*>(mpLoopKF.get()),
-//                            KPMatchesLoop, KPMatchesLoopGood);
-//    imshow("test loop match", tmp);
-//    waitKey(30);
+    Mat tmp = drawLoopMatch(dynamic_cast<Frame*>(pKF.get()), dynamic_cast<Frame*>(mpLoopKF.get()),
+                            KPMatchesLoop, KPMatchesLoopGood);
+    const string fileToSave = Config::MatchImageStorePath + "../loop/" + to_string(pKF->mIdKF) + ".jpg";
+    Mat toSave;
+    resize(tmp, toSave, Size2i(tmp.cols * 1.5, tmp.rows * 1.5));
+    imwrite(fileToSave, toSave);
+
+    mKPMatchesLoop = KPMatchesLoopGood;
 
     // 保留MP匹配
     GlobalMapper::removeKPMatch(pKF, mpLoopKF, KPMatchesLoop);
@@ -2010,7 +2084,6 @@ Mat TestTrack::drawLoopMatch(Frame* f1, Frame* f2, const std::map<int, int>& m1,
         const Point2f ptR = f2->mvKeyPoints[m.second].pt + offset;
         circle(imgOut, ptL, 2, Scalar(0, 255, 0), -1);
         circle(imgOut, ptR, 2, Scalar(0, 255, 0), -1);
-        line(imgOut, ptL, ptR, Scalar(0, 255, 0));
     }
     for (const auto& m : m2) {
         const Point2f ptL = f1->mvKeyPoints[m.first].pt;

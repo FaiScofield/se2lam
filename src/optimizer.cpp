@@ -641,6 +641,9 @@ g2o::EdgeSE3* addEdgeSE3(SlamOptimizer& opt, const g2o::Isometry3D& measure, int
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setInformation(info);
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+    rk->setDelta(Config::ThHuber);
+    e->setRobustKernel(rk);
 
     opt.addEdge(e);
 

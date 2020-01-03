@@ -37,7 +37,8 @@ public:
     unsigned long getCurrentFrameID() { return mCurrentFrame.id; }
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
     cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
-    void copyForPub();
+    void pubCurrentFrame();
+    void pubLoopFrame();
     cv::Mat drawLoopMatch(Frame*, Frame*, const std::map<int, int>&, const std::map<int, int>&);
 
     cvu::eTrackingState mState;

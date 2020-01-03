@@ -62,6 +62,11 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond& q_)
     return angle_axis.angle() * angle_axis.axis();
 }
 
+inline g2o::SE2 toG2OSE2(const se2lam::Se2& se2)
+{
+    return g2o::SE2(se2.x, se2.y, se2.theta);
+}
+
 g2o::Matrix3D Jl(const g2o::Vector3D& v3d);
 g2o::Matrix3D invJl(const g2o::Vector3D& v3d);
 g2o::Matrix6d invJJl(const g2o::Vector6d& v6d);
