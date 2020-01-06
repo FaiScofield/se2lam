@@ -145,8 +145,8 @@ void EdgeSE2XYZ::linearizeOplus()
         Matrix23D J1, J2;
         for (int i = 0; i < 3; ++i) {
             const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
-            const Vector3D pose = v1->estimate().toVector(); //! 注意扰动要直接加在R3中的平移上
-            const SE2 pose_eps(pose + Vector3D(epsi));
+            const Vector3D pose = v1->estimate().toVector();
+            const SE2 pose_eps(pose + Vector3D(epsi));  //! 注意扰动要直接加在R3中的平移上
             const SE3Quat Tcw_eps = Tcb * SE2ToSE3(pose_eps.inverse());
             const Vector3D lc_eps1 = Tcw_eps.map(v2->estimate());
             const Vector2D Ji = (cam->cam_map(lc_eps1) - cam->cam_map(lc)) / eps;
@@ -235,6 +235,37 @@ void PreEdgeSE2::linearizeOplus()
     Rm.block<2, 2>(0, 0) = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
     _jacobianOplusXi = Rm.transpose() * _jacobianOplusXi;
     _jacobianOplusXj = Rm.transpose() * _jacobianOplusXj;
+
+    {  //! ------------- check jacobians -----------------
+        // 数值法求解雅克比, 看结果是否跟自己解析写的一样
+        const double eps = 1e-6;
+        const double eps1[3] = {eps, 0, 0};
+        const double eps2[3] = {0, eps, 0};
+        const double eps3[3] = {0, 0, eps};
+        cout << "EdgeSE2Custom Jacobian 解析法 Xi = " << endl << _jacobianOplusXi << endl;
+        g2o::Matrix3D J1, J2;
+        for (int i = 0; i < 3; ++i) {
+            const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
+            //! NOTE 状态变量的更新要和顶点中的一致!
+            g2o::SE2 vi_eps(vi->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
+            g2o::SE2 delta_eps = g2o::SE2(_measurement).inverse() * (vi_eps.inverse() * vj->estimate());
+            //! NOTE 根据倒数定义, 这里就是普通减法, 不是广义减!
+            g2o::Vector3D Ji = (delta_eps.toVector() - _error) / eps;
+            J1.block<3, 1>(0, i) = Ji;
+        }
+        cout << "EdgeSE2Custom Jacobian 数值法 Xi = " << endl << J1 << endl;
+
+        cout << "EdgeSE2Custom Jacobian 解析法 Xj = " << endl << _jacobianOplusXj << endl;
+        for (int j = 0; j < 3; ++j) {
+            const double epsi[3] = {eps1[j], eps2[j], eps3[j]};
+            g2o::SE2 vj_eps(vj->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
+            g2o::SE2 delta_eps = g2o::SE2(_measurement).inverse() * (vi->estimate().inverse() * vj_eps);
+            g2o::Vector3D Jj = (delta_eps.toVector() - _error) / eps;
+            J2.block<3, 1>(0, j) = Jj;
+        }
+        cout << "EdgeSE2Custom Jacobian 数值法 Xj = " << endl << J2 << endl;
+    }
+
 }
 
 }  // namespace g2o

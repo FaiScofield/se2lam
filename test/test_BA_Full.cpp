@@ -29,7 +29,7 @@ using namespace g2o;
 
 const string g_outPointCloudFile = "/home/vance/output/test_BA_SE2.ply";
 const string g_outGTfile = "/home/vance/output/test_BA_Full_GT.ply";
-const double g_scale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
+const double g_visualScale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
 size_t g_nKFs = 0, g_nMPs = 900;    // num of camera pose and MPs.
 size_t g_skip = 0, g_delta = 0;
 

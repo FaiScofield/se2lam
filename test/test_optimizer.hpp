@@ -74,7 +74,7 @@ public:
     }
 };
 
-//! 完成使命
+//! 完成使命 201912
 class EdgeSE2XYZCustom
     : public g2o::BaseBinaryEdge<2, g2o::Vector2D, g2o::VertexSE2, g2o::VertexSBAPointXYZ>
 {
@@ -113,8 +113,8 @@ public:
 
     void computeError()
     {
-        g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
-        g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
+        g2o::VertexSE2* v1 = dynamic_cast<g2o::VertexSE2*>(_vertices[0]);
+        g2o::VertexSBAPointXYZ* v2 = dynamic_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
 
         const g2o::SE3Quat Tcw = Tcb * SE2ToSE3_(v1->estimate().inverse());
         const Eigen::Vector3d lc = Tcw.map(v2->estimate());
@@ -124,8 +124,8 @@ public:
 
     virtual void linearizeOplus()
     {
-        const g2o::VertexSE2* v1 = static_cast<g2o::VertexSE2*>(_vertices[0]);
-        const g2o::VertexSBAPointXYZ* v2 = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
+        const g2o::VertexSE2* v1 = dynamic_cast<g2o::VertexSE2*>(_vertices[0]);
+        const g2o::VertexSBAPointXYZ* v2 = dynamic_cast<g2o::VertexSBAPointXYZ*>(_vertices[1]);
 
 
         const Eigen::Vector3d vwb = v1->estimate().toVector();
@@ -208,6 +208,7 @@ private:
     g2o::CameraParameters* cam;
 };
 
+//! 完成使命 20200106
 class EdgeSE2Custom : public g2o::EdgeSE2
 {
 public:
@@ -240,10 +241,18 @@ public:
         return os.good();
     }
 
+    void computeError()
+    {
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(_vertices[0]);
+        const g2o::VertexSE2* vj = dynamic_cast<const g2o::VertexSE2*>(_vertices[1]);
+        const g2o::SE2 delta = _inverseMeasurement * (vi->estimate().inverse() * vj->estimate());
+        _error = delta.toVector();
+    }
+
     virtual void linearizeOplus()
     {
-        const g2o::VertexSE2* vi = static_cast<const g2o::VertexSE2*>(_vertices[0]);
-        const g2o::VertexSE2* vj = static_cast<const g2o::VertexSE2*>(_vertices[1]);
+        const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(_vertices[0]);
+        const g2o::VertexSE2* vj = dynamic_cast<const g2o::VertexSE2*>(_vertices[1]);
         const g2o::Matrix2D Ri = vi->estimate().rotation().toRotationMatrix();
         const g2o::Vector2D ti = vi->estimate().translation();
         const g2o::Vector2D tj = vj->estimate().translation();
@@ -262,8 +271,7 @@ public:
         Rm.block<2, 2>(0, 0) = _measurement.rotation().toRotationMatrix();
         _jacobianOplusXi = Rm.transpose() * _jacobianOplusXi;
         _jacobianOplusXj = Rm.transpose() * _jacobianOplusXj;
-
-        //? 这里数值法的结果有误
+        /*
         {  //! ------------- check jacobians -----------------
             // 数值法求解雅克比, 看结果是否跟自己解析写的一样
             const double eps = 1e-6;
@@ -274,11 +282,11 @@ public:
             g2o::Matrix3D J1, J2;
             for (int i = 0; i < 3; ++i) {
                 const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
+                //! NOTE 状态变量的更新要和顶点中的一致!
                 g2o::SE2 vi_eps(vi->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
-                //g2o::SE2 vi_eps(vi->estimate() * g2o::SE2(epsi[0], epsi[1], epsi[2]));
                 g2o::SE2 delta_eps = _measurement.inverse() * (vi_eps.inverse() * vj->estimate());
+                //! NOTE 根据倒数定义, 这里就是普通减法, 不是广义减!
                 g2o::Vector3D Ji = (delta_eps.toVector() - _error) / eps;
-                //g2o::Vector3D Ji = (g2o::SE2(_error).inverse() * delta_eps).toVector() / eps;
                 J1.block<3, 1>(0, i) = Ji;
             }
             cout << "EdgeSE2Custom Jacobian 数值法 Xi = " << endl << J1 << endl;
@@ -287,16 +295,15 @@ public:
             for (int j = 0; j < 3; ++j) {
                 const double epsi[3] = {eps1[j], eps2[j], eps3[j]};
                 g2o::SE2 vj_eps(vj->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
-                //g2o::SE2 vj_eps(vj->estimate() * g2o::SE2(epsi[0], epsi[1], epsi[2]));
                 g2o::SE2 delta_eps = _measurement.inverse() * (vi->estimate().inverse() * vj_eps);
                 g2o::Vector3D Jj = (delta_eps.toVector() - _error) / eps;
-                //g2o::Vector3D Jj = (g2o::SE2(_error).inverse() * delta_eps).toVector() / eps;
                 J2.block<3, 1>(0, j) = Jj;
             }
             cout << "EdgeSE2Custom Jacobian 数值法 Xj = " << endl << J2 << endl;
         }
-
+        */
     }
+
 };
 
 G2O_REGISTER_TYPE(EDGE_SE2, EdgeSE2Custom);

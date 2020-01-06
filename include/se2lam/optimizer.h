@@ -62,9 +62,12 @@ inline Eigen::Vector3d toRotationVector(const Eigen::Quaterniond& q_)
     return angle_axis.angle() * angle_axis.axis();
 }
 
-inline g2o::SE2 toG2OSE2(const se2lam::Se2& se2)
+inline g2o::SE2 toG2OSE2(const se2lam::Se2& se2, bool normalize_unit = false)
 {
-    return g2o::SE2(se2.x, se2.y, se2.theta);
+    if (normalize_unit)  // 是否将单位从mm转回m
+        return g2o::SE2(se2.x * 0.001, se2.y * 0.001, se2.theta);
+    else
+        return g2o::SE2(se2.x, se2.y, se2.theta);
 }
 
 g2o::Matrix3D Jl(const g2o::Vector3D& v3d);

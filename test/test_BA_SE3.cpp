@@ -22,7 +22,7 @@ using namespace std;
 
 const std::string g_outPointCloudFile = "/home/vance/output/test_BA_SE3.ply";
 size_t g_nKFVertices = 0;  // num of camera pose
-const double g_scale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
+const double g_visualScale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
 
 bool inBoard(const Eigen::Vector2d& uv)
 {
@@ -130,8 +130,8 @@ void calcOdoConstraint(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
 
     //! Vector order: [trans, rot] 先平移后旋转
     // 不确定度(即协方差), 信息矩阵为其逆.
-    double dx = dOdo.x / g_scale * Config::OdoUncertainX + Config::OdoNoiseX;
-    double dy = dOdo.y / g_scale * Config::OdoUncertainY + Config::OdoNoiseY;
+    double dx = dOdo.x / g_visualScale * Config::OdoUncertainX + Config::OdoNoiseX;
+    double dy = dOdo.y / g_visualScale * Config::OdoUncertainY + Config::OdoNoiseY;
     double dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
 
     // 信息矩阵
@@ -179,8 +179,8 @@ int main(int argc, char** argv)
         istringstream iss(line);
         g2o::Vector3D lineData;
         iss >> lineData[0] >> lineData[1] >> lineData[2];
-        lineData[0] *= g_scale;  // mm换成cm
-        lineData[1] *= g_scale;
+        lineData[0] *= g_visualScale;  // mm换成cm
+        lineData[1] *= g_visualScale;
         vOdomData.emplace_back(lineData[0], lineData[1], lineData[2]);
     }
     const int skip = 100;
@@ -202,9 +202,9 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < nMPs; ++i) {
         double dx = rng.uniform(0., 0.99999);
         double dy = rng.uniform(0., 0.99999);
-        const double x = (dx * 5000. - 1000.) * g_scale;
-        const double y = (dy * 5000.) * g_scale;
-        const double z = (5000.0 + rng.gaussian(200.)) * g_scale;
+        const double x = (dx * 5000. - 1000.) * g_visualScale;
+        const double y = (dy * 5000.) * g_visualScale;
+        const double z = (5000.0 + rng.gaussian(200.)) * g_visualScale;
         vPoints.push_back(Eigen::Vector3d(x, y, z));
     }
 
