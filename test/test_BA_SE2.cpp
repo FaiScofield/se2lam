@@ -15,17 +15,26 @@
 
 //#define USE_PRESE2          0 // else use g2o::SE2
 //#define USE_XYZCUSTOM       0 // else use EdgeSE2XYZ
-
-#define USE_EDGEXYZ_ONLY    0 // else EDGExyz + EdgeSE2
+#define USE_EDGESE2_ONLY    0
+#define USE_EDGEXYZ_ONLY    0
 #define EDGEXYZ_FULL_INFO   0
 #define SAVE_BA_RESULT      1
-#define PRINT_DEBUG_INFO    0
+#define PRINT_DEBUG_INFO    1
+#define NORMALIZE_UNIT      0  // 是否将单位转回[m]进行优化
+
+//! NOTE 在迭代上限足够大的情况下,[m]速度稍快一些, [mm]精度稍高一些
 
 using namespace std;
 
 const std::string g_outPointCloudFile = "/home/vance/output/test_BA_SE2.ply";
 size_t g_nKFVertices = 0;  // num of camera pose
-const double g_scale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
+#if NORMALIZE_UNIT
+const double g_visualScale = 100;
+const double g_unitScale = 1e-3;
+#else
+const double g_visualScale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方便在g2o_viewer中可视化
+const double g_unitScale = 1.;
+#endif
 
 bool inBoard(const Eigen::Vector2d& uv)
 {
@@ -148,9 +157,9 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < nMPs; ++i) {
         double dx = rng.uniform(0., 0.99999);
         double dy = rng.uniform(0., 0.99999);
-        const double x = (dx * 5000. - 1000.);
-        const double y = (dy * 5000.);
-        const double z = (5000.0 + rng.gaussian(200.));
+        const double x = dx * 5000. - 1000.;
+        const double y = dy * 5000.;
+        const double z = 3000.0 + rng.gaussian(200.);
         vPoints.push_back(Eigen::Vector3d(x, y, z));
 
         const int level = rng.uniform(0, 5);
@@ -178,19 +187,19 @@ int main(int argc, char** argv)
         if (i != skip) {
             Eigen::Vector3d& meas = preInfo.meas;
             g2o::SE2 odok = toG2OSE2(vOdomData[i - 1]).inverse() * toG2OSE2(vOdomData[i]);
-            Eigen::Vector2d odork = odok.translation();
+            Eigen::Vector2d odork = odok.translation() * g_unitScale;
             Eigen::Matrix2d Phi_ik = Eigen::Rotation2Dd(meas[2]).toRotationMatrix();
             meas.head<2>() += Phi_ik * odork;
             meas[2] += odok.rotation().angle();
 
             Eigen::Matrix3d Ak = Eigen::Matrix3d::Identity();
             Eigen::Matrix3d Bk = Eigen::Matrix3d::Identity();
-            Ak.block<2, 1>(0, 2) = Phi_ik * Eigen::Vector2d(-odork[1], odork[0]);
+            Ak.block<2, 1>(0, 2) = Phi_ik * Eigen::Vector2d(-odork[1], odork[0]) * g_unitScale;
             Bk.block<2, 2>(0, 0) = Phi_ik;
             Eigen::Matrix3d& Sigmak = preInfo.cov;
             Eigen::Matrix3d Sigma_vk = Eigen::Matrix3d::Identity();
-            Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
-            Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
+            Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX) * g_unitScale * g_unitScale;
+            Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY) * g_unitScale * g_unitScale;
             Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
             Eigen::Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
             Sigmak = Sigma_k_1;
@@ -199,8 +208,8 @@ int main(int argc, char** argv)
         if ((i - skip) % delta == 0) {
             const int vertexID = (i - skip) / delta;
             Se2 noisePose = vOdomData[i];
-            noisePose.x += rng.gaussian(noiseX * noiseX);
-            noisePose.y += rng.gaussian(noiseY * noiseY);
+            noisePose.x = (noisePose.x + rng.gaussian(noiseX * noiseX)) * g_unitScale;
+            noisePose.y = (noisePose.y + rng.gaussian(noiseY * noiseY)) * g_unitScale;
             noisePose.theta += rng.gaussian(noiseT * noiseT);
 
             g2o::VertexSE2* v = new g2o::VertexSE2();
@@ -232,37 +241,39 @@ int main(int argc, char** argv)
         const g2o::SE2 meas(m[0], m[1], m[2]);
         const Eigen::Matrix3d info = vPreInfos[vertexIDTo].cov.inverse();
 
-#if USE_PRESE2
+    #if USE_PRESE2
         // EdgePreSE2
         g2o::PreEdgeSE2* e = new g2o::PreEdgeSE2();
-        e->setMeasurement(m);
-#else
+        e->setMeasurement(meas.toVector());
+    #else
         // Edge SE2
         g2o::EdgeSE2* e = new g2o::EdgeSE2();
-        // EdgeSE2Custom* e = new EdgeSE2Custom();
         e->setMeasurement(meas);
-#endif
+    #endif
         e->setVertex(0, v1);
         e->setVertex(1, v2);
-        e->setInformation(info/*Eigen::Matrix3d::Identity()*/);
+        e->setInformation(info);
         optimizer.addEdge(e);
-#if PRINT_DEBUG_INFO
+    #if PRINT_DEBUG_INFO
         e->computeError();
         cout << "EdgeSE2 from " << v1->id() << " to " << v2->id() << " , chi2 = "
              << e->chi2() << ", error = [" << e->error().transpose() << "], info = "
-             << endl << info << endl;
-#endif
+             << /*endl << info << */endl;
+    #endif
     }
     cout << endl;
-#endif
+#endif  // USE_EDGEXYZ_ONLY == 0
 
+#if USE_EDGESE2_ONLY == 0
     // vertices/edges of MPs
     const g2o::SE3Quat Tbc = toSE3Quat(Config::Tbc);
+    g2o::SE3Quat Tbc_unit = Tbc;
+    Tbc_unit.setTranslation(Tbc_unit.translation() * g_unitScale);
     size_t MPVertexId = g_nKFVertices;
     for (size_t j = 0; j < nMPs; ++j) {
         // vetices
         Eigen::Vector3d noise(rng.gaussian(10), rng.gaussian(10), rng.gaussian(200));
-        const Eigen::Vector3d& lw = vPoints[j] + noise;
+        const Eigen::Vector3d& lw = (vPoints[j] + noise) * g_unitScale;
         g2o::VertexSBAPointXYZ* vj = new g2o::VertexSBAPointXYZ();
         vj->setEstimate(lw);
         vj->setId(MPVertexId++);
@@ -274,18 +285,19 @@ int main(int argc, char** argv)
         for (size_t i = 0; i < g_nKFVertices; ++i) {
             g2o::VertexSE2* vi = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(i));
             const int idx = vi->id() * delta + skip;
-            const g2o::SE3Quat Tcw = Tbc.inverse() * SE2ToSE3_(toG2OSE2(vOdomData[idx]).inverse());
-            const Eigen::Vector3d lc = Tcw.map(vPoints[j]);
-            if (lc(2) < 0)
+            const g2o::SE3Quat Tciw = Tbc_unit.inverse() *
+                    SE2ToSE3_(toG2OSE2(vOdomData[idx] * g_unitScale).inverse());
+            const Eigen::Vector3d lci = Tciw.map(vPoints[j] * g_unitScale);
+            if (lci(2) < 0)
                 continue;
 
-            const Eigen::Vector2d uv = cam->cam_map(lc);
+            const Eigen::Vector2d uv = cam->cam_map(lci);
             if (inBoard(uv)) {
                 g2o::RobustKernelCauchy* kernel = new g2o::RobustKernelCauchy();
                 kernel->setDelta(1);
 
                 const Eigen::Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * vSigma2[j];
-#if EDGEXYZ_FULL_INFO
+    #if EDGEXYZ_FULL_INFO
                 const double zc = lc(2);
                 const double zc_inv = 1. / zc;
                 const double zc_inv2 = zc_inv * zc_inv;
@@ -293,7 +305,7 @@ int main(int argc, char** argv)
                 const float& fy = Config::fy;
                 g2o::Matrix23D J_lc;
                 J_lc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;
-                const Eigen::Matrix3d Rcw = Tcw.rotation().toRotationMatrix();
+                const Eigen::Matrix3d Rcw = Tciw.rotation().toRotationMatrix();
                 const g2o::Matrix23D J_MPi = J_lc * Rcw;
 
                 const g2o::SE2 Twb = vi->estimate();
@@ -306,34 +318,36 @@ int main(int argc, char** argv)
                 const float Sigma_z = 1.f / Config::PlaneMotionInfoZ;
                 const Eigen::Matrix2d cov = Sigma_rotxy * J_KFj_rotxy * J_KFj_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
                 const Eigen::Matrix2d info = cov.inverse();
-#else
+    #else
                 const Eigen::Matrix2d info = Sigma_u.inverse();
-#endif
+    #endif
 
-#if USE_XYZCUSTOM
+    #if USE_XYZCUSTOM
                 EdgeSE2XYZCustom* e = new EdgeSE2XYZCustom();
-#else
+    #else
                 g2o::EdgeSE2XYZ* e = new g2o::EdgeSE2XYZ();
-#endif
+    #endif
                 e->setVertex(0, vi);
                 e->setVertex(1, vj);
                 e->setMeasurement(uv);
 
                 e->setInformation(info);
                 e->setCameraParameter(Config::Kcam);
-                e->setExtParameter(Tbc);
+                e->setExtParameter(Tbc_unit);
                 e->setRobustKernel(kernel);
                 optimizer.addEdge(e);
-#if PRINT_DEBUG_INFO
+    #if PRINT_DEBUG_INFO
                 e->computeError();
                 cout << "EdgeSE2XYZ from " << vi->id() << " to " << vj->id() << " , chi2 = "
                      << e->chi2() << ", error = [" << e->error().transpose() << "], info = "
-                     << endl << info << endl;
-                cout << "Sigma_u inv = " << endl << Sigma_u.inverse() << endl;
-#endif
+                     /*<< endl << info */<< endl;
+                //cout << "Sigma_u inv = " << endl << Sigma_u.inverse() << endl;
+    #endif
             }
         }
     }
+#endif  // USE_EDGESE2_ONLY == 0
+
     double t1 = timer.count();
     cout << "Load " << optimizer.vertices().size() << " vertices and " << optimizer.edges().size()
          << " edges tatal." << endl;
@@ -343,7 +357,7 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < g_nKFVertices; ++i) {
         const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
         const g2o::SE2 est = vi->estimate();
-        g2o::SE2 scaledEstimate(est[0] * g_scale, est[1] * g_scale, est[2]);
+        g2o::SE2 scaledEstimate(est[0] * g_visualScale, est[1] * g_visualScale, est[2]);
 
         g2o::VertexSE2* v_scale = new g2o::VertexSE2();
         v_scale->setId(i);
@@ -369,14 +383,26 @@ int main(int argc, char** argv)
 
 #if SAVE_BA_RESULT
     // update optimization result
+    g2o::Vector3D MAE(0, 0, 0);  // [mm]
     for (size_t i = 0; i < g_nKFVertices; ++i) {
         const g2o::VertexSE2* vi = dynamic_cast<const g2o::VertexSE2*>(optimizer.vertex(i));
         const g2o::SE2 est = vi->estimate();
-        g2o::SE2 scaledEstimate(est[0] * g_scale, est[1] * g_scale, est[2]);
+        g2o::SE2 scaledEstimate(est[0] * g_visualScale, est[1] * g_visualScale, est[2]);
 
         g2o::VertexSE2* vi_scale = dynamic_cast<g2o::VertexSE2*>(optSaver.vertex(i));
         vi_scale->setEstimate(scaledEstimate);
+
+        // output MAE [mm]
+        g2o::Vector3D esti = est.toVector();
+        esti[0] /= g_unitScale;
+        esti[1] /= g_unitScale;
+        g2o::Vector3D abs_ei = esti - toG2OSE2(vOdomData[i]).toVector();
+        for (size_t i = 0; i < 3; ++i)
+            abs_ei[i] = abs(abs_ei[i]);
+        MAE += abs_ei;
     }
+    MAE = MAE / g_nKFVertices;
+    cout << "MAE[mm] = " << MAE.transpose() << endl;
     optSaver.save("/home/vance/output/test_BA_SE2_after.g2o");
     writeToPlyFileAppend(&optimizer);
 #endif

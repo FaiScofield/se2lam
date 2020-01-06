@@ -14,7 +14,7 @@
 namespace g2o
 {
 
-G2O_REGISTER_TYPE(EDGE_SE2, PreEdgeSE2);
+G2O_REGISTER_TYPE(EDGE_SE2, PreEdgeSE2);  // for g2o_viewer
 G2O_REGISTER_TYPE(EDGE_SE2:XYZ, EdgeSE2XYZ);
 
 using namespace std;
@@ -136,6 +136,7 @@ void EdgeSE2XYZ::linearizeOplus()
 
     /*
     {  //! ------------- check jacobians -----------------
+        //! 已验证, 结论正确. 201912
         // 数值法求解雅克比, 看结果是否跟自己解析写的一样
         const double eps = 1e-6;
         const double eps1[3] = {eps, 0, 0};
@@ -236,6 +237,7 @@ void PreEdgeSE2::linearizeOplus()
     _jacobianOplusXi = Rm.transpose() * _jacobianOplusXi;
     _jacobianOplusXj = Rm.transpose() * _jacobianOplusXj;
 
+    /*  //! 已验证, 结论正确 20200106
     {  //! ------------- check jacobians -----------------
         // 数值法求解雅克比, 看结果是否跟自己解析写的一样
         const double eps = 1e-6;
@@ -265,6 +267,7 @@ void PreEdgeSE2::linearizeOplus()
         }
         cout << "EdgeSE2Custom Jacobian 数值法 Xj = " << endl << J2 << endl;
     }
+    */
 
 }
 

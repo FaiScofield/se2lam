@@ -17,7 +17,7 @@ namespace se2lam
 #define USE_RK_DATASET      0
 #define DO_RELOCALIZATION   0
 #define DO_LOCAL_BA         1
-#define DO_GLOBAL_BA        0
+#define DO_GLOBAL_BA        1
 #define DO_GLOBAL_BA_Vertify_NEW 0  // TODO
 #define SAVE_BA_RESULT      1   // for g2o_viewer
 
@@ -1397,7 +1397,7 @@ void TestTrack::localBA()
     SlamLinearSolverCholmod* linearSolver = new SlamLinearSolverCholmod();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     SlamAlgorithmLM* solver = new SlamAlgorithmLM(blockSolver);
-    solver->setMaxTrialsAfterFailure(5);
+    solver->setMaxTrialsAfterFailure(10);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(Config::LocalVerbose);
 
@@ -1434,7 +1434,7 @@ void TestTrack::localBA()
 
     timer.start();
     optimizer.initializeOptimization(0);
-    optimizer.optimize(Config::LocalIterNum*2);
+    optimizer.optimize(Config::LocalIterNum);
     double t2 = timer.count();
 
     if (solver->currentLambda() > 100.0) {
@@ -1442,6 +1442,16 @@ void TestTrack::localBA()
              << " , reject optimized result!" << endl;
         //return;
     }
+
+//    size_t nEdges = optimizer.edges().size();
+//    auto sEdges = optimizer.edges();
+//    for (size_t i = N; i < nEdges; ++i) {
+//        g2o::EdgeSE2XYZ* ei = dynamic_cast<g2o::EdgeSE2XYZ*>(sEdges[i]);
+//        if (ei->chi2() > 100)
+//            cerr << "***** Large chi2 = " << ei->chi2() << ", error = " << ei->error()->transpose() << endl;
+//    }
+
+
 
     timer.start();
     mpMap->optimizeLocalGraph(optimizer);  // 用优化后的结果更新KFs和MPs
@@ -1521,17 +1531,22 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
             continue;
 
         const int id1 = distance(vpLocalKFs.begin(), it);
+        Eigen::Matrix3d info = meas.cov.inverse();
 #if USE_RK_DATASET
-        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, meas.cov.inverse()*1e2);
+        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, info*1e2);
 #else
-        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, meas.cov.inverse());
+        info.setIdentity();
+        info(2, 2) *= 1e6;
+        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, info);
 #endif
-//        e->computeError();
-//        cout << "EdgeSE2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << " , chi2 = "
-//             << e->chi2() << ", error = [" << e->error().transpose() << "]" << endl;
+        e->computeError();
+        cerr << "EdgeSE2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << " , chi2 = "
+             << e->chi2() << ", error = [" << e->error().transpose() << "], prevInfo = "
+             << endl << meas.cov.inverse() << endl;
+
 //        Se2 dodo = pKFj->odom - pKFi->odom;
-//        cout << "OdomSe2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << ", dodo = "
-//             << dodo << ", Edge measurement = [" << meas.meas.transpose() << "]" << endl;
+//        cerr << "OdomSe2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << ", dodo = "
+//             << dodo * 1e3 << ", Edge measurement = [" << meas.meas.transpose() << "]" << endl;
     }
 
     // Vertices for LocalRefKFs
@@ -1615,8 +1630,14 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
             */
 
             const float invSigma2 = pKFj->mvInvLevelSigma2[octave];  // 单层时都是1.0
-            addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
+            g2o::EdgeSE2XYZ* ej = addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
                           Eigen::Matrix2d::Identity() * invSigma2, delta);
+            ej->computeError();
+            if (ej->chi2() > 10)
+                cerr << "EdgeSE2XYZ from " << vertexIdKF << " to " << vertexIdMP << " , chi2 = "
+                     << ej->chi2() << ", error = [" << ej->error().transpose() << "]" << endl;
+            if (ej->chi2() > 100)
+                cerr << "********** [WARNI] Large chi2!!! **********" << endl;
         }
     }
 
@@ -1849,15 +1870,15 @@ void TestTrack::globalBA()
 
 #if SAVE_BA_RESULT
     SlamOptimizer optSaver;
-    const float g2o_scale = 0.001;
+    const float g2o_scale = 0.01;
     const int N = vAllKFs.size();
     for (int i = 0; i < N; ++i) {
         const g2o::VertexSE3* vi = dynamic_cast<const g2o::VertexSE3*>(optimizer.vertex(i));
-        g2o::Isometry3D pose = vi->estimate();
-        pose.pretranslate(pose.translation() * g2o_scale);
+        g2o::SE3Quat pose = toSE3Quat(vi->estimate());
+        pose.setTranslation(pose.translation() * g2o_scale);
 
         g2o::VertexSE3* vi_scaled = new g2o::VertexSE3();
-        vi_scaled->setEstimate(pose);
+        vi_scaled->setEstimate(g2o::Isometry3D(pose));
         vi_scaled->setId(i);
         optSaver.addVertex(vi_scaled);
 
@@ -1918,13 +1939,14 @@ void TestTrack::globalBA()
            mpNewKF->id, mpNewKF->mIdKF, t1, t2, t3, t4);
 
 #if SAVE_BA_RESULT
+    optSaver.clear();
     for (int i = 0, iend = vAllKFs.size(); i < iend; ++i) {
         const g2o::VertexSE3* vi = dynamic_cast<const g2o::VertexSE3*>(optimizer.vertex(i));
-        g2o::Isometry3D pose = vi->estimate();
-        pose.pretranslate(pose.translation() * g2o_scale);
+        g2o::SE3Quat pose = toSE3Quat(vi->estimate());
+        pose.setTranslation(pose.translation() * g2o_scale);
 
         g2o::VertexSE3* vi_scaled = new g2o::VertexSE3();
-        vi_scaled->setEstimate(pose);
+        vi_scaled->setEstimate(g2o::Isometry3D(pose));
         vi_scaled->setId(N + i);
         optSaver.addVertex(vi_scaled);
 
@@ -1936,6 +1958,8 @@ void TestTrack::globalBA()
             optSaver.addEdge(e_tmp);
         }
     }
+    const string g2oFile2 = Config::G2oResultsStorePath + "global-" + to_string(mpNewKF->mIdKF) + "-2.g2o";
+    optSaver.save(g2oFile2.c_str());
 #endif
 }
 

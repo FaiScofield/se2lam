@@ -36,14 +36,15 @@ void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
 
     //! Vector order: [trans, rot] 先平移后旋转
     // 不确定度(即协方差), 信息矩阵为其逆.
-    float dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
-    float dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
-    float dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
+    double dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
+    double dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
+    double dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
 
-    // 信息矩阵
-    float data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e4, 1e4, 1e4, 1.f / (dtheta * dtheta)};
-    for (int i = 0; i < 6; ++i)
+    //! 信息矩阵. 由于单位是[mm], 平移部分要*1e-6. 旋转要在一个量级内, 故最后要*1e-4. 20200106
+    double data[6] = {1e-6 / (dx * dx), 1e-6 / (dy * dy), 1e-6, 1, 1, 1e-4 / (dtheta * dtheta)};
+//    double data[6] = {1.f / (dx * dx), 1.f / (dy * dy), 1e4, 1e4, 1e4, 1.f / (dtheta * dtheta)};
+    for (size_t i = 0; i < 6; ++i)
         Info_se3_bTb(i, i) = data[i];
      Info_se3 = Info_se3_bTb;
 
@@ -536,13 +537,18 @@ g2o::VertexSE3* addVertexSE3AndEdgeSE3Prior(SlamOptimizer& opt, const g2o::Isome
     Twc = Twb * Tbc;
 
     //! Vector order: [trans, rot]
-    g2o::Matrix6d Info_wb = g2o::Matrix6d::Zero();
-    Info_wb(0, 0) = 1e-4;
-    Info_wb(1, 1) = 1e-4;
-    Info_wb(2, 2) = Config::PlaneMotionInfoZ;
-    Info_wb(3, 3) = Config::PlaneMotionInfoXrot;
-    Info_wb(4, 4) = Config::PlaneMotionInfoYrot;
-    Info_wb(5, 5) = 1e-4;
+//    g2o::Matrix6d Info_wb = g2o::Matrix6d::Zero();
+//    Info_wb(0, 0) = 1e-4;
+//    Info_wb(1, 1) = 1e-4;
+//    Info_wb(2, 2) = Config::PlaneMotionInfoZ;
+//    Info_wb(3, 3) = Config::PlaneMotionInfoXrot;
+//    Info_wb(4, 4) = Config::PlaneMotionInfoYrot;
+//    Info_wb(5, 5) = 1e-4;
+    //! from test_BA_SE3.cpp  20200106
+    g2o::Matrix6d Info_wb = g2o::Matrix6d::Identity();
+    Info_wb(0, 0) = 1e-9;
+    Info_wb(1, 1) = 1e-9;
+    Info_wb(2, 2) = 1e-6;
     g2o::Matrix6d J_bb_cc = AdjTR(Tbc);
     g2o::Matrix6d Info_pose = J_bb_cc.transpose() * Info_wb * J_bb_cc;
     Isometry3D Iso_w_c = Twc;
@@ -763,7 +769,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     addEdgeSE3ExpmapPlaneConstraint(optimizer, toSE3Quat(pFrame->getPose()), 0, Config::Tbc);
 
     // 设置MP观测约束(边)
-    const int N = pFrame->N;
+    const size_t N = pFrame->N;
     vector<EdgeSE3ProjectXYZOnlyPose*> vpEdges;
     vector<size_t> vnIndexEdge;  // MP被加入到图中优化, 其对应的KP索引被记录在此
     vpEdges.reserve(N);
@@ -772,7 +778,7 @@ void poseOptimization(Frame* pFrame, int& nMPInliers, double& error)
     const float delta = Config::ThHuber;
     const vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false, false);
     assert(vAllMPs.size() == N);
-    for (int i = 0; i < N; i++) {
+    for (size_t i = 0; i < N; i++) {
         const PtrMapPoint& pMP = vAllMPs[i];
         if (!pMP || pMP->isNull())
             continue;
