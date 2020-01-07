@@ -115,7 +115,7 @@ void calcSE3toXYZInfo(const Point3f& Pc1, const Mat& Tc1w, const Mat& Tc2w, Eige
 EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int id1,
                           const cv::Mat& K, const SE3Quat& Tbc, const Matrix2D& info, double thHuber)
 {
-    EdgeSE2XYZ* e = new EdgeSE2XYZ;
+    EdgeSE2XYZ* e = new EdgeSE2XYZ();
     e->vertices()[0] = opt.vertex(id0);  // KF id
     e->vertices()[1] = opt.vertex(id1);  // MP id
     e->setCameraParameter(K);
@@ -131,7 +131,7 @@ EdgeSE2XYZ* addEdgeSE2XYZ(SlamOptimizer& opt, const Vector2D& meas, int id0, int
 
 VertexSE2* addVertexSE2(SlamOptimizer& opt, const SE2& pose, int id, bool fixed)
 {
-    VertexSE2* v = new VertexSE2;
+    VertexSE2* v = new VertexSE2();
     v->setEstimate(pose);
     v->setId(id);
     v->setFixed(fixed);
@@ -147,7 +147,7 @@ SE2 estimateVertexSE2(SlamOptimizer& opt, int id)
 
 PreEdgeSE2* addPreEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
 {
-    PreEdgeSE2* e = new PreEdgeSE2;
+    PreEdgeSE2* e = new PreEdgeSE2();
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(meas);
@@ -158,7 +158,7 @@ PreEdgeSE2* addPreEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int
 
 EdgeSE2* addEdgeSE2(SlamOptimizer& opt, const Vector3D& meas, int id0, int id1, const Matrix3D& info)
 {
-    EdgeSE2* e = new EdgeSE2;
+    EdgeSE2* e = new EdgeSE2();
     e->vertices()[0] = opt.vertex(id0);
     e->vertices()[1] = opt.vertex(id1);
     e->setMeasurement(SE2(meas));  // meas = v1 - v0

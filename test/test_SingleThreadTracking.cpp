@@ -3,7 +3,7 @@
 #include "MapPublish.h"
 #include "MapStorage.h"
 
-# define USE_RK_DATASET 0
+# define USE_RK_DATASET 1
 
 string g_orbVocFile = "/home/vance/slam_ws/ORB_SLAM2/Vocabulary/ORBvoc.bin";
 

@@ -16,15 +16,16 @@
 //#define USE_PRESE2          0 // else use g2o::SE2
 //#define USE_XYZCUSTOM       0 // else use EdgeSE2XYZ
 #define USE_EDGESE2_ONLY    0
-#define USE_EDGEXYZ_ONLY    0
+#define USE_EDGEXYZ_ONLY    1
 #define EDGEXYZ_FULL_INFO   0
 #define SAVE_BA_RESULT      1
 #define PRINT_DEBUG_INFO    1
 #define NORMALIZE_UNIT      0  // 是否将单位转回[m]进行优化
-
 //! NOTE 在迭代上限足够大的情况下,[m]速度稍快一些, [mm]精度稍高一些
 
 using namespace std;
+using namespace Eigen;
+using namespace g2o;
 
 const std::string g_outPointCloudFile = "/home/vance/output/test_BA_SE2.ply";
 size_t g_nKFVertices = 0;  // num of camera pose
@@ -36,7 +37,7 @@ const double g_visualScale = 0.1;  // 数据尺度, 将单位[mm]换成[cm],方�
 const double g_unitScale = 1.;
 #endif
 
-bool inBoard(const Eigen::Vector2d& uv)
+bool inBoard(const Vector2d& uv)
 {
     static const double& w = Config::ImgSize.width;
     static const double& h = Config::ImgSize.height;
@@ -150,7 +151,7 @@ int main(int argc, char** argv)
 
     // generate observations
     size_t nMPs = 200;
-    vector<Eigen::Vector3d> vPoints;
+    vector<Vector3d> vPoints;
     vector<double> vSigma2;
     vPoints.reserve(nMPs);
     vSigma2.reserve(nMPs);
@@ -160,7 +161,7 @@ int main(int argc, char** argv)
         const double x = dx * 5000. - 1000.;
         const double y = dy * 5000.;
         const double z = 3000.0 + rng.gaussian(200.);
-        vPoints.push_back(Eigen::Vector3d(x, y, z));
+        vPoints.push_back(Vector3d(x, y, z));
 
         const int level = rng.uniform(0, 5);
         vSigma2.push_back(std::pow(1.2, level));
@@ -185,23 +186,23 @@ int main(int argc, char** argv)
     for (int i = skip; i < N; ++i) {
         // update preInfo
         if (i != skip) {
-            Eigen::Vector3d& meas = preInfo.meas;
+            Vector3d& meas = preInfo.meas;
             g2o::SE2 odok = toG2OSE2(vOdomData[i - 1]).inverse() * toG2OSE2(vOdomData[i]);
-            Eigen::Vector2d odork = odok.translation() * g_unitScale;
-            Eigen::Matrix2d Phi_ik = Eigen::Rotation2Dd(meas[2]).toRotationMatrix();
+            Vector2d odork = odok.translation() * g_unitScale;
+            Matrix2d Phi_ik = Rotation2Dd(meas[2]).toRotationMatrix();
             meas.head<2>() += Phi_ik * odork;
             meas[2] += odok.rotation().angle();
 
-            Eigen::Matrix3d Ak = Eigen::Matrix3d::Identity();
-            Eigen::Matrix3d Bk = Eigen::Matrix3d::Identity();
-            Ak.block<2, 1>(0, 2) = Phi_ik * Eigen::Vector2d(-odork[1], odork[0]) * g_unitScale;
+            Matrix3d Ak = Matrix3d::Identity();
+            Matrix3d Bk = Matrix3d::Identity();
+            Ak.block<2, 1>(0, 2) = Phi_ik * Vector2d(-odork[1], odork[0]) * g_unitScale;
             Bk.block<2, 2>(0, 0) = Phi_ik;
-            Eigen::Matrix3d& Sigmak = preInfo.cov;
-            Eigen::Matrix3d Sigma_vk = Eigen::Matrix3d::Identity();
+            Matrix3d& Sigmak = preInfo.cov;
+            Matrix3d Sigma_vk = Matrix3d::Identity();
             Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX) * g_unitScale * g_unitScale;
             Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY) * g_unitScale * g_unitScale;
             Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
-            Eigen::Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
+            Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
             Sigmak = Sigma_k_1;
         }
 
@@ -237,9 +238,9 @@ int main(int argc, char** argv)
         const auto v1 = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo - 1));
         const auto v2 = dynamic_cast<g2o::VertexSE2*>(optimizer.vertex(vertexIDTo));
 
-        Eigen::Vector3d& m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
+        Vector3d& m = vPreInfos[vertexIDTo].meas;  // 第0个不是有效值
         const g2o::SE2 meas(m[0], m[1], m[2]);
-        const Eigen::Matrix3d info = vPreInfos[vertexIDTo].cov.inverse();
+        const Matrix3d info = vPreInfos[vertexIDTo].cov.inverse();
 
     #if USE_PRESE2
         // EdgePreSE2
@@ -272,8 +273,8 @@ int main(int argc, char** argv)
     size_t MPVertexId = g_nKFVertices;
     for (size_t j = 0; j < nMPs; ++j) {
         // vetices
-        Eigen::Vector3d noise(rng.gaussian(10), rng.gaussian(10), rng.gaussian(200));
-        const Eigen::Vector3d& lw = (vPoints[j] + noise) * g_unitScale;
+        Vector3d noise(rng.gaussian(10), rng.gaussian(10), rng.gaussian(200));
+        const Vector3d& lw = (vPoints[j] + noise) * g_unitScale;
         g2o::VertexSBAPointXYZ* vj = new g2o::VertexSBAPointXYZ();
         vj->setEstimate(lw);
         vj->setId(MPVertexId++);
@@ -287,16 +288,16 @@ int main(int argc, char** argv)
             const int idx = vi->id() * delta + skip;
             const g2o::SE3Quat Tciw = Tbc_unit.inverse() *
                     SE2ToSE3_(toG2OSE2(vOdomData[idx] * g_unitScale).inverse());
-            const Eigen::Vector3d lci = Tciw.map(vPoints[j] * g_unitScale);
+            const Vector3d lci = Tciw.map(vPoints[j] * g_unitScale);
             if (lci(2) < 0)
                 continue;
 
-            const Eigen::Vector2d uv = cam->cam_map(lci);
+            const Vector2d uv = cam->cam_map(lci) + Vector2d(rng.gaussian(2), rng.gaussian(2));
             if (inBoard(uv)) {
                 g2o::RobustKernelCauchy* kernel = new g2o::RobustKernelCauchy();
                 kernel->setDelta(1);
 
-                const Eigen::Matrix2d Sigma_u = Eigen::Matrix2d::Identity() * vSigma2[j];
+                const Matrix2d Sigma_u = Matrix2d::Identity() * vSigma2[j];
     #if EDGEXYZ_FULL_INFO
                 const double zc = lc(2);
                 const double zc_inv = 1. / zc;
@@ -305,21 +306,21 @@ int main(int argc, char** argv)
                 const float& fy = Config::fy;
                 g2o::Matrix23D J_lc;
                 J_lc << fx * zc_inv, 0, -fx * lc(0) * zc_inv2, 0, fy * zc_inv, -fy * lc(1) * zc_inv2;
-                const Eigen::Matrix3d Rcw = Tciw.rotation().toRotationMatrix();
+                const Matrix3d Rcw = Tciw.rotation().toRotationMatrix();
                 const g2o::Matrix23D J_MPi = J_lc * Rcw;
 
                 const g2o::SE2 Twb = vi->estimate();
-                const Eigen::Vector3d pi(Twb[0], Twb[1], 0);
-                const Eigen::Matrix2d J_KFj_rotxy = (J_MPi * g2o::skew(lw - pi)).block<2, 2>(0, 0);
+                const Vector3d pi(Twb[0], Twb[1], 0);
+                const Matrix2d J_KFj_rotxy = (J_MPi * g2o::skew(lw - pi)).block<2, 2>(0, 0);
 
-                const Eigen::Vector2d J_z = -J_MPi.block<2, 1>(0, 2);
+                const Vector2d J_z = -J_MPi.block<2, 1>(0, 2);
 
                 const float Sigma_rotxy = 1.f / Config::PlaneMotionInfoXrot;
                 const float Sigma_z = 1.f / Config::PlaneMotionInfoZ;
-                const Eigen::Matrix2d cov = Sigma_rotxy * J_KFj_rotxy * J_KFj_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
-                const Eigen::Matrix2d info = cov.inverse();
+                const Matrix2d cov = Sigma_rotxy * J_KFj_rotxy * J_KFj_rotxy.transpose() + Sigma_z * J_z * J_z.transpose() + Sigma_u;
+                const Matrix2d info = cov.inverse();
     #else
-                const Eigen::Matrix2d info = Sigma_u.inverse();
+                const Matrix2d info = Sigma_u.inverse();
     #endif
 
     #if USE_XYZCUSTOM

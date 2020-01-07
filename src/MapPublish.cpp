@@ -17,7 +17,7 @@
 namespace se2lam
 {
 
-#define USE_RK_DATASET 0
+#define USE_RK_DATASET 1
 
 using namespace cv;
 using namespace std;
@@ -268,9 +268,12 @@ void MapPublish::run()
 
         publishCameraCurr(cvu::inv(mCurrentFramePose));
         publishOdomInformation();
-        if (mpMap->mbNewKFInserted) {  // Map不变时没必要重复显示
-            mpMap->mbNewKFInserted = false;
+        if (mpMap->mbKFUpdated) {  // Map不变时没必要重复显示
+            mpMap->mbKFUpdated = false;
             publishKeyFrames();
+        }
+        if (mpMap->mbMPUpdated) {  // Map不变时没必要重复显示
+            mpMap->mbMPUpdated = false;
             publishMapPoints();
         }
 

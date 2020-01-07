@@ -167,16 +167,23 @@ int main(int argc, char** argv)
         cerr << "Usage: test_pointDetection <dataPath> [number_frames_to_process]" << endl;
         exit(-1);
     }
+
     // initialization
     Config::readConfig(string(argv[1]));
     int num = Config::ImgCount;
-    if (argc == 3) {
+    if (argc > 2) {
         num = atoi(argv[2]);
-        cerr << "set number_frames_to_process = " << num << endl;
+        cerr << " - set number_frames_to_process = " << num << endl;
     }
+    const int delta = 20;
+    const int skip = Config::ImgStartIndex;
+    cerr << " set skip and delta to " << skip << " / " << delta << endl;
     Tcb_unit = Config::Tcb;
     Tcb_unit.rowRange(0, 3).col(3) *= g_unitScale;
     Tbc_unit = cvu::inv(Tcb_unit);
+    cerr << " - set unitScale and visualScale to " << g_unitScale << " / " << g_visualScale << endl;
+    cerr << " - set Tcb_unit to " << endl << Tcb_unit << endl;
+    cerr << " - set Tbc_unit to " << endl << Tbc_unit << endl;
 
     // read data
     string odomRawFile = Config::DataPath + "odo_raw.txt";  // [mm]
@@ -184,12 +191,8 @@ int main(int argc, char** argv)
     readOdomDatas(odomRawFile, vOdomData);
     if (vOdomData.empty())
         exit(-1);
-
-    const int skip = Config::ImgStartIndex;
-    const int delta = 20;
     const int N = min((int)vOdomData.size(), num);
-    cout << "Use " << N << " odom data (size of vertices) in the file to test BA. " << endl;
-    cout << "skip = " << skip << ", delta = " << delta << endl;
+    cerr << " - use " << N << " odom data (size of vertices) in the file to test BA. " << endl;
 
     // random noise
     cv::RNG rng;  // OpenCV随机数产生器

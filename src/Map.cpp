@@ -25,7 +25,8 @@ typedef unique_lock<mutex> locker;
 Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 {
     mCurrentFramePose = cv::Mat::eye(4, 4, CV_32FC1);
-    mbNewKFInserted = false;
+    mbKFUpdated = false;
+    mbMPUpdated = false;
 }
 
 Map::~Map()
@@ -38,7 +39,7 @@ void Map::insertKF(const PtrKeyFrame& pKF)
     mspKFs.insert(pKF);
     mCurrentKF = pKF;
     isEmpty = false;
-    mbNewKFInserted = true;
+    mbKFUpdated = true;
 }
 
 void Map::insertMP(const PtrMapPoint& pMP)
@@ -46,12 +47,14 @@ void Map::insertMP(const PtrMapPoint& pMP)
     locker lock(mMutexGlobalGraph);
     pMP->setMap(this);
     mspMPs.insert(pMP);
+    mbMPUpdated = true;
 }
 
 void Map::eraseKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
-    mspKFs.erase(pKF);
+    if (mspKFs.erase(pKF))
+        mbKFUpdated = true;
 
     locker lock2(mMutexLocalGraph);
     auto iter1 = find(mvLocalGraphKFs.begin(), mvLocalGraphKFs.end(), pKF);
@@ -65,7 +68,8 @@ void Map::eraseKF(const PtrKeyFrame& pKF)
 void Map::eraseMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
-    mspMPs.erase(pMP);
+    if (mspMPs.erase(pMP))
+        mbMPUpdated = true;
 
     locker lock2(mMutexLocalGraph);
     auto iter = find(mvLocalGraphMPs.begin(), mvLocalGraphMPs.end(), pMP);
@@ -102,7 +106,8 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
     }
 
     toDelete->mergedInto(toKeep);
-    mspMPs.erase(toDelete);
+    if (mspMPs.erase(toDelete))
+        mbMPUpdated = true;
     fprintf(stderr, "[ Map ][Info ] Have a merge between #%ld(keep) and #%ld(delete) MP.\n",
             toKeep->mId, toDelete->mId);
 
@@ -189,6 +194,8 @@ void Map::clear()
     mCurrentFramePose.release();
     KeyFrame::mNextIdKF = 0;
     MapPoint::mNextId = 0;
+    mbKFUpdated = true;
+    mbMPUpdated = true;
 }
 
 //! 没用到
@@ -289,6 +296,7 @@ int Map::pruneRedundantKF()
                             thisKF->mIdKF, thisKF.use_count());
 
                     nPruned++;
+                    mbKFUpdated = true;
                 }
             }
         }
@@ -1269,8 +1277,10 @@ int Map::removeLocalOutlierMP(SlamOptimizer& optimizer)
             pMP->eraseObservation(pKF);  // 观测为0时会自动setNull(). lock Map::LocalMutex
         }
 
-        if (pMP->isNull())
+        if (pMP->isNull()) {
             nBadMP++;
+            mbMPUpdated = true;
+        }
     }
 
     printf("[INFO] #%ld(KF#%ld) MP外点提取数/实际移除(析构)数为: %d/%d个, 耗时: %.2fms\n",
@@ -1336,6 +1346,7 @@ void Map::updateCovisibility(const PtrKeyFrame& pNewKF)
             pKFi->addCovisibleKF(pNewKF);
             printf("[ Map ][Info ] #%ld(KF#%ld) 和(KF#%ld)添加了共视关系, 共视比例为%.2f, %.2f.\n",
                    pNewKF->id, pNewKF->mIdKF, pKFi->mIdKF, ratios.x, ratios.y);
+            mbKFUpdated = true;
         }
     }
 }
@@ -1420,6 +1431,7 @@ bool Map::updateFeatGraph(const PtrKeyFrame& _pKF)
                                 "KF#%ld to KF#%ld!\n\n",
                         _pKF->id, _pKF->mIdKF, ptKFFrom->mIdKF, ptKFTo->mIdKF);
             }
+            mbKFUpdated = true;
         } else {
             if (Config::GlobalPrint)
                 fprintf(stderr, "[ Map ][Error] #%ld(KF#%ld) Add feature constraint failed!\n",

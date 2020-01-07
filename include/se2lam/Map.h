@@ -100,7 +100,7 @@ public:
     std::vector<int> mIdxFtrBased;
     std::vector<int> mIdxOdoBased;
 
-    bool mbNewKFInserted; // for visualizaiton.
+    bool mbKFUpdated, mbMPUpdated; // for visualizaiton.
 
 private:
     void loadLocalGraph(SlamOptimizer& optimizer,

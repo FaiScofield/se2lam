@@ -14,10 +14,10 @@ namespace se2lam
 {
 
 //#define WEIGHT_COVISIBLITIES  // TODO
-#define USE_RK_DATASET      0
+#define USE_RK_DATASET      1
 #define DO_RELOCALIZATION   0
 #define DO_LOCAL_BA         1
-#define DO_GLOBAL_BA        1
+#define DO_GLOBAL_BA        0
 #define DO_GLOBAL_BA_Vertify_NEW 0  // TODO
 #define SAVE_BA_RESULT      1   // for g2o_viewer
 
@@ -253,26 +253,8 @@ bool TestTrack::trackReferenceKF()
 
     // 4.三角化生成潜在MP, 由LocalMap线程创造MP
     int nObs = 0;
-//    if (!bLessKPmatch)
+    if (!bLessKPmatch)
         nObs = doTriangulate(mpReferenceKF, &mCurrentFrame);  // 更新一些数据
-
-    assert(nObs == static_cast<int>(mCurrentFrame.countObservations()));
-    if (0 && nObs > 10) { //! 这里不用执行
-        WorkTimer timer;
-
-        const Se2 Twb1 = mCurrentFrame.getTwb();
-        const Mat Tcw_opt = poseOptimize(&mCurrentFrame);
-        Se2 Twb2;
-        Twb2.fromCvSE3(cvu::inv(Tcw_opt) * Config::Tcb);
-        cout << "[Track][Info ] #" << mCurrentFrame.id << "-#" << mLastRefKFid << " 位姿优化情况: 观测数: "
-             << nObs << ", 耗时: " << timer.count() << ", 位姿优化前后的值为: " << Twb1 << " ==> " << Twb2 << endl;
-
-        bool lost = detectIfLost(mCurrentFrame, Tcw_opt);
-        if (lost)
-            return false;
-        else
-            mCurrentFrame.setPose(Tcw_opt);
-    }
 
     return true;
 }
@@ -337,13 +319,13 @@ void TestTrack::updateFramePoseFromRef()
     Matrix3d Sigma_vk = Matrix3d::Identity();
     Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
     Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
-    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
+    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta) * 1e6;
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 
     mCurrentFrame.mPreSE2 = preSE2;
 
-//    cout << "[Debug] #" << mCurrentFrame.id << "-#" << mLastRefKFid << " prein_odo ref to cur info  = "
+//    cerr << "[Debug] #" << mCurrentFrame.id << "-#" << mLastRefKFid << " prein_odo ref to cur info  = "
 //         << endl << Sigmak << endl;
 }
 
@@ -357,6 +339,8 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
     mnMPsNewAdded = 0;
     mnKPMatchesGood = 0;
 
+    if (mCurrentFrame.id > 72)
+        int a = 0;
     if (mvKPMatchIdx.empty()) {
         mnKPMatchesGood = mnKPsInline;
         return 0;
@@ -1119,16 +1103,16 @@ void TestTrack::addNewKF(PtrKeyFrame& pKF, const map<size_t, MPCandidate>& MPCan
     mpMap->updateCovisibility(mpNewKF);
 #endif
 
-    PtrKeyFrame pKFLast = mpMap->getCurrentKF();
-    assert(mpNewKF->mIdKF - pKFLast->mIdKF == 1);
-    assert(pKFLast->mIdKF == mpReferenceKF->mIdKF);
+    PtrKeyFrame pLastRefKF = mpMap->getCurrentKF();
+    assert(mpNewKF->mIdKF - pLastRefKF->mIdKF == 1);
+    assert(pLastRefKF->mIdKF == mpReferenceKF->mIdKF);
 
     // 添加KF之间的位姿约束, 用于全局优化
     Mat measure;
     g2o::Matrix6d info;
-    calcOdoConstraintCam(mpNewKF->odom - pKFLast->odom, measure, info);
-    pKFLast->setOdoMeasureFrom(mpNewKF, measure, toCvMat6f(info));
-    mpNewKF->setOdoMeasureTo(pKFLast, measure, toCvMat6f(info));
+    calcOdoConstraintCam(mpNewKF->odom - pLastRefKF->odom, measure, info);
+    pLastRefKF->setOdoMeasureFrom(mpNewKF, measure, toCvMat6f(info));
+    mpNewKF->setOdoMeasureTo(pLastRefKF, measure, toCvMat6f(info));
 
     double t2 = timer.count();
     printf("[Track][Timer] #%ld(KF#%ld) L2.更新共视关系耗时: %.2fms, 共获得共视KF数量: %ld, MP观测数: %ld\n",
@@ -1232,13 +1216,25 @@ void TestTrack::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
     const Mat Tc2w = mpNewKF->getPose();
 
     // 1.为newKF在Track线程中添加的可视MP添加info. 可以保证视差都是好的
-    int nAddInfo= 0;
+    int nAddInfo= 0, nMinusObs = 0;
     const int nObs = mpNewKF->countObservations();
     for (size_t i = 0, iend = mpNewKF->N; i < iend; ++i) {
         PtrMapPoint pMP = mpNewKF->getObservation(i);
         if (pMP) {
             assert(pMP->isGoodPrl());
-            Point3f Pc1 = cvu::se3map(Tc1w, pMP->getPos());
+            const Point3f Pc2 = cvu::se3map(Tc2w, pMP->getPos());
+            const Point2f uv2 = cvu::camprjc(Config::Kcam, Pc2);
+            double e = norm(uv2 - mpNewKF->mvKeyPoints[i].pt);
+            if (e > 30) {
+                cerr << "[WARNI] #MP" << pMP->mId << " project to KF#" << mpNewKF->mIdKF << " in point "
+                     << Mat(mpNewKF->mvKeyPoints[i].pt).t() << " but projError > 30 for in point"
+                     << Mat(uv2).t() << endl;
+                mpNewKF->setObservation(nullptr, i);
+                nMinusObs++;
+                continue;
+            }
+
+            const Point3f Pc1 = cvu::se3map(Tc1w, pMP->getPos());
             Eigen::Matrix3d xyzinfo1, xyzinfo2;
             calcSE3toXYZInfo(Pc1, Tc1w, Tc2w, xyzinfo1, xyzinfo2);
             mpNewKF->setObsAndInfo(pMP, i, xyzinfo2);
@@ -1247,9 +1243,8 @@ void TestTrack::findCorresponds(const map<size_t, MPCandidate>& MPCandidates)
         }
     }
     double t1 = timer.count();
-    printf("[Track][Info ] #%ld(KF#%ld) L1.1.关联地图点1/3, 可视MP添加信息矩阵数/KF可视MP数: %d/%d, 耗时: %.2fms\n",
-           mpNewKF->id, mpNewKF->mIdKF, nAddInfo, nObs, t1);
-    assert(nObs == static_cast<int>(mpNewKF->countObservations()));
+    printf("[Track][Info ] #%ld(KF#%ld) L1.1.关联地图点1/3, 可视MP添加数/去除数/原总数/现总数: %d/%d/%d/%ld, 耗时: %.2fms\n",
+           mpNewKF->id, mpNewKF->mIdKF, nAddInfo, nMinusObs, nObs, mpNewKF->countObservations(), t1);
 
     // 2.局部地图中非newKF的MPs投影到newKF, 新投影的MP可能会把MP候选的坑占了
     //! NOTE 视差不好的不要投
@@ -1451,8 +1446,6 @@ void TestTrack::localBA()
 //            cerr << "***** Large chi2 = " << ei->chi2() << ", error = " << ei->error()->transpose() << endl;
 //    }
 
-
-
     timer.start();
     mpMap->optimizeLocalGraph(optimizer);  // 用优化后的结果更新KFs和MPs
     double t3 = timer.count();
@@ -1484,69 +1477,41 @@ void TestTrack::localBA()
     }
     const string g2oFile = Config::G2oResultsStorePath + "local-" + to_string(mpNewKF->mIdKF) + ".g2o";
     optSaver.save(g2oFile.c_str());
+    const string file2 = Config::G2oResultsStorePath + "local-" + to_string(mpNewKF->mIdKF) + "-edges.g2o";
+    optimizer.save(file2.c_str());
 #endif
 }
 
 void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
+
+#define USE_EDEG_SE2    1
+#define USE_EDEG_XYZ    1
+
     const vector<PtrKeyFrame> vpLocalKFs = mpMap->getLocalKFs();
     const vector<PtrKeyFrame> vpLocalRefKFs = mpMap->getRefKFs();
     const vector<PtrMapPoint> vpLocalMPs = mpMap->getLocalMPs();
 
-    CamPara* campr = addCamPara(optimizer, Config::Kcam, 0);
+    // CamPara* campr = addCamPara(optimizer, Config::Kcam, 0);
 
-    const float delta = Config::ThHuber;
     const size_t nLocalKFs = vpLocalKFs.size();
     const size_t nRefKFs = vpLocalRefKFs.size();
     const size_t nLocalMPs = vpLocalMPs.size();
     const size_t maxVertexIdKF = nLocalKFs + nRefKFs;
     unsigned long minKFid = nRefKFs > 0 ? 0 : vpLocalKFs[0]->mIdKF;
-    if (nRefKFs == 0)
-        fprintf(stderr, "[Track][Debug] #%ld(KF#%ld) L8.localBA() RefKF.size = 0, minKFid = %ld\n",
-               mpNewKF->id, mpNewKF->mIdKF, minKFid);
 
     // Vertices for LocalKFs
     for (size_t i = 0; i < nLocalKFs; ++i) {
         const PtrKeyFrame& pKFi = vpLocalKFs[i];
         assert(!pKFi->isNull());
 
-        const int vertexIdKF = i;
         const bool fixed = (pKFi->mIdKF == minKFid) || (pKFi->mIdKF == 0);
-
         const Se2 Twb = pKFi->getTwb();
-        const g2o::SE2 pose(Twb.x, Twb.y, Twb.theta);
-        addVertexSE2(optimizer, pose, vertexIdKF, fixed);
-    }
 
-    // odo Edges for LocalKFs
-    for (size_t i = 0; i < nLocalKFs; ++i) {
-        const PtrKeyFrame& pKFi = vpLocalKFs[i];
-        const PtrKeyFrame pKFj = pKFi->preOdomFromSelf.first;
-        if (!pKFj || pKFj->isNull())
-            continue;
-        assert(pKFj->mIdKF > pKFi->mIdKF); // from是指自己的下一KF
-
-        PreSE2 meas = pKFi->preOdomFromSelf.second;
-        auto it = std::find(vpLocalKFs.begin(), vpLocalKFs.end(), pKFj);
-        if (it == vpLocalKFs.end())
-            continue;
-
-        const int id1 = distance(vpLocalKFs.begin(), it);
-        Eigen::Matrix3d info = meas.cov.inverse();
-#if USE_RK_DATASET
-        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, info*1e2);
-#else
-        info.setIdentity();
-        info(2, 2) *= 1e6;
-        auto e = addEdgeSE2(optimizer, meas.meas, i, id1, info);
-#endif
-        e->computeError();
-        cerr << "EdgeSE2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << " , chi2 = "
-             << e->chi2() << ", error = [" << e->error().transpose() << "], prevInfo = "
-             << endl << meas.cov.inverse() << endl;
-
-//        Se2 dodo = pKFj->odom - pKFi->odom;
-//        cerr << "OdomSe2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << ", dodo = "
-//             << dodo * 1e3 << ", Edge measurement = [" << meas.meas.transpose() << "]" << endl;
+        g2o::VertexSE2* v = new g2o::VertexSE2();
+        v->setEstimate(g2o::SE2(Twb.x, Twb.y, Twb.theta));
+        v->setId(i);
+        v->setFixed(fixed);
+        optimizer.addVertex(v);
     }
 
     // Vertices for LocalRefKFs
@@ -1555,12 +1520,56 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
         assert(!pKFj->isNull());
 
         const int vertexIdKF = j + nLocalKFs;
-
         const Se2 Twb = pKFj->getTwb();
-        const g2o::SE2 pose(Twb.x, Twb.y, Twb.theta);
-        addVertexSE2(optimizer, pose, vertexIdKF, true);
+
+        g2o::VertexSE2* v = new g2o::VertexSE2();
+        v->setEstimate(g2o::SE2(Twb.x, Twb.y, Twb.theta));
+        v->setId(vertexIdKF);
+        v->setFixed(true);
+        optimizer.addVertex(v);
     }
 
+#if USE_EDEG_SE2
+    // odo Edges for LocalKFs
+    int nEdgeSE2 = 0;
+    for (size_t idxi = 0; idxi < nLocalKFs; ++idxi) {
+        const PtrKeyFrame& pKFi = vpLocalKFs[idxi];
+        const PtrKeyFrame pKFj = pKFi->preOdomFromSelf.first; // from是指自己的后一帧KF
+        if (!pKFj || pKFj->isNull())
+            continue;
+
+        auto it = std::find(vpLocalKFs.begin(), vpLocalKFs.end(), pKFj);
+        if (it == vpLocalKFs.end())
+            continue;
+
+        nEdgeSE2++;
+        assert(pKFj->mIdKF > pKFi->mIdKF);
+
+        const int idxj = distance(vpLocalKFs.begin(), it);
+        const PreSE2 preOdom = pKFi->preOdomFromSelf.second;
+        Eigen::Matrix3d info = preOdom.cov.inverse();
+#if USE_RK_DATASET
+        //info.setIdentity();
+        //info(2, 2) *= 1e6;
+#else
+        info.setIdentity();
+        info(2, 2) *= 1e6;
+#endif
+        g2o::EdgeSE2* e = new g2o::EdgeSE2();
+        e->vertices()[0] = optimizer.vertex(idxi);
+        e->vertices()[1] = optimizer.vertex(idxj);
+        e->setMeasurement(g2o::SE2(preOdom.meas));  // meas = vj - vi
+        e->setInformation(info);
+        optimizer.addEdge(e);
+
+        e->computeError();
+        cerr << "EdgeSE2 from " << pKFi->mIdKF << " to " << pKFj->mIdKF << " , chi2 = "
+             << e->chi2() << ", error = [" << e->error().transpose() << "], prevInfo = "
+             << endl << preOdom.cov.inverse() << endl;
+    }
+#endif
+
+#if USE_EDEG_XYZ
     // Vertices and edges for LocalMPs
     for (size_t i = 0; i < nLocalMPs; ++i) {
         const PtrMapPoint& pMP = vpLocalMPs[i];
@@ -1571,7 +1580,12 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
 
         const int vertexIdMP = i + maxVertexIdKF;
         const Eigen::Vector3d lw = toVector3d(pMP->getPos());
-        addVertexSBAXYZ(optimizer, lw, vertexIdMP);
+        g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
+        v->setEstimate(lw);
+        v->setId(vertexIdMP);
+        v->setMarginalized(true);
+        v->setFixed(false);
+        optimizer.addVertex(v);
 
         const vector<PtrKeyFrame> pObsKFs = pMP->getObservations();
         for (auto j = pObsKFs.begin(), jend = pObsKFs.end(); j != jend; ++j) {
@@ -1584,7 +1598,7 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
 
             const int octave = pMP->getOctave(pKFj);
             const int ftrIdx = pMP->getKPIndexInKF(pKFj);
-            const float Sigma2 = pKFj->mvLevelSigma2[octave];  // 单层时都是1.0
+            //const float Sigma2 = pKFj->mvLevelSigma2[octave];  // 单层时都是1.0
             const Eigen::Vector2d uv = toVector2d(pKFj->mvKeyPoints[ftrIdx].pt);
 
             // 针对当前MPi的某一个观测KFj, 如果KFj在图里(是一个顶点)则给它加上边
@@ -1629,18 +1643,29 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
                           Sigma_all.inverse(), delta);
             */
 
-            const float invSigma2 = pKFj->mvInvLevelSigma2[octave];  // 单层时都是1.0
-            g2o::EdgeSE2XYZ* ej = addEdgeSE2XYZ(optimizer, uv, vertexIdKF, vertexIdMP, Config::Kcam, toSE3Quat(Config::Tbc),
-                          Eigen::Matrix2d::Identity() * invSigma2, delta);
+            const float invSigma2 = pKFj->mvInvLevelSigma2[octave];
+            Eigen::Matrix2d info = Eigen::Matrix2d::Identity() * invSigma2;
+            g2o::EdgeSE2XYZ* ej = new g2o::EdgeSE2XYZ();
+            ej->vertices()[0] = optimizer.vertex(vertexIdKF);  // KF id
+            ej->vertices()[1] = optimizer.vertex(vertexIdMP);  // MP id
+            ej->setCameraParameter(Config::Kcam);
+            ej->setExtParameter(toSE3Quat(Config::Tbc));
+            ej->setMeasurement(uv);
+            ej->setInformation(info);
+            ej->setRobustKernel(new g2o::RobustKernelCauchy());
+            optimizer.addEdge(ej);
+
             ej->computeError();
             if (ej->chi2() > 10)
                 cerr << "EdgeSE2XYZ from " << vertexIdKF << " to " << vertexIdMP << " , chi2 = "
                      << ej->chi2() << ", error = [" << ej->error().transpose() << "]" << endl;
-            if (ej->chi2() > 100)
-                cerr << "********** [WARNI] Large chi2!!! **********" << endl;
+//            if (ej->chi2() > 300) {
+//                cerr << "********** [WARNI] Large chi2 > 100 !! **********" << endl;
+//                //optimizer.removeEdge(ej);
+//            }
         }
     }
-
+#endif
     printf("[Track][Timer] #%ld(KF#%ld) L8.localBA()规模: KFs/RefKFs/MPs = %ld/%ld/%ld, "
            "Vertices = %ld, Edges = %ld\n", mpNewKF->id, mpNewKF->mIdKF,
            nLocalKFs, nRefKFs, nLocalMPs, optimizer.vertices().size(), optimizer.edges().size());
@@ -1688,7 +1713,6 @@ Mat TestTrack::poseOptimize(Frame* pFrame)
     vnIndexEdge.reserve(N);
 
     // 设置MP观测约束(边)
-    const float delta = Config::ThHuber;
     const vector<PtrMapPoint> vAllMPs = pFrame->getObservations(false);
     assert(vAllMPs.size() == N);
     int vertexIdMP = 1;
@@ -1697,15 +1721,10 @@ Mat TestTrack::poseOptimize(Frame* pFrame)
         if (!pMP || pMP->isNull())
             continue;
 
-        pFrame->mvbMPOutlier[i] = false;  //! TODO
-
         const Eigen::Vector3d lw = toVector3d(pMP->getPos());
         const cv::KeyPoint& kpUn = pFrame->mvKeyPoints[i];
         const Eigen::Vector2d uv = toVector2d(kpUn.pt);
         const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-
-        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-        rk->setDelta(delta);
 
 #if USE_SE2
         // 固定MP
@@ -1722,13 +1741,14 @@ Mat TestTrack::poseOptimize(Frame* pFrame)
 #endif
         e->setMeasurement(uv);
         e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-        e->setRobustKernel(rk);
+        e->setRobustKernel(new g2o::RobustKernelCauchy());
         optimizer.addEdge(e);
         vpEdges.push_back(e);
         vnIndexEdge.push_back(i);
     }
 
     if (vpEdges.size() < 5) {
+        cerr << "[WARNI] Edges < 5, skip pose optimization." << endl;
         return pFrame->getPose();
     }
 
