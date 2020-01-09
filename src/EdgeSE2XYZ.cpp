@@ -14,6 +14,8 @@
 namespace g2o
 {
 
+#define ORIGINAL_ERROR_PRESE2
+
 G2O_REGISTER_TYPE(EDGE_SE2, PreEdgeSE2);  // for g2o_viewer
 G2O_REGISTER_TYPE(EDGE_SE2:XYZ, EdgeSE2XYZ);
 
@@ -206,12 +208,17 @@ void PreEdgeSE2::computeError()
     double ai = v1->estimate().rotation().angle();
     double aj = v2->estimate().rotation().angle();
 
+#ifdef ORIGINAL_ERROR_PRESE2
+    _error.head<2>() = Ri.transpose() * (tj - ti) - _measurement.head<2>();
+    _error[2] = aj - ai - _measurement[2];
+#else
     const Vector2D tm = _measurement.head<2>();
     Matrix2D Rm = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
 
     //! NOTE 这里的残差应该是SE2的减法!
     _error.head<2>() = Rm.transpose() * (Ri.transpose() * (tj - ti) - tm);
     _error[2] = normalize_theta(aj - ai - _measurement[2]);
+#endif
 }
 
 void PreEdgeSE2::linearizeOplus()
@@ -232,6 +239,54 @@ void PreEdgeSE2::linearizeOplus()
     _jacobianOplusXj.setIdentity();
     _jacobianOplusXj.block<2, 2>(0, 0) = Ri.transpose();
 
+#ifdef ORIGINAL_ERROR_PRESE2
+    /*
+    {  //! ------------- check jacobians -----------------
+        // 数值法求解雅克比, 看结果是否跟自己解析写的一样
+        const double eps = 1e-6;
+        const double eps1[3] = {eps, 0, 0};
+        const double eps2[3] = {0, eps, 0};
+        const double eps3[3] = {0, 0, eps};
+        cout << "PreEdgeSE2 Jacobian 解析法 Xi = " << endl << _jacobianOplusXi << endl;
+        Matrix3D J1, J2;
+        for (int i = 0; i < 3; ++i) {
+            const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
+            //! NOTE 状态变量的更新要和顶点中的一致!
+            const SE2 vi_eps(vi->estimate().toVector() + Vector3D(epsi[0], epsi[1], epsi[2]));
+            const Matrix2D Ri_eps = vi_eps.rotation().toRotationMatrix();
+            const Vector2D ti_eps = vi_eps.translation();
+            const double ai_eps = vi_eps.rotation().angle();
+            const double aj = vj->estimate().rotation().angle();
+
+            Vector3D delta_eps;
+            delta_eps.head<2>() = Ri_eps.transpose() * (tj - ti_eps) - _measurement.head<2>();
+            delta_eps[2] = aj - ai_eps - _measurement[2];
+
+            //! NOTE 根据倒数定义, 这里就是普通减法, 不是广义减!
+            Vector3D Ji = (delta_eps - _error) / eps;
+            J1.block<3, 1>(0, i) = Ji;
+        }
+        cout << "PreEdgeSE2 Jacobian 数值法 Xi = " << endl << J1 << endl;
+
+        cout << "PreEdgeSE2 Jacobian 解析法 Xj = " << endl << _jacobianOplusXj << endl;
+        for (int j = 0; j < 3; ++j) {
+            const double epsi[3] = {eps1[j], eps2[j], eps3[j]};
+            const SE2 vj_eps(vj->estimate().toVector() + Vector3D(epsi[0], epsi[1], epsi[2]));
+            const Vector2D tj_eps = vj_eps.translation();
+            const double ai = vi->estimate().rotation().angle();
+            const double aj_eps = vj_eps.rotation().angle();
+
+            Vector3D delta_eps;
+            delta_eps.head<2>() = Ri.transpose() * (tj_eps - ti) - _measurement.head<2>();
+            delta_eps[2] = aj_eps - ai - _measurement[2];
+
+            Vector3D Jj = (delta_eps - _error) / eps;
+            J2.block<3, 1>(0, j) = Jj;
+        }
+        cout << "PreEdgeSE2 Jacobian 数值法 Xj = " << endl << J2 << endl;
+    }
+    */
+#else
     Matrix3D Rm = Matrix3D::Identity();
     Rm.block<2, 2>(0, 0) = Eigen::Rotation2Dd(_measurement[2]).toRotationMatrix();
     _jacobianOplusXi = Rm.transpose() * _jacobianOplusXi;
@@ -244,31 +299,31 @@ void PreEdgeSE2::linearizeOplus()
         const double eps1[3] = {eps, 0, 0};
         const double eps2[3] = {0, eps, 0};
         const double eps3[3] = {0, 0, eps};
-        cout << "EdgeSE2Custom Jacobian 解析法 Xi = " << endl << _jacobianOplusXi << endl;
-        g2o::Matrix3D J1, J2;
+        cout << "PreEdgeSE2 Jacobian 解析法 Xi = " << endl << _jacobianOplusXi << endl;
+        Matrix3D J1, J2;
         for (int i = 0; i < 3; ++i) {
             const double epsi[3] = {eps1[i], eps2[i], eps3[i]};
             //! NOTE 状态变量的更新要和顶点中的一致!
-            g2o::SE2 vi_eps(vi->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
-            g2o::SE2 delta_eps = g2o::SE2(_measurement).inverse() * (vi_eps.inverse() * vj->estimate());
+            SE2 vi_eps(vi->estimate().toVector() + Vector3D(epsi[0], epsi[1], epsi[2]));
+            SE2 delta_eps = SE2(_measurement).inverse() * (vi_eps.inverse() * vj->estimate());
             //! NOTE 根据倒数定义, 这里就是普通减法, 不是广义减!
-            g2o::Vector3D Ji = (delta_eps.toVector() - _error) / eps;
+            Vector3D Ji = (delta_eps.toVector() - _error) / eps;
             J1.block<3, 1>(0, i) = Ji;
         }
-        cout << "EdgeSE2Custom Jacobian 数值法 Xi = " << endl << J1 << endl;
+        cout << "PreEdgeSE2 Jacobian 数值法 Xi = " << endl << J1 << endl;
 
-        cout << "EdgeSE2Custom Jacobian 解析法 Xj = " << endl << _jacobianOplusXj << endl;
+        cout << "PreEdgeSE2 Jacobian 解析法 Xj = " << endl << _jacobianOplusXj << endl;
         for (int j = 0; j < 3; ++j) {
             const double epsi[3] = {eps1[j], eps2[j], eps3[j]};
-            g2o::SE2 vj_eps(vj->estimate().toVector() + g2o::Vector3D(epsi[0], epsi[1], epsi[2]));
-            g2o::SE2 delta_eps = g2o::SE2(_measurement).inverse() * (vi->estimate().inverse() * vj_eps);
-            g2o::Vector3D Jj = (delta_eps.toVector() - _error) / eps;
+            SE2 vj_eps(vj->estimate().toVector() + Vector3D(epsi[0], epsi[1], epsi[2]));
+            SE2 delta_eps = SE2(_measurement).inverse() * (vi->estimate().inverse() * vj_eps);
+            Vector3D Jj = (delta_eps.toVector() - _error) / eps;
             J2.block<3, 1>(0, j) = Jj;
         }
-        cout << "EdgeSE2Custom Jacobian 数值法 Xj = " << endl << J2 << endl;
+        cout << "PreEdgeSE2 Jacobian 数值法 Xj = " << endl << J2 << endl;
     }
     */
-
+#endif
 }
 
 }  // namespace g2o

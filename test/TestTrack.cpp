@@ -42,7 +42,7 @@ TestTrack::TestTrack()
     if (!bVocLoad)
         cerr << "[Track][Error] Wrong path to vocabulary, Falied to open it." << endl;
 
-    nMinFrames = min(3, cvCeil(0.3 * Config::FPS));  // 上溢
+    nMinFrames = min(2, cvCeil(0.3 * Config::FPS));  // 上溢
     nMaxFrames = cvFloor(5 * Config::FPS);  // 下溢
     nMinMatches = std::min(cvFloor(0.1 * Config::MaxFtrNumber), 40);
     mMaxAngle = static_cast<float>(g2o::deg2rad(80.));
@@ -97,12 +97,18 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
 
             // 每次Tracikng前先判断是否处于纯旋转状态
             const Se2 dOdom = mCurrentFrame.odom - mLastFrame.odom;
-            const Point2f dxy(dOdom.x, dOdom.y);
-            const bool bPureRotation = cv::norm(dxy) < 10.f && abs(dOdom.theta) > 0.1;  // [mm/rad]
+            const Point2f dxy = cv::norm(Point2f(dOdom.x, dOdom.y));
+            const float dt = abs(dOdom.theta);
+            const bool bPureRotation = dxy < 10.f && dt > 0.1;  // [mm/rad]
+            const bool bStop = dxy < 1e-3 && dxy < 1e-3;
             if (bPureRotation) {
-                mState = cvu::ROTATE;
+                mState = cvu::PURE_ROTATE;
                 printf("[Track][Info ] #%ld-#%ld 当前处于纯旋转状态! dx = %.2f, dtheta = %.2f\n",
-                       mCurrentFrame.id, mLastRefKFid, cv::norm(dxy), dOdom.theta);
+                       mCurrentFrame.id, mLastRefKFid, dxy, dt);
+            } else if (bStop) {
+                mState = cvu::STOP;
+                printf("[Track][Info ] #%ld-#%ld 当前处于[静止]状态! dx = %.2f, dtheta = %.2f\n",
+                       mCurrentFrame.id, mLastRefKFid, dxy, dt);
             } else {
                 mState = cvu::OK;
             }
@@ -127,18 +133,18 @@ void TestTrack::run(const cv::Mat& img, const Se2& odo, const double time)
 
             // 每次Tracikng前先判断是否处于纯旋转状态
             const Se2 dOdom = mCurrentFrame.odom - mLastFrame.odom;
-            const float dx = cv::norm(Point2f(dOdom.x, dOdom.y));
-            const float dt = abs(dOdom.theta);
-            const bool bPureRotation = dx < 1. && dt > 0.1;  // [mm/rad]
-            const bool bStop = dx < 1e-3 && dt < 1e-3;
+            const double dxy = cv::norm(Point2f(dOdom.x, dOdom.y));
+            const double dt = abs(dOdom.theta);
+            const bool bPureRotation = dxy < 1. && dt > 0.1;  // [mm/rad]
+            const bool bStop = dxy < 1e-3 && dt < 1e-3;
             if (bPureRotation) {
                 mState = cvu::PURE_ROTATE;
                 printf("[Track][Info ] #%ld-#%ld 当前处于[纯旋转]状态! dx = %.2f, dtheta = %.2f\n",
-                       mCurrentFrame.id, mLastRefKFid, dx, dt);
+                       mCurrentFrame.id, mLastRefKFid, dxy, dt);
             } else if (bStop) {
                 mState = cvu::STOP;
                 printf("[Track][Info ] #%ld-#%ld 当前处于[静止]状态! dx = %.2f, dtheta = %.2f\n",
-                       mCurrentFrame.id, mLastRefKFid, dx, dt);
+                       mCurrentFrame.id, mLastRefKFid, dxy, dt);
             } else {
                 mState = cvu::OK;
             }
@@ -339,8 +345,6 @@ int TestTrack::doTriangulate(PtrKeyFrame& pKF, Frame* frame)
     mnMPsNewAdded = 0;
     mnKPMatchesGood = 0;
 
-    if (mCurrentFrame.id > 72)
-        int a = 0;
     if (mvKPMatchIdx.empty()) {
         mnKPMatchesGood = mnKPsInline;
         return 0;
@@ -1551,14 +1555,17 @@ void TestTrack::loadLocalGraph(SlamOptimizer& optimizer) {
 #if USE_RK_DATASET
         //info.setIdentity();
         //info(2, 2) *= 1e6;
+        info *= 1e3;
 #else
         info.setIdentity();
         info(2, 2) *= 1e6;
 #endif
-        g2o::EdgeSE2* e = new g2o::EdgeSE2();
+        //g2o::EdgeSE2* e = new g2o::EdgeSE2();
+        g2o::PreEdgeSE2* e = new g2o::PreEdgeSE2();
         e->vertices()[0] = optimizer.vertex(idxi);
         e->vertices()[1] = optimizer.vertex(idxj);
-        e->setMeasurement(g2o::SE2(preOdom.meas));  // meas = vj - vi
+        //e->setMeasurement(g2o::SE2(preOdom.meas));  // meas = vj - vi
+        e->setMeasurement(preOdom.meas);
         e->setInformation(info);
         optimizer.addEdge(e);
 

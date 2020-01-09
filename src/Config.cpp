@@ -52,10 +52,10 @@ int Config::GlobalIterNum = 12;
 bool Config::LocalVerbose = false;
 bool Config::GlobalVerbose = false;
 
-float Config::OdoNoiseX = 1.0;
+float Config::OdoNoiseX = 1.0;      // 1mm
 float Config::OdoNoiseY = 1.0;
-float Config::OdoNoiseTheta = 1.0;
-float Config::OdoUncertainX = 0.01;
+float Config::OdoNoiseTheta = 3.49e-3;  // 0.2deg
+float Config::OdoUncertainX = 0.01; // 1%
 float Config::OdoUncertainY = 0.01;
 float Config::OdoUncertainTheta = 0.01;
 

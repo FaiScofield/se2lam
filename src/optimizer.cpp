@@ -31,14 +31,14 @@ void calcOdoConstraintCam(const Se2& dOdo, Mat& Tc1c2, g2o::Matrix6d& Info_se3)
 {
     const Mat& Tbc = Config::Tbc;
     const Mat& Tcb = Config::Tcb;
-    const Mat Tb1b2 = dOdo.toCvSE3();
+    const Mat Tb1b2 = dOdo.toCvSE3(); // [mm]
     Tc1c2 = Tcb * Tb1b2 * Tbc;
 
     //! Vector order: [trans, rot] 先平移后旋转
     // 不确定度(即协方差), 信息矩阵为其逆.
-    double dx = dOdo.x * Config::OdoUncertainX + Config::OdoNoiseX;
-    double dy = dOdo.y * Config::OdoUncertainY + Config::OdoNoiseY;
-    double dtheta = dOdo.theta * Config::OdoUncertainTheta + Config::OdoNoiseTheta;
+    double dx = std::max(dOdo.x * Config::OdoUncertainX, Config::OdoNoiseX);
+    double dy = std::max(dOdo.y * Config::OdoUncertainY, Config::OdoNoiseY);
+    double dtheta = std::max(dOdo.theta * Config::OdoUncertainTheta, Config::OdoNoiseTheta);
     g2o::Matrix6d Info_se3_bTb = g2o::Matrix6d::Zero();
 
     //! 信息矩阵. 由于单位是[mm], 平移部分要*1e-6. 旋转要在一个量级内, 故最后要*1e-4. 20200106

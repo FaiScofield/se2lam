@@ -95,8 +95,8 @@ private:
     Frame mCurrentFrame, mLastFrame;
     PtrKeyFrame mpReferenceKF, mpNewKF, mpLoopKF;
 
-    std::map<size_t, MPCandidate> mMPCandidates;  // 候选MP容器
-    std::map<int, int> mKPMatchesLoop;            // 和回环帧的BoW匹配情况
+    std::map<size_t, MPCandidate> mMPCandidates;    // 候选MP容器
+    std::map<int, int> mKPMatchesLoop;              // 和回环帧的BoW匹配情况
     std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;  // KP内点匹配对/三角化结果都好的匹配
     int mnMPsCandidate;                               // 潜在MP总数
     int mnKPMatches, mnKPsInline, mnKPMatchesGood;  // KP匹配对数/内点数/具有MP的KP匹配对数

@@ -48,7 +48,8 @@ public:
     unsigned long getCurrentFrameID() { return mCurrentFrame.id; }
     Se2 getCurrentFrameOdo() { return mCurrentFrame.odom; }
     cv::Mat getCurrentFramePose() { return mCurrentFrame.getPose(); }
-    void copyForPub();
+    void pubCurrentFrame();
+    void pubLoopFrame();
 
     bool isFinished();
     void requestFinish();
@@ -59,9 +60,12 @@ public:
     // Tracking states
     cvu::eTrackingState mState;
     cvu::eTrackingState mLastState;
+    std::string mImageText;
 
-    int N1 = 0, N2 = 0, N3 = 0;  // for debug print
-    double trackTimeTatal = 0.;
+    // for debug print
+    unsigned long mLastRefKFid = 0;
+    double trackTimeTatal = 0;
+    int N1 = 0, N2 = 0, N3 = 0;
 
 private:
     void processFirstFrame();
@@ -70,18 +74,19 @@ private:
     void updateFramePoseFromRef();
 
     void doTriangulate(PtrKeyFrame& pKF);
-    void resetLocalTrack();
-    bool needNewKF();
+    void resetTrackingData(bool newKFInserted);
+    void newKFDecision();
+    bool needNewKFForLastFrame();
+    bool needNewKFForCurrentFrame();
     void addNewKF();
 
     // Relocalization
-    bool detectIfLost();
-    bool detectIfLost(int cros, double projError);
-
     bool doRelocalization();
-    bool detectLoopClose();
-    bool verifyLoopClose();
-    void doLocalBA(Frame& pKF);
+    bool detectIfLost(Frame& f, const cv::Mat& Tcw_opt);
+    bool detectLoopClose(Frame* frame, std::vector<PtrKeyFrame>& vpKFsCand);
+    bool verifyLoopClose(Frame* frame, const std::vector<PtrKeyFrame>& vpKFsCand);
+    bool optimizeLoopClose(Frame* frame, cv::Mat& optPose);
+    cv::Mat poseOptimize(Frame* pFrame);
     void startNewTrack();
 
     void checkReady();
@@ -89,11 +94,8 @@ private:
     void setFinish();
 
 private:
-    static bool mbUseOdometry;  //! TODO 冗余变量
-    bool mbPrint;
     bool mbNeedVisualization;
     bool mbRelocalized;  // 成功重定位标志
-    std::string mImageText;
 
     // set in OdoSLAM class
     Map* mpMap;
@@ -101,7 +103,6 @@ private:
     GlobalMapper* mpGlobalMapper;
     Sensors* mpSensors;
     MapPublish* mpMapPublisher;
-
     ORBextractor* mpORBextractor;  // 这里有new
     ORBmatcher* mpORBmatcher;  // 这里有new
 
@@ -112,21 +113,20 @@ private:
     std::map<size_t, MPCandidate> mMPCandidates;  // 参考帧的MP候选, 在LocalMap线程中会生成真正的MP
     std::map<int, int> mKPMatchesLoop;  // 重定位回环中通过BoW匹配的KP匹配对
     std::vector<int> mvKPMatchIdx, mvKPMatchIdxGood;  // Matches12, 参考帧到当前帧的KP匹配索引. Good指有对应的MP
-    int mnMPsNewAdded, mnMPsCandidate, mnKPMatchesBad;  // 新增/潜在的MP数及不好的匹配点数
-    int mnKPMatches, mnKPsInline, mnMPsInline, mnMPsTracked;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
-    int mnLostFrames;  // 连续追踪失败的帧数
+    int mnMPsCandidate;
+    int mnMPsTracked, mnMPsNewAdded, mnMPsInline;  // 新增/潜在的MP数及不好的匹配点数
+    int mnKPMatches, mnKPsInline, mnKPMatchesGood;  // 匹配内点数/三角化丢弃后的内点数/关联上参考帧MP数
+    int mnLostFrames, mnLessMatchFrames;  // 连续追踪失败的帧数
     double mLoopScore;
 
     // New KeyFrame rules (according to fps)
     int nMinFrames, nMaxFrames, nMinMatches;
-    float mMaxAngle, mMaxDistance;
-    float mCurrRatioGoodDepth, mCurrRatioGoodParl;
-    float mLastRatioGoodDepth, mLastRatioGoodParl;
+    float mMaxAngle, mMinDistance;
 
     cv::Mat mAffineMatrix;  // A12
 
     // preintegration on SE2
-    PreSE2 preSE2;
+    PreSE2 mPreSE2;
 
     bool mbFinishRequested;
     bool mbFinished;
