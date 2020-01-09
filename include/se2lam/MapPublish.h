@@ -23,6 +23,7 @@ class Map;
 class MapPublish
 {
 public:
+    MapPublish();
     MapPublish(Map* pMap);
     ~MapPublish();
 
@@ -55,21 +56,20 @@ public:
     Localizer* mpLocalizer;
 
     // for visulization
-    bool mbFrontUpdated;
+    bool mbFrontEndUpdated;
     unsigned long mnCurrentFrameID;
     cv::Mat mCurrentFramePose;
     cv::Mat mCurrentImage, mReferenceImage;
-
     cv::Mat mAffineMatrix, mHomography;
     std::vector<cv::KeyPoint> mvCurrentKPs, mvReferenceKPs;
     std::vector<int> mvMatchIdx, mvMatchIdxGood;
-    std::string mFrontText;
+    std::string mFrontImageText;
 
-    bool mbBackUpdated;
+    bool mbBackEndUpdated;
     PtrKeyFrame mpKFCurr, mpKFLoop;
     std::map<int, int> mMatchLoop;
     cv::Mat mLoopImageMatch;
-    std::string mBackText;
+    std::string mBackImageText;
     std::mutex mMutexUpdate;
 
 private:

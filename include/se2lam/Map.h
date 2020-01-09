@@ -96,10 +96,11 @@ public:
     //! Update feature constraint graph, on KFs pairs given by LocalMapper
     bool UpdateFeatGraph(const PtrKeyFrame& _pKF);
 
-    bool mbNewKFInserted;  // for visualizaiton.
+    bool mbKFUpdated, mbMPUpdated; // for visualizaiton.
 
 protected:
     PtrKeyFrame mCurrentKF;
+    cv::Mat mCurrentFramePose;  // Tcw
 
     bool isEmpty;
 
@@ -112,8 +113,6 @@ protected:
     std::vector<PtrKeyFrame> mLocalGraphKFs;
     std::vector<PtrKeyFrame> mLocalRefKFs;
     LocalMapper* mpLocalMapper;
-
-    cv::Mat mCurrentFramePose;
 
     std::mutex mMutexGlobalGraph;
     std::mutex mMutexLocalGraph;

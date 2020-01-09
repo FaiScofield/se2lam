@@ -6,8 +6,15 @@ Makefile
 odoslam.cbp
 CMakeLists.txt.user
 Makefile
+*build/
+*lib/
 Thirdparty/
-*.bag
-**/*voc.bin
+dependencies/
+.vscode/
 _clang-format
+*.bag
 *.rviz
+*.bag
+*.bin
+*.so
+*.a

@@ -398,6 +398,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
     return nmatches;
 }
 
+//! vbPrevMatched 应该要乘以参考帧到上一帧的仿射变换
 int ORBmatcher::MatchByWindow(const Frame &frame1, Frame &frame2,
                               vector<Point2f> &vbPrevMatched, const int winSize,  vector<int> &vnMatches12,
                               const int levelOffset, const int minLevel, const int maxLevel) {

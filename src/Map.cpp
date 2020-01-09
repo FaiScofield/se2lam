@@ -24,7 +24,8 @@ typedef lock_guard<mutex> locker;
 Map::Map() : mCurrentKF(nullptr), isEmpty(true), mpLocalMapper(nullptr)
 {
     mCurrentFramePose = Mat::eye(4, 4, CV_32FC1);
-    mbNewKFInserted = false;
+    mbKFUpdated = false;
+    mbMPUpdated = false;
 }
 Map::~Map() {}
 
@@ -75,29 +76,46 @@ void Map::clear()
 void Map::insertKF(const PtrKeyFrame& pkf)
 {
     locker lock(mMutexGlobalGraph);
-    mKFs.insert(pkf);
     // pkf->setMap(this);
+    mKFs.insert(pkf);
     mCurrentKF = pkf;
     isEmpty = false;
-    mbNewKFInserted = true;
+    mbKFUpdated = true;
 }
 
 void Map::insertMP(const PtrMapPoint& pmp)
 {
     locker lock(mMutexGlobalGraph);
+    // pMP->setMap(this);
     mMPs.insert(pmp);
+    mbMPUpdated = true;
 }
 
 void Map::eraseKF(const PtrKeyFrame& pKF)
 {
     locker lock(mMutexGlobalGraph);
-    mKFs.erase(pKF);
+    if (mKFs.erase(pKF))
+        mbKFUpdated = true;
+
+    locker lock2(mMutexLocalGraph);
+    auto iter1 = find(mLocalGraphKFs.begin(), mLocalGraphKFs.end(), pKF);
+    if (iter1 != mLocalGraphKFs.end())
+        mLocalGraphKFs.erase(iter1);
+    auto iter2 = find(mLocalRefKFs.begin(), mLocalRefKFs.end(), pKF);
+    if (iter2 != mLocalRefKFs.end())
+        mLocalRefKFs.erase(iter2);
 }
 
 void Map::eraseMP(const PtrMapPoint& pMP)
 {
     locker lock(mMutexGlobalGraph);
-    mMPs.erase(pMP);
+    if (mMPs.erase(pMP))
+        mbMPUpdated = true;
+
+    locker lock2(mMutexLocalGraph);
+    auto iter = find(mLocalGraphMPs.begin(), mLocalGraphMPs.end(), pMP);
+    if (iter != mLocalGraphMPs.end())
+        mLocalGraphMPs.erase(iter);
 }
 
 Mat Map::getCurrentFramePose()
@@ -163,12 +181,12 @@ void Map::mergeMP(PtrMapPoint& toKeep, PtrMapPoint& toDelete)
     }
 
     toDelete->mergedInto(toKeep);
-    mMPs.erase(toDelete);
+    if (mMPs.erase(toDelete))
+        mbMPUpdated = true;
 
     auto it = std::find(mLocalGraphMPs.begin(), mLocalGraphMPs.end(), toDelete);
-    if (it != mLocalGraphMPs.end()) {
+    if (it != mLocalGraphMPs.end())
         *it = toKeep;
-    }
 }
 
 void Map::setLocalMapper(LocalMapper* pLocalMapper)
@@ -1023,8 +1041,8 @@ void Map::loadLocalGraph(SlamOptimizer& optimizer)
         const int id1 = it - mLocalGraphKFs.begin();
         {
             Eigen::Map<Eigen::Matrix3d, RowMajor> info(meas.cov);
-            // addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
-            addEdgeSE2_g2o(optimizer, Vector3D(meas.meas), i, id1, info);
+            addEdgeSE2(optimizer, Vector3D(meas.meas), i, id1, info);
+            //addEdgeSE2_g2o(optimizer, Vector3D(meas.meas), i, id1, info);
         }
     }
 

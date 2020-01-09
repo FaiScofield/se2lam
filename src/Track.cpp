@@ -123,7 +123,6 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);
         mpMap->insertKF(mpReferenceKF);
 
-
         // reset
         KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
         mLastFrame = mCurrentFrame;
@@ -149,8 +148,9 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
     UpdateFramePose();
 
-    //int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
-    mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
+    //! TODO mPrevMatched 应该是 refKF的KPs 应用了"到lastFrame的仿射变换A"后的预测点位置. 相当于先验了. 起的效果跟MatchByWindowWarp()应该是一致的!  mPrevMatched可以再乘上通过odom算出来的旋转, 会更精确
+    mnKPMatches = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 25, mvKPMatchIdx);
+//    mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
     mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
     // Check parallax and do triangulation
@@ -185,7 +185,7 @@ void Track::UpdateFramePose()
     Matrix3d Sigma_vk = Matrix3d::Identity();
     Sigma_vk(0, 0) = (Config::OdoNoiseX * Config::OdoNoiseX);
     Sigma_vk(1, 1) = (Config::OdoNoiseY * Config::OdoNoiseY);
-    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta);
+    Sigma_vk(2, 2) = (Config::OdoNoiseTheta * Config::OdoNoiseTheta) * 1e6;
     Matrix3d Sigma_k_1 = Ak * Sigmak * Ak.transpose() + Bk * Sigma_vk * Bk.transpose();
     Sigmak = Sigma_k_1;
 }
