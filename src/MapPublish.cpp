@@ -25,10 +25,18 @@ using namespace std;
 typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
-    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mPointSize(Config::PointSize),
-      mCameraSize(Config::CameraSize), mScaleRatio(Config::MappubScaleRatio),
-      mbFinishRequested(false), mbFinished(false)
+    : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mpTracker(nullptr), mpLocalMapper(nullptr),
+      mpLocalizer(nullptr), mbFrontEndUpdated(false), mbBackEndUpdated(false), mPointSize(0.1f),
+      mCameraSize(0.3f), mScaleRatio(300), mbFinishRequested(false), mbFinished(false)
 {
+    if (Config::PointSize > 0)
+        mPointSize = Config::PointSize;
+    if (Config::PointSize > 0)
+        mCameraSize = Config::CameraSize;
+    if (Config::MappubScaleRatio > 0)
+        mScaleRatio = Config::MappubScaleRatio;
+
+
     const char* MAP_FRAME_ID = "/se2lam/World";
     const double kfScale = 0.05;  // 0.1
 
@@ -230,9 +238,9 @@ void MapPublish::run()
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
 
-    Size s = Config::ImgSize;
-    s.width *= 2;
-    Mat imgLoop = Mat::zeros(s, CV_8UC3);
+    Size imgSize = Config::ImgSize;
+    imgSize.width *= 2;
+    Mat imgLoop = Mat::zeros(imgSize, CV_8UC3);
     ros::Rate rate(Config::FPS * 3);
     while (nh.ok()) {
         if (checkFinish())
