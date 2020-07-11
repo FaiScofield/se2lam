@@ -1,8 +1,8 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+ */
 
 #include "GlobalMapper.h"
 #include "Config.h"
@@ -227,9 +227,8 @@ bool GlobalMapper::DetectLoopClose()
     if (pKFBest != NULL && scoreBest > minScoreBest) {
         mpKFLoop = pKFBest;
         bDetected = true;
-        cout << "[Globa][Info ] #" << pKFCurr->id << "(KF#" << pKFCurr->mIdKF
-             << ") 重定位, 检测到回环(KF#" << mpKFLoop->mIdKF << ")! score = " << scoreBest
-             << ", 等待验证!" << endl;
+        cout << "[Globa][Info ] #" << pKFCurr->id << "(KF#" << pKFCurr->mIdKF << ") 重定位, 检测到回环(KF#"
+             << mpKFLoop->mIdKF << ")! score = " << scoreBest << ", 等待验证!" << endl;
     } else {
         mpKFLoop.reset();
     }
@@ -760,9 +759,10 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
 {
     vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>> vSe3KFs;
     vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>> vPt3MPs;
+    set<int> sIdMPin1Outlier;
 
     //! Optimize Local Graph with Only 2 KFs and MPs matched, and remove outlier by 3D measurements
-    OptKFPairMatch(_pKFFrom, _pKFTo, mapMatch, vSe3KFs, vPt3MPs);
+    OptKFPairMatch(_pKFFrom, _pKFTo, mapMatch, vSe3KFs, vPt3MPs, sIdMPin1Outlier);
     if (mapMatch.size() < 3) {
         return 1;
     }
@@ -772,6 +772,8 @@ int GlobalMapper::CreateFeatEdge(PtrKeyFrame _pKFFrom, PtrKeyFrame _pKFTo, map<i
 
     int count = 0;
     for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+        if (sIdMPin1Outlier.count(iter->first))
+            continue;
 
         int idxMPin1 = iter->first;
         //        PtrMapPoint pMPin1 = _pKFFrom->mDualObservations[idxMPin1];
@@ -902,7 +904,8 @@ void GlobalMapper::OptKFPair(const vector<PtrKeyFrame>& _vPtrKFs, const vector<P
 
 void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int, int>& mapMatch,
                                   vector<g2o::SE3Quat, Eigen::aligned_allocator<g2o::SE3Quat>>& _vSe3KFs,
-                                  vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs)
+                                  vector<g2o::Vector3D, Eigen::aligned_allocator<g2o::Vector3D>>& _vPt3MPs,
+                                  set<int>& sIdMPin1Outlier)
 {
     // Init optimizer
     SlamOptimizer optimizer;
@@ -964,7 +967,7 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
 
     // Remove outliers by checking 3D measurement error
     double dThreshChi2 = 5.0;
-    set<int> sIdMPin1Outlier;
+    // set<int> sIdMPin1Outlier;
 
     for (auto it = optimizer.edges().begin(); it != optimizer.edges().end(); it++) {
         g2o::EdgeSE3PointXYZ* pEdge = static_cast<g2o::EdgeSE3PointXYZ*>(*it);
@@ -979,16 +982,10 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
         }
     }
 
-    if (Config::GlobalPrint) {
+    if (Config::GLOBAL_PRINT) {
         cerr << "## DEBUG GM: "
              << "Find " << sIdMPin1Outlier.size() << " outliers by 3D MP to KF measurements." << endl;
     }
-
-    for (auto it = sIdMPin1Outlier.begin(); it != sIdMPin1Outlier.end(); it++) {
-        int idMatch = *it;
-        mapMatch.erase(idMatch);
-    }
-    numMatch = mapMatch.size();
 
     // Return optimize results
     _vSe3KFs.clear();
@@ -998,10 +995,20 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
     }
 
     _vPt3MPs.clear();
-    for (int j = 0; j < numMatch; j++) {
-        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j + 2);
+    vertexId = 1;
+    for (auto iter = mapMatch.begin(); iter != mapMatch.end(); iter++) {
+        vertexId++;
+        if (sIdMPin1Outlier.count(iter->first))
+            continue;
+        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, vertexId);
         _vPt3MPs.push_back(Pt3MPj);
     }
+    /*
+    for (int j=0; j<numMatch; j++) {
+        g2o::Vector3D Pt3MPj = estimateVertexXYZ(optimizer, j+2);
+        _vPt3MPs.push_back(Pt3MPj);
+    }
+    */
 }
 
 void GlobalMapper::PrintSE3(const g2o::SE3Quat se3)
@@ -1279,7 +1286,7 @@ set<PtrKeyFrame> GlobalMapper::GetAllConnectedKFs_nLayers(const PtrKeyFrame _pKF
                                                           set<PtrKeyFrame> _sKFSelected)
 {
 
-    set<PtrKeyFrame> sKFLocal;  // Set of KFs whose distance from _pKF smaller than maxDist
+    set<PtrKeyFrame> sKFLocal;   // Set of KFs whose distance from _pKF smaller than maxDist
     set<PtrKeyFrame> sKFActive;  // Set of KFs who are active for next loop;
     sKFActive.insert(_pKF);
 

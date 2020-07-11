@@ -68,7 +68,7 @@ public:
     void stop()
     {
         tickEnd = cv::getTickCount();
-        time = (tickEnd - tickBegin) * 1000. / cv::getTickFrequency();  // [ms]
+        time = double(tickEnd - tickBegin) * 1000.0 / cv::getTickFrequency();  // [ms]
     }
 
     double count()
