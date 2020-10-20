@@ -16,8 +16,9 @@
 #include <opencv2/features2d/features2d.hpp>
 
 namespace se2lam{
-class KeyFrame;
 
+class Map;
+class KeyFrame;
 typedef std::shared_ptr<KeyFrame> PtrKeyFrame;
 
 class MapPoint
@@ -26,6 +27,14 @@ public:
     MapPoint();
     MapPoint(cv::Point3f pos, bool goodPrl);
     ~MapPoint();
+
+    struct IdLessThan{
+        bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const {
+            return lhs->mId < rhs->mId;
+        }
+    };
+
+    void setMap(Map* pMap) { mpMap = pMap; }
 
     std::set<PtrKeyFrame> getObservations();
 
@@ -56,7 +65,9 @@ public:
     PtrKeyFrame mMainKF;
     int mMainOctave;
     float mLevelScaleFactor;
+
     cv::Point2f getMainMeasure();
+
     void updateMainKFandDescriptor();
 
     bool acceptNewObserve(cv::Point3f posKF, const cv::KeyPoint kp);
@@ -65,16 +76,6 @@ public:
 
     void updateMeasureInKFs();
 
-    int mId;
-    static int mNextId;
-
-    struct IdLessThan{
-        bool operator() (const std::shared_ptr<MapPoint>& lhs, const std::shared_ptr<MapPoint>& rhs) const{
-            return lhs->mId < rhs->mId;
-        }
-    };
-
-
     void revisitFailCount();
 
     // This MP would be replaced and abandoned later by
@@ -82,12 +83,18 @@ public:
 
     int getFtrIdx(PtrKeyFrame pKF);
 
+    int mId;
+    static int mNextId;
+
 protected:
+    void setNull();
+
+    Map* mpMap;
+
     std::map<PtrKeyFrame, int> mObservations;
 
     cv::Point3f mPos;
 
-    void setNull();
     bool mbNull;
     bool mbGoodParallax;
 
@@ -99,7 +106,6 @@ protected:
 
     std::mutex mMutexPos;
     std::mutex mMutexObs;
-
 };
 
 typedef std::shared_ptr<MapPoint> PtrMapPoint;

@@ -80,6 +80,8 @@ std::string Config::WriteTrajFileName = "se2lam.traj";
 
 bool Config::NeedVisualization = true;
 int Config::MappubScaleRatio = 300;
+float Config::CameraSize = 0.3;
+float Config::PointSize = 0.15;
 
 cv::Mat Config::PrjMtrxEye;
 float Config::ThDepthFilter;  //! TODO
@@ -195,6 +197,8 @@ void Config::readConfig(const std::string& path)
 
     settings["need_visulization"] >> NeedVisualization;
     settings["mappub_scale_ratio"] >> MappubScaleRatio;
+    settings["camera_size"] >> CameraSize;
+    settings["point_size"] >> PointSize;
 
     PrjMtrxEye = Kcam * cv::Mat::eye(3, 4, CV_32FC1);
     settings["depth_filter_thresh"] >> ThDepthFilter;
@@ -251,8 +255,10 @@ void Config::checkParamValidity()
               << " - Map file name(read): " << ReadMapFileName << std::endl
               << " - Map file name(write): " << WriteMapFileName << std::endl
               << " - Trajectory file name(write): " << WriteTrajFileName << std::endl
-              << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
               << " - Need visulization: " << NeedVisualization << std::endl
+              << " - Mappub scale ratio: " << MappubScaleRatio << std::endl
+              << " - Camera size for visulization: " << CameraSize << std::endl
+              << " - Point size for visulization: " << PointSize << std::endl
               << " - Local print(debug): " << LocalPrint << std::endl
               << " - Global print(debug): " << GlobalPrint << std::endl
               << " - Save match images(debug): " << SaveMatchImage << std::endl
@@ -282,6 +288,8 @@ void Config::checkParamValidity()
     assert(LocalFrameSearchLevel > 0);
     assert(LocalFrameSearchRadius > 0.f);
     assert(MappubScaleRatio >= 1);
+    assert(CameraSize > 0.f);
+    assert(PointSize > 0.f);
 }
 
 Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.) {}
@@ -331,6 +339,11 @@ Se2& Se2::operator=(const Se2& that)
     timeStamp = that.timeStamp;
 
     return *this;
+}
+
+Se2 Se2::operator*(double scale) const
+{
+    return Se2(x*scale, y*scale, theta, timeStamp);
 }
 
 cv::Mat Se2::toCvSE3() const

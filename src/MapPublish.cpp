@@ -11,7 +11,7 @@
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <sensor_msgs/Image.h>
-#include <opencv2/highgui/highgui.hpp>
+//#include <opencv2/highgui/highgui.hpp>
 
 namespace se2lam
 {
@@ -22,58 +22,80 @@ typedef unique_lock<mutex> locker;
 
 MapPublish::MapPublish(Map* pMap)
     : mbIsLocalize(Config::LocalizationOnly), mpMap(pMap), mpTracker(nullptr), mpLocalMapper(nullptr),
-      mpLocalizer(nullptr), mbFrontUpdated(false), mbBackUpdated(false), mPointSize(0.2f),
-      mCameraSize(0.5f), mScaleRatio(Config::MappubScaleRatio), mbFinishRequested(false), mbFinished(false)
+      mpLocalizer(nullptr), mbFrontEndUpdated(false), mbBackEndUpdated(false), mPointSize(0.1f),
+      mCameraSize(0.3f), mScaleRatio(300), mbFinishRequested(false), mbFinished(false)
 {
+    if (Config::PointSize > 0)
+        mPointSize = Config::PointSize;
+    if (Config::PointSize > 0)
+        mCameraSize = Config::CameraSize;
+    if (Config::MappubScaleRatio > 0)
+        mScaleRatio = Config::MappubScaleRatio;
+
     const char* MAP_FRAME_ID = "/se2lam/World";
+    const double kfScale = 0.05;  // 0.1
 
     // Global (Negtive) KFs, black
     mKFsNeg.header.frame_id = MAP_FRAME_ID;
     mKFsNeg.ns = "KeyFramesNegative";
     mKFsNeg.id = 0;
     mKFsNeg.type = visualization_msgs::Marker::LINE_LIST;
-    mKFsNeg.scale.x = 0.1;
+    mKFsNeg.action = visualization_msgs::Marker::ADD;
+    mKFsNeg.scale.x = kfScale;
     // mKFsNeg.scale.y = 0.1;
     mKFsNeg.pose.orientation.w = 1.0;
-    mKFsNeg.action = visualization_msgs::Marker::ADD;
     mKFsNeg.color.r = 0.0;
     mKFsNeg.color.g = 0.0;
     mKFsNeg.color.b = 0.0;
-    mKFsNeg.color.a = 0.5;
+    mKFsNeg.color.a = 1.0;
 
     // Local (Active) KFs, blue
     mKFsAct.header.frame_id = MAP_FRAME_ID;
     mKFsAct.ns = "KeyFramesActive";
     mKFsAct.id = 1;
     mKFsAct.type = visualization_msgs::Marker::LINE_LIST;
-    mKFsAct.scale.x = 0.1;
+    mKFsAct.action = visualization_msgs::Marker::ADD;
+    mKFsAct.scale.x = kfScale;
     // mKFsAct.scale.y = 0.1;
     mKFsAct.pose.orientation.w = 1.0;
-    mKFsAct.action = visualization_msgs::Marker::ADD;
     mKFsAct.color.b = 1.0;
-    mKFsAct.color.a = 0.5;
+    mKFsAct.color.a = 1.0;
+
+    // Local Reference (Fixed) KFs, purple
+    mKFsFix.header.frame_id = MAP_FRAME_ID;
+    mKFsFix.ns = "KeyFramesFixed";
+    mKFsFix.id = 2;
+    mKFsFix.type = visualization_msgs::Marker::LINE_LIST;
+    mKFsFix.action = visualization_msgs::Marker::ADD;
+    mKFsFix.scale.x = kfScale;
+    // mKFsFix.scale.y = kfScale;
+    mKFsFix.pose.orientation.w = 1.0;
+    mKFsFix.color.r = 1.0;
+    mKFsFix.color.b = 1.0;
+    mKFsFix.color.a = 1.0;
 
     // Configure Current Camera, red
     mKFNow.header.frame_id = MAP_FRAME_ID;
     mKFNow.ns = "Camera";
-    mKFNow.id = 2;
+    mKFNow.id = 3;
     mKFNow.type = visualization_msgs::Marker::LINE_LIST;
-    mKFNow.scale.x = 0.1;
+    mKFNow.action = visualization_msgs::Marker::ADD;
+    mKFNow.scale.x = kfScale;
     // mKFNow.scale.y = 0.1;
     mKFNow.pose.orientation.w = 1.0;
-    mKFNow.action = visualization_msgs::Marker::ADD;
+
     mKFNow.color.r = 1.0;
     mKFNow.color.a = 1.0;
 
     // Configure MPs not in local map, black
     mMPsNeg.header.frame_id = MAP_FRAME_ID;
     mMPsNeg.ns = "MapPointsNegative";
-    mMPsNeg.id = 3;
+    mMPsNeg.id = 4;
     mMPsNeg.type = visualization_msgs::Marker::POINTS;
+    mMPsNeg.action = visualization_msgs::Marker::ADD;
     mMPsNeg.scale.x = mPointSize;
     mMPsNeg.scale.y = mPointSize;
     mMPsNeg.pose.orientation.w = 1.0;
-    mMPsNeg.action = visualization_msgs::Marker::ADD;
     mMPsNeg.color.r = 0.0;
     mMPsNeg.color.g = 0.0;
     mMPsNeg.color.b = 0.0;
@@ -82,12 +104,12 @@ MapPublish::MapPublish(Map* pMap)
     // Configure MPs in local map, blue
     mMPsAct.header.frame_id = MAP_FRAME_ID;
     mMPsAct.ns = "MapPointsActive";
-    mMPsAct.id = 4;
+    mMPsAct.id = 5;
     mMPsAct.type = visualization_msgs::Marker::POINTS;
+    mMPsAct.action = visualization_msgs::Marker::ADD;
     mMPsAct.scale.x = mPointSize;
     mMPsAct.scale.y = mPointSize;
     mMPsAct.pose.orientation.w = 1.0;
-    mMPsAct.action = visualization_msgs::Marker::ADD;
     mMPsAct.color.r = 0.0;
     mMPsAct.color.g = 0.0;
     mMPsAct.color.b = 1.0;
@@ -96,12 +118,12 @@ MapPublish::MapPublish(Map* pMap)
     // Configure MPs currently observed, red
     mMPsNow.header.frame_id = MAP_FRAME_ID;
     mMPsNow.ns = "MapPointsNow";
-    mMPsNow.id = 5;
+    mMPsNow.id = 6;
     mMPsNow.type = visualization_msgs::Marker::POINTS;
+    mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.scale.x = mPointSize * 1.5f;
     mMPsNow.scale.y = mPointSize * 1.5f;
     mMPsNow.pose.orientation.w = 1.0;
-    mMPsNow.action = visualization_msgs::Marker::ADD;
     mMPsNow.color.r = 1.0;
     mMPsNow.color.g = 0.0;
     mMPsNow.color.b = 0.0;
@@ -110,12 +132,12 @@ MapPublish::MapPublish(Map* pMap)
     // Configure Covisibility Graph
     mCovisGraph.header.frame_id = MAP_FRAME_ID;
     mCovisGraph.ns = "CovisGraph";
-    mCovisGraph.id = 6;
+    mCovisGraph.id = 7;
     mCovisGraph.type = visualization_msgs::Marker::LINE_LIST;
+    mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.scale.x = 0.03;
     // mCovisGraph.scale.y = 0.03;
     mCovisGraph.pose.orientation.w = 1.0;
-    mCovisGraph.action = visualization_msgs::Marker::ADD;
     mCovisGraph.color.r = 0.0;
     mCovisGraph.color.g = 1.0;
     mCovisGraph.color.b = 0.0;
@@ -124,26 +146,26 @@ MapPublish::MapPublish(Map* pMap)
     // Configure Feature Constraint Graph
     mFeatGraph.header.frame_id = MAP_FRAME_ID;
     mFeatGraph.ns = "FeatGraph";
-    mFeatGraph.id = 7;
+    mFeatGraph.id = 8;
     mFeatGraph.type = visualization_msgs::Marker::LINE_LIST;
-    mFeatGraph.scale.x = 0.03;
+    mFeatGraph.action = visualization_msgs::Marker::ADD;
+    mFeatGraph.scale.x = 0.08;
     // mFeatGraph.scale.y = 0.03;
     mFeatGraph.pose.orientation.w = 1.0;
-    mFeatGraph.action = visualization_msgs::Marker::ADD;
     mFeatGraph.color.r = 0.0;
     mFeatGraph.color.g = 0.0;
     mFeatGraph.color.b = 1.0;
-    mFeatGraph.color.a = 0.5;
+    mFeatGraph.color.a = 1.0;
 
     // Configure Odometry Constraint Graph, black
     mVIGraph.header.frame_id = MAP_FRAME_ID;
     mVIGraph.ns = "VIGraph";
-    mVIGraph.id = 8;
+    mVIGraph.id = 9;
     mVIGraph.type = visualization_msgs::Marker::LINE_LIST;
+    mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.scale.x = 0.06;
     // mVIGraph.scale.y = 0.06;
     mVIGraph.pose.orientation.w = 1.0;
-    mVIGraph.action = visualization_msgs::Marker::ADD;
     mVIGraph.color.r = 0.0;
     mVIGraph.color.g = 0.0;
     mVIGraph.color.b = 0.0;
@@ -152,7 +174,7 @@ MapPublish::MapPublish(Map* pMap)
     // Configure Odometry Raw Graph, light red
     mOdomRawGraph.header.frame_id = MAP_FRAME_ID;
     mOdomRawGraph.ns = "OdomRawGraph";
-    mOdomRawGraph.id = 9;
+    mOdomRawGraph.id = 10;
     mOdomRawGraph.type = visualization_msgs::Marker::LINE_LIST;
     mOdomRawGraph.action = visualization_msgs::Marker::ADD;
     mOdomRawGraph.scale.x = 0.05;
@@ -166,21 +188,21 @@ MapPublish::MapPublish(Map* pMap)
     // Cofigure MPs with no good Parallax, purple
     mMPsNoGoodPrl.header.frame_id = MAP_FRAME_ID;
     mMPsNoGoodPrl.ns = "MapPointsNoGoodParallax";
-    mMPsNoGoodPrl.id = 10;
+    mMPsNoGoodPrl.id = 11;
     mMPsNoGoodPrl.type = visualization_msgs::Marker::POINTS;
+    mMPsNoGoodPrl.action = visualization_msgs::Marker::ADD;
     mMPsNoGoodPrl.scale.x = 0.08;
     mMPsNoGoodPrl.scale.y = 0.08;
     mMPsNoGoodPrl.pose.orientation.w = 1.0;
-    mMPsNoGoodPrl.action = visualization_msgs::Marker::ADD;
     mMPsNoGoodPrl.color.r = 1.0;
-    mMPsNoGoodPrl.color.g = 0.1;
+    mMPsNoGoodPrl.color.g = 0.2;
     mMPsNoGoodPrl.color.b = 1.0;
     mMPsNoGoodPrl.color.a = 0.8;
 
     if (Config::ShowGroundTruth) {
         mGroundTruthGraph.header.frame_id = MAP_FRAME_ID;
         mGroundTruthGraph.ns = "GTGraph";
-        mGroundTruthGraph.id = 11;
+        mGroundTruthGraph.id = 12;
         mGroundTruthGraph.type = visualization_msgs::Marker::LINE_LIST;
         mGroundTruthGraph.scale.x = 0.06;
         // mGroundTruthGraph.scale.y = 0.06;
@@ -201,6 +223,7 @@ MapPublish::MapPublish(Map* pMap)
 
     publisher.publish(mKFsNeg);
     publisher.publish(mKFsAct);
+    publisher.publish(mKFsFix);
     publisher.publish(mKFNow);
 
     publisher.publish(mMPsNeg);
@@ -222,9 +245,7 @@ MapPublish::MapPublish(Map* pMap)
 }
 
 MapPublish::~MapPublish()
-{
-}
-
+{}
 
 void MapPublish::run()
 {
@@ -266,38 +287,50 @@ void MapPublish::run()
     image_transport::ImageTransport it(nh);
     image_transport::Publisher pub = it.advertise("/camera/framepub", 1);
 
-    ros::Rate rate(Config::FPS * 2);
+    Size imgSize = Config::ImgSize;
+    imgSize.width *= 2;
+    Mat imgLoop = Mat::zeros(imgSize, CV_8UC3);
+    ros::Rate rate(Config::FPS * 3);
     while (nh.ok()) {
         if (checkFinish())
             break;
-        if (mpMap->empty())
-            continue;
-        if (!mbFrontUpdated)
-            continue;
-        mbFrontUpdated = false;
 
-        Mat imgShow;
-        Mat imgUp = drawCurrentFrameMatches();
-        if (mbBackUpdated && mpKFLoop != nullptr && !mpKFLoop->isNull() && !mpKFCurr->isNull()) {
-            mLoopImageMatch = drawLoopCloseMatches();
-            mbBackUpdated = false;
-            mpKFLoop = nullptr;
+        if (mpMap->empty()) {
+            rate.sleep();
+            continue;
         }
-        vconcat(imgUp, mLoopImageMatch, imgShow);
+
+        if (!mbFrontEndUpdated) {  // Tracker/Localizer 更新此标志
+            rate.sleep();
+            continue;
+        }
+        mbFrontEndUpdated = false;
+
+        Mat imgMatch = drawCurrentFrameMatches();
+        if (mbBackEndUpdated && mpKFLoop != nullptr && !mpKFLoop->isNull() && !mpKFCurr->isNull()) {
+            imgLoop = drawLoopCloseMatches();
+            mbBackEndUpdated = false;
+            mpKFLoop.reset();
+        }
+        Mat imgShow;
+        vconcat(imgMatch, imgLoop, imgShow);
         sensor_msgs::ImagePtr msgShow = cv_bridge::CvImage(std_msgs::Header(), "bgr8", imgShow).toImageMsg();
         pub.publish(msgShow);
 
         // debug 存下match图片
         if (Config::SaveMatchImage) {
             string fileName = Config::MatchImageStorePath + to_string(mnCurrentFrameID) + ".jpg";
-            imwrite(fileName, imgShow);
+            imwrite(fileName, imgMatch);
         }
 
         publishCameraCurr(cvu::inv(mCurrentFramePose));
         publishOdomInformation();
-        if (mpMap->mbNewKFInserted) {  // Map不变时没必要重复显示
-            mpMap->mbNewKFInserted = false;
+        if (mpMap->mbKFUpdated) {  // Map不变时没必要重复显示
+            mpMap->mbKFUpdated = false;
             publishKeyFrames();
+        }
+        if (mpMap->mbMPUpdated) {  // Map不变时没必要重复显示
+            mpMap->mbMPUpdated = false;
             publishMapPoints();
         }
         if (Config::ShowGroundTruth)
@@ -306,7 +339,7 @@ void MapPublish::run()
         rate.sleep();
         ros::spinOnce();
     }
-    cerr << "[MapPublisher] Exiting mappublish..." << endl;
+    cerr << "[MapPublisher] Exiting Mappublish..." << endl;
 
     nh.shutdown();
 
@@ -317,7 +350,7 @@ void MapPublish::publishKeyFrames()
 {
     mKFsNeg.points.clear();
     mKFsAct.points.clear();
-
+    mKFsFix.points.clear();
     mCovisGraph.points.clear();
     mFeatGraph.points.clear();
     if (!mbIsLocalize)
@@ -335,11 +368,14 @@ void MapPublish::publishKeyFrames()
     if (vKFsAll.empty())
         return;
 
-    vector<PtrKeyFrame> vKFsAct, vKFsNeg;
-    if (mbIsLocalize)
+    vector<PtrKeyFrame> vKFsAct, vKFsFix;
+    if (mbIsLocalize) {
         vKFsAct = mpLocalizer->GetLocalKFs();
-    else
+        // vKFsFix = vKFsAll;  //! TODO
+    } else {
         vKFsAct = mpMap->getLocalKFs();
+        vKFsFix = mpMap->getRefKFs();
+    }
 
     for (int i = 0, iend = vKFsAll.size(); i < iend; i++) {
         const PtrKeyFrame& pKFi = vKFsAll[i];
@@ -364,6 +400,7 @@ void MapPublish::publishKeyFrames()
         msgs_b.x = ob.at<float>(0) / mScaleRatio;
         msgs_b.y = ob.at<float>(1) / mScaleRatio;
         msgs_b.z = ob.at<float>(2) / mScaleRatio;
+
         // 相机的中心和4周围个点，可视化用
         geometry_msgs::Point msgs_o, msgs_p1, msgs_p2, msgs_p3, msgs_p4;
         msgs_o.x = ow.at<float>(0);
@@ -382,48 +419,66 @@ void MapPublish::publishKeyFrames()
         msgs_p4.y = p4w.at<float>(1);
         msgs_p4.z = p4w.at<float>(2);
 
-        // 判断第i帧KF是Active/Active
-        int count = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
-        if (count == 0) {  // Negtive
-            vKFsNeg.push_back(pKFi);
-            mKFsNeg.points.push_back(msgs_o);
-            mKFsNeg.points.push_back(msgs_p1);
-            mKFsNeg.points.push_back(msgs_o);
-            mKFsNeg.points.push_back(msgs_p2);
-            mKFsNeg.points.push_back(msgs_o);
-            mKFsNeg.points.push_back(msgs_p3);
-            mKFsNeg.points.push_back(msgs_o);
-            mKFsNeg.points.push_back(msgs_p4);
-            mKFsNeg.points.push_back(msgs_p1);
-            mKFsNeg.points.push_back(msgs_p2);
-            mKFsNeg.points.push_back(msgs_p2);
-            mKFsNeg.points.push_back(msgs_p3);
-            mKFsNeg.points.push_back(msgs_p3);
-            mKFsNeg.points.push_back(msgs_p4);
-            mKFsNeg.points.push_back(msgs_p4);
-            mKFsNeg.points.push_back(msgs_p1);
-        } else {  // Active
-            mKFsAct.points.push_back(msgs_o);
-            mKFsAct.points.push_back(msgs_p1);
-            mKFsAct.points.push_back(msgs_o);
-            mKFsAct.points.push_back(msgs_p2);
-            mKFsAct.points.push_back(msgs_o);
-            mKFsAct.points.push_back(msgs_p3);
-            mKFsAct.points.push_back(msgs_o);
-            mKFsAct.points.push_back(msgs_p4);
-            mKFsAct.points.push_back(msgs_p1);
-            mKFsAct.points.push_back(msgs_p2);
-            mKFsAct.points.push_back(msgs_p2);
-            mKFsAct.points.push_back(msgs_p3);
-            mKFsAct.points.push_back(msgs_p3);
-            mKFsAct.points.push_back(msgs_p4);
-            mKFsAct.points.push_back(msgs_p4);
-            mKFsAct.points.push_back(msgs_p1);
+        // 判断第i帧KF是Active/Active/Fixed
+        int count1 = std::count(vKFsFix.begin(), vKFsFix.end(), pKFi);
+        if (count1 > 0) {  // Fixed
+            mKFsFix.points.push_back(msgs_o);
+            mKFsFix.points.push_back(msgs_p1);
+            mKFsFix.points.push_back(msgs_o);
+            mKFsFix.points.push_back(msgs_p2);
+            mKFsFix.points.push_back(msgs_o);
+            mKFsFix.points.push_back(msgs_p3);
+            mKFsFix.points.push_back(msgs_o);
+            mKFsFix.points.push_back(msgs_p4);
+            mKFsFix.points.push_back(msgs_p1);
+            mKFsFix.points.push_back(msgs_p2);
+            mKFsFix.points.push_back(msgs_p2);
+            mKFsFix.points.push_back(msgs_p3);
+            mKFsFix.points.push_back(msgs_p3);
+            mKFsFix.points.push_back(msgs_p4);
+            mKFsFix.points.push_back(msgs_p4);
+            mKFsFix.points.push_back(msgs_p1);
+        } else {
+            int count2 = std::count(vKFsAct.begin(), vKFsAct.end(), pKFi);
+            if (count2 > 0) {  // Active
+                mKFsAct.points.push_back(msgs_o);
+                mKFsAct.points.push_back(msgs_p1);
+                mKFsAct.points.push_back(msgs_o);
+                mKFsAct.points.push_back(msgs_p2);
+                mKFsAct.points.push_back(msgs_o);
+                mKFsAct.points.push_back(msgs_p3);
+                mKFsAct.points.push_back(msgs_o);
+                mKFsAct.points.push_back(msgs_p4);
+                mKFsAct.points.push_back(msgs_p1);
+                mKFsAct.points.push_back(msgs_p2);
+                mKFsAct.points.push_back(msgs_p2);
+                mKFsAct.points.push_back(msgs_p3);
+                mKFsAct.points.push_back(msgs_p3);
+                mKFsAct.points.push_back(msgs_p4);
+                mKFsAct.points.push_back(msgs_p4);
+                mKFsAct.points.push_back(msgs_p1);
+            } else {  // Negtive
+                mKFsNeg.points.push_back(msgs_o);
+                mKFsNeg.points.push_back(msgs_p1);
+                mKFsNeg.points.push_back(msgs_o);
+                mKFsNeg.points.push_back(msgs_p2);
+                mKFsNeg.points.push_back(msgs_o);
+                mKFsNeg.points.push_back(msgs_p3);
+                mKFsNeg.points.push_back(msgs_o);
+                mKFsNeg.points.push_back(msgs_p4);
+                mKFsNeg.points.push_back(msgs_p1);
+                mKFsNeg.points.push_back(msgs_p2);
+                mKFsNeg.points.push_back(msgs_p2);
+                mKFsNeg.points.push_back(msgs_p3);
+                mKFsNeg.points.push_back(msgs_p3);
+                mKFsNeg.points.push_back(msgs_p4);
+                mKFsNeg.points.push_back(msgs_p4);
+                mKFsNeg.points.push_back(msgs_p1);
+            }
         }
 
         // Covisibility Graph
         const set<PtrKeyFrame> covKFs = pKFi->getAllCovisibleKFs();
-
         if (!covKFs.empty()) {
             for (auto it = covKFs.begin(), iend = covKFs.end(); it != iend; it++) {
                 if ((*it)->mIdKF > pKFi->mIdKF)  // 只统计在自己前面的共视KF, 防止重复计入
@@ -465,27 +520,23 @@ void MapPublish::publishKeyFrames()
         }
     }
 
+    mKFsFix.header.stamp = ros::Time::now();
+    mKFsAct.header.stamp = ros::Time::now();
     mKFsNeg.header.stamp = ros::Time::now();
     mCovisGraph.header.stamp = ros::Time::now();
     mFeatGraph.header.stamp = ros::Time::now();
     mVIGraph.header.stamp = ros::Time::now();
 
-    publisher.publish(mKFsNeg);
+    publisher.publish(mKFsFix);
     publisher.publish(mKFsAct);
-
+    publisher.publish(mKFsNeg);
     publisher.publish(mCovisGraph);
     publisher.publish(mFeatGraph);
     publisher.publish(mVIGraph);
-
-    PtrKeyFrame pKF0 = mpMap->getCurrentKF();
-    cout << "[MapPublisher] #" << pKF0->id << "(KF#" << pKF0->mIdKF
-         << ") 当前可视化输出 Local/Negtive/Global KFs =  " << vKFsAct.size() << "/"
-         << vKFsNeg.size() << "/" << vKFsAll.size() << endl;
 }
 
 void MapPublish::publishMapPoints()
 {
-
     mMPsNeg.points.clear();
     mMPsAct.points.clear();
     mMPsNow.points.clear();
