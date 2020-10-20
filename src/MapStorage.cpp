@@ -431,7 +431,7 @@ void MapStorage::loadKeyFrames(){
 
     for(int i = 0, iend = mvKFs.size(); i < iend; i++) {
         PtrKeyFrame pKF = mvKFs[i];
-        Mat img = imread(mMapPath + to_string(i) + ".bmp", CV_LOAD_IMAGE_GRAYSCALE);
+        Mat img = imread(mMapPath + to_string(i) + ".bmp", IMREAD_GRAYSCALE);
         img.copyTo(pKF->mImage);
     }
 

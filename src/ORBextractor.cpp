@@ -80,6 +80,7 @@ const float HARRIS_K = 0.04f;
 const int PATCH_SIZE = 31;
 const int HALF_PATCH_SIZE = 15;
 const int EDGE_THRESHOLD = 16;
+const float factorPI = (float)(CV_PI / 180.f);
 
 static void HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize, float harris_k)
 {
@@ -123,7 +124,6 @@ static void HarrisResponses(const Mat& img, vector<KeyPoint>& pts, int blockSize
     }
 }
 
-
 static float IC_Angle(const Mat& image, Point2f pt, const vector<int>& u_max)
 {
     int m_01 = 0, m_10 = 0;
@@ -151,8 +151,6 @@ static float IC_Angle(const Mat& image, Point2f pt, const vector<int>& u_max)
     return fastAtan2((float)m_01, (float)m_10);
 }
 
-
-const float factorPI = (float)(CV_PI / 180.f);
 static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Point* pattern, uchar* desc)
 {
     float angle = (float)kpt.angle * factorPI;
@@ -198,6 +196,25 @@ static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Poin
 
 #undef GET_VALUE
 }
+
+static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
+                               const vector<Point>& pattern)
+{
+    descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+
+    for (size_t i = 0; i < keypoints.size(); i++)
+        computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
+}
+
+static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints, const vector<int>& umax)
+{
+    for (vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
+         keypoint != keypointEnd; ++keypoint) {
+        keypoint->angle = IC_Angle(image, keypoint->pt, umax);
+    }
+}
+
+
 
 ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _scoreType, int _fastTh)
     : nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), scoreType(_scoreType),
@@ -256,11 +273,98 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int
     }
 }
 
-static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints, const vector<int>& umax)
+void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints, OutputArray _descriptors)
 {
-    for (vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
-         keypoint != keypointEnd; ++keypoint) {
-        keypoint->angle = IC_Angle(image, keypoint->pt, umax);
+    if (_image.empty())
+        return;
+
+    Mat image = _image.getMat(), mask = _mask.getMat();
+    assert(image.type() == CV_8UC1);
+
+    // Pre-compute the scale pyramids
+    ComputePyramid(image, mask);
+
+    vector<vector<KeyPoint>> allKeypoints;
+    ComputeKeyPoints(allKeypoints);
+
+    Mat descriptors;
+
+    int nkeypoints = 0;
+    for (int level = 0; level < nlevels; ++level)
+        nkeypoints += (int)allKeypoints[level].size();
+    if (nkeypoints == 0)
+        _descriptors.release();
+    else {
+        _descriptors.create(nkeypoints, 32, CV_8U);
+        descriptors = _descriptors.getMat();
+    }
+
+    _keypoints.clear();
+    _keypoints.reserve(nkeypoints);
+
+    int offset = 0;
+    for (int level = 0; level < nlevels; ++level) {
+        vector<KeyPoint>& keypoints = allKeypoints[level];
+        int nkeypointsLevel = (int)keypoints.size();
+
+        if (nkeypointsLevel == 0)
+            continue;
+
+        // preprocess the resized image
+        Mat& workingMat = mvImagePyramid[level];
+        GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
+
+        // Compute the descriptors
+        Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
+        computeDescriptors(workingMat, keypoints, desc, pattern);
+
+        offset += nkeypointsLevel;
+
+        // Scale keypoint coordinates
+        if (level != 0) {
+            float scale = mvScaleFactor[level];  // getScale(level, firstLevel, scaleFactor);
+            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
+                 keypoint != keypointEnd; ++keypoint)
+                keypoint->pt *= scale;
+        }
+        // And add the keypoints to the output
+        _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
+    }
+}
+
+void ORBextractor::ComputePyramid(const cv::Mat& image, const cv::Mat& Mask)
+{
+    for (int level = 0; level < nlevels; ++level) {
+        float scale = mvInvScaleFactor[level];
+        Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
+        Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
+        Mat temp(wholeSize, image.type()), masktemp;
+        mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
+
+        if (!Mask.empty()) {
+            masktemp = Mat(wholeSize, Mask.type());
+            mvMaskPyramid[level] = masktemp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
+        }
+
+        // Compute the resized image
+        if (level != 0) {
+            resize(mvImagePyramid[level - 1], mvImagePyramid[level], sz, 0, 0, INTER_LINEAR);
+            if (!Mask.empty()) {
+                resize(mvMaskPyramid[level - 1], mvMaskPyramid[level], sz, 0, 0, INTER_NEAREST);
+            }
+
+            copyMakeBorder(mvImagePyramid[level], temp, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                           EDGE_THRESHOLD, EDGE_THRESHOLD, BORDER_REFLECT_101 + BORDER_ISOLATED);
+            if (!Mask.empty())
+                copyMakeBorder(mvMaskPyramid[level], masktemp, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                               EDGE_THRESHOLD, EDGE_THRESHOLD, BORDER_CONSTANT + BORDER_ISOLATED);
+        } else {
+            copyMakeBorder(image, temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                           EDGE_THRESHOLD, BORDER_REFLECT_101);
+            if (!Mask.empty())
+                copyMakeBorder(Mask, masktemp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                               EDGE_THRESHOLD, BORDER_CONSTANT + BORDER_ISOLATED);
+        }
     }
 }
 
@@ -371,7 +475,6 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
 
 
         // Retain by score
-
         while (nToDistribute > 0 && nNoMore < nCells) {
             int nNewFeaturesCell = nfeaturesCell + ceil((float)nToDistribute / (nCells - nNoMore));
             nToDistribute = 0;
@@ -424,110 +527,6 @@ void ORBextractor::ComputeKeyPoints(vector<vector<KeyPoint>>& allKeypoints)
     // and compute orientations
     for (int level = 0; level < nlevels; ++level)
         computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
-}
-
-static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
-                               const vector<Point>& pattern)
-{
-    descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
-
-    for (size_t i = 0; i < keypoints.size(); i++)
-        computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
-}
-
-void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints, OutputArray _descriptors)
-{
-    if (_image.empty())
-        return;
-
-    Mat image = _image.getMat(), mask = _mask.getMat();
-    assert(image.type() == CV_8UC1);
-
-    // Pre-compute the scale pyramids
-    ComputePyramid(image, mask);
-
-    vector<vector<KeyPoint>> allKeypoints;
-    ComputeKeyPoints(allKeypoints);
-
-    Mat descriptors;
-
-    int nkeypoints = 0;
-    for (int level = 0; level < nlevels; ++level)
-        nkeypoints += (int)allKeypoints[level].size();
-    if (nkeypoints == 0)
-        _descriptors.release();
-    else {
-        _descriptors.create(nkeypoints, 32, CV_8U);
-        descriptors = _descriptors.getMat();
-    }
-
-    _keypoints.clear();
-    _keypoints.reserve(nkeypoints);
-
-    int offset = 0;
-    for (int level = 0; level < nlevels; ++level) {
-        vector<KeyPoint>& keypoints = allKeypoints[level];
-        int nkeypointsLevel = (int)keypoints.size();
-
-        if (nkeypointsLevel == 0)
-            continue;
-
-        // preprocess the resized image
-        Mat& workingMat = mvImagePyramid[level];
-        GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
-
-        // Compute the descriptors
-        Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-        computeDescriptors(workingMat, keypoints, desc, pattern);
-
-        offset += nkeypointsLevel;
-
-        // Scale keypoint coordinates
-        if (level != 0) {
-            float scale = mvScaleFactor[level];  // getScale(level, firstLevel, scaleFactor);
-            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
-                 keypoint != keypointEnd; ++keypoint)
-                keypoint->pt *= scale;
-        }
-        // And add the keypoints to the output
-        _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
-    }
-}
-
-void ORBextractor::ComputePyramid(const cv::Mat& image, const cv::Mat& Mask)
-{
-    for (int level = 0; level < nlevels; ++level) {
-        float scale = mvInvScaleFactor[level];
-        Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
-        Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
-        Mat temp(wholeSize, image.type()), masktemp;
-        mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
-
-        if (!Mask.empty()) {
-            masktemp = Mat(wholeSize, Mask.type());
-            mvMaskPyramid[level] = masktemp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
-        }
-
-        // Compute the resized image
-        if (level != 0) {
-            resize(mvImagePyramid[level - 1], mvImagePyramid[level], sz, 0, 0, INTER_LINEAR);
-            if (!Mask.empty()) {
-                resize(mvMaskPyramid[level - 1], mvMaskPyramid[level], sz, 0, 0, INTER_NEAREST);
-            }
-
-            copyMakeBorder(mvImagePyramid[level], temp, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                           EDGE_THRESHOLD, EDGE_THRESHOLD, BORDER_REFLECT_101 + BORDER_ISOLATED);
-            if (!Mask.empty())
-                copyMakeBorder(mvMaskPyramid[level], masktemp, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               EDGE_THRESHOLD, EDGE_THRESHOLD, BORDER_CONSTANT + BORDER_ISOLATED);
-        } else {
-            copyMakeBorder(image, temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                           EDGE_THRESHOLD, BORDER_REFLECT_101);
-            if (!Mask.empty())
-                copyMakeBorder(Mask, masktemp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               EDGE_THRESHOLD, BORDER_CONSTANT + BORDER_ISOLATED);
-        }
-    }
 }
 
 }  // namespace se2lam

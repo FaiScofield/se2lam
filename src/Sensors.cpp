@@ -28,7 +28,7 @@ void Sensors::updateImg(const cv::Mat& img_, double time_)
     }
 
     if (img_.channels() == 3)
-        cv::cvtColor(img_, mImg, CV_BGR2GRAY);
+        cv::cvtColor(img_, mImg, cv::COLOR_BGR2GRAY);
     else
         img_.copyTo(mImg);
 

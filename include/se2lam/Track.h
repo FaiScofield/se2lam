@@ -50,7 +50,7 @@ public:
     int nMinFrames;
     int nMaxFrames;
 
-    double trackTimeTatal = 0.;
+//    double trackTimeTatal = 0.;
 
 private:
     void CheckReady();

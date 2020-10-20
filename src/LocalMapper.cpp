@@ -1,8 +1,8 @@
 /**
-* This file is part of se2lam
-*
-* Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
-*/
+ * This file is part of se2lam
+ *
+ * Copyright (C) Fan ZHENG (github.com/izhengfan), Hengbo TANG (github.com/hbtang)
+ */
 
 #include "LocalMapper.h"
 #include "GlobalMapper.h"
@@ -284,8 +284,8 @@ void LocalMapper::localBA()
 
     cout << "[Local][Info ] #" << mpNewKF->id << "(KF#" << mpNewKF->mIdKF
          << ") L6.局部BA涉及的KF/RefKF/MP数量为: " << mpMap->countLocalKFs() << "/"
-         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << ", 加载/优化耗时: "
-         << t1 << "/" << timer.count() << ", 是否被强制中断: " << optimizer.terminate() << endl;
+         << mpMap->countLocalRefKFs() << "/" << mpMap->countLocalMPs() << ", 加载/优化耗时: " << t1
+         << "/" << timer.count() << ", 是否被强制中断: " << optimizer.terminate() << endl;
 
 
 #ifdef REJECT_IF_LARGE_LAMBDA
@@ -307,9 +307,11 @@ void LocalMapper::localBA()
 
 void LocalMapper::run()
 {
-
     if (Config::LocalizationOnly)
         return;
+
+    LOGI("--st-- LocalMapper::run()");
+
 
     mbPrintDebugInfo = Config::LocalPrint;
 
@@ -368,7 +370,7 @@ void LocalMapper::run()
     local_ba_time_log.close();
 #endif
 
-    cerr << "[Local][Info ] Exiting localmapper .." << endl;
+    LOGI("--en-- LocalMapper::run()");
 
     setFinish();
 }

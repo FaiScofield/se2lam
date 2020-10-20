@@ -14,6 +14,14 @@
 namespace se2lam
 {
 
+// LOG define
+#define LOGT(msg) (std::cout << "\033[32m" << "[TRACE] " << msg << "\033[0m" << std::endl)
+#define LOGI(msg) (std::cout << "\033[0m"  << "[INFO ] " << msg << "\033[0m" << std::endl)
+#define LOGW(msg) (std::cerr << "\033[33m" << "[WARN ] " << msg << "\033[0m" << std::endl)
+#define LOGE(msg) (std::cerr << "\033[31m" << "[ERROR] " << msg << "\033[0m" << std::endl)
+#define LOGF(msg) (std::cerr << "\033[35m" << "[FATAL] " << msg << "\033[0m" << std::endl)
+
+
 // -pi ~ +pi
 inline double normalizeAngle(double theta)
 {

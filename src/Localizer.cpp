@@ -447,7 +447,7 @@ void Localizer::DrawImgCurr() {
 
     mpKFCurr->copyImgTo(mImgCurr);
     if(mImgCurr.channels() == 1)
-        cvtColor(mImgCurr, mImgCurr, CV_GRAY2BGR);
+        cvtColor(mImgCurr, mImgCurr, COLOR_GRAY2BGR);
 
     for (int i=0, iend=mpKFCurr->mvKeyPoints.size(); i<iend; i++) {
 
@@ -487,9 +487,9 @@ void Localizer::DrawImgMatch(const map<int, int> & mapMatch) {
     }
 
     if(mImgLoop.channels() == 1)
-        cvtColor(mImgLoop, mImgLoop, CV_GRAY2BGR);
+        cvtColor(mImgLoop, mImgLoop, COLOR_GRAY2BGR);
     if(mImgMatch.channels() == 1)
-        cvtColor(mImgMatch, mImgMatch, CV_GRAY2BGR);
+        cvtColor(mImgMatch, mImgMatch, COLOR_GRAY2BGR);
     vconcat(mImgCurr, mImgLoop, mImgMatch);
 
     //! Draw Features

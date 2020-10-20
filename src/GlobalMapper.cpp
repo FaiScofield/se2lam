@@ -982,10 +982,10 @@ void GlobalMapper::OptKFPairMatch(PtrKeyFrame _pKF1, PtrKeyFrame _pKF2, map<int,
         }
     }
 
-    if (Config::GLOBAL_PRINT) {
-        cerr << "## DEBUG GM: "
-             << "Find " << sIdMPin1Outlier.size() << " outliers by 3D MP to KF measurements." << endl;
-    }
+    // if (Config::GLOBAL_PRINT) {
+    //     cerr << "## DEBUG GM: "
+    //          << "Find " << sIdMPin1Outlier.size() << " outliers by 3D MP to KF measurements." << endl;
+    // }
 
     // Return optimize results
     _vSe3KFs.clear();
@@ -1112,12 +1112,12 @@ void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)
 
     if (mImgCurr.channels() == 1) {
         Mat imgTemp = mImgCurr.clone();
-        cvtColor(mImgCurr, imgTemp, CV_GRAY2BGR);
+        cvtColor(mImgCurr, imgTemp, COLOR_GRAY2BGR);
         imgTemp.copyTo(mImgCurr);
     }
     if (mImgLoop.channels() == 1) {
         Mat imgTemp = mImgLoop.clone();
-        cvtColor(mImgLoop, imgTemp, CV_GRAY2BGR);
+        cvtColor(mImgLoop, imgTemp, COLOR_GRAY2BGR);
         imgTemp.copyTo(mImgLoop);
     }
     hconcat(mImgCurr, mImgLoop, mImgMatch);

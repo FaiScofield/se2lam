@@ -26,15 +26,23 @@ target_link_libraries(test_vn
 #    ${LINK_LIBS}
 #)
 
-add_executable(run_pipeline run_pipeline.cpp)
-target_link_libraries(run_pipeline
-    se2lam
-    ${LINK_LIBS}
-    ${G2O_LIBS}
-)
+# add_executable(run_pipeline run_pipeline.cpp)
+# target_link_libraries(run_pipeline
+#     se2lam
+#     ${LINK_LIBS}
+#     ${G2O_LIBS}
+# )
 
 #add_executable(rkOdomToSE2 rkOdomToSE2.cpp)
 #target_link_libraries(rkOdomToSE2
 #    se2lam
 #    ${LINK_LIBS}
 #)
+
+
+##### 
+add_executable(test_featureExtract test_featureExtract.cpp)
+target_link_libraries(test_featureExtract
+   se2lam
+   ${LINK_LIBS}
+)

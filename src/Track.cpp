@@ -30,7 +30,7 @@ Track::Track()
 {
     mLocalMPs = vector<Point3f>(Config::MaxFtrNumber, Point3f(-1, -1, -1));
     nMinFrames = min(8, cvCeil(0.25 * Config::FPS));  // 上溢
-    nMaxFrames = cvFloor(1 * Config::FPS);  // 下溢
+    nMaxFrames = cvFloor(1 * Config::FPS);            // 下溢
     mnGoodPrl = 0;
     mnKPMatches = 0;
     mnKPsInline = 0;
@@ -55,10 +55,18 @@ Track::~Track()
 
 void Track::Run()
 {
-    CheckReady();
-
     if (Config::LocalizationOnly)
         return;
+
+    LOGT("--st-- Track::Run()");
+
+    CheckReady();
+
+    WorkTimer timer;
+    Mat img;
+    Se2 odo;
+    double trackTimeTatal = 0.;
+    double t1 = 0., t2 = 0.;
 
     ros::Rate rate(Config::FPS * 5);
     while (ros::ok()) {
@@ -70,13 +78,12 @@ void Track::Run()
             continue;
         }
 
-        WorkTimer timer;
-
-        cv::Mat img;
-        Se2 odo;
+        // read data
+        timer.start();
         mpSensors->readData(odo, img);
-        double t1 = timer.count(), t2 = 0, t3 = 0;
+        t1 = timer.count();
 
+        // tracking
         timer.start();
         {
             locker lock(mMutexForPub);
@@ -86,22 +93,22 @@ void Track::Run()
             else
                 TrackReferenceKF(img, odo);
         }
-        t2 = timer.count();
-        trackTimeTatal += t1 + t2;
-        cout << setiosflags(ios::fixed) << setprecision(2);  // 设置浮点数保留2位小数
-        cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
-             << " 前端总耗时为: " << t1 + t2
-             << "ms, 平均耗时: " << trackTimeTatal / mCurrentFrame.id << "ms" << endl;
-
         mpMap->setCurrentFramePose(mCurrentFrame.Tcw);
         lastOdom = odo;
+        t2 = timer.count();
+        trackTimeTatal += t1 + t2;
+        LOGT(setiosflags(ios::fixed) << setprecision(2));  // 设置浮点数保留2位小数
+        LOGT("#" << mCurrentFrame.id << "-#" << mpReferenceKF->id << " TIME COST: \t" << t1 + t2
+                 << "ms, AVE: " << trackTimeTatal / mCurrentFrame.id << "ms");
+
         CopyForPub();
 
         ResetLocalTrack();
+
         rate.sleep();
     }
 
-    cerr << "[Track][Info ] Exiting tracking .." << endl;
+    LOGT("--en-- Track::Run()");
 
     SetFinish();
 }
@@ -109,10 +116,11 @@ void Track::Run()
 
 void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
 {
+    LOGT("--st-- Track::ProcessFirstFrame()");
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    size_t th = Config::MaxFtrNumber;
-    if (mCurrentFrame.N > (th >> 1)) {  // 首帧特征点需要超过最大点数的一半
+    const size_t th_nMaxFtrNum = (Config::MaxFtrNumber >> 1);
+    if (mCurrentFrame.N > th_nMaxFtrNum) {  // 首帧特征点需要超过最大点数的一半
         cout << "========================================================" << endl;
         cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
              << "And the start odom is: " << mCurrentFrame.odom << endl;
@@ -122,7 +130,6 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
         mCurrentFrame.Tcw = Config::Tcb.clone();
         mpReferenceKF = make_shared<KeyFrame>(mCurrentFrame);
         mpMap->insertKF(mpReferenceKF);
-
 
         // reset
         KeyPoint::convert(mCurrentFrame.mvKeyPoints, mPrevMatched);
@@ -142,6 +149,7 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
 
         Frame::nextId = 0;
     }
+    LOGT("--en-- Track::ProcessFirstFrame()");
 }
 
 void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
@@ -149,7 +157,7 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
     UpdateFramePose();
 
-    //int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
+    // int nMatched = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 20, mvKPMatchIdx);
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
     mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
@@ -157,8 +165,8 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     mnMPsTracked = DoTriangulate();
 
     cout << "[Track][Info ] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
-         << " 追踪匹配情况: 关联/内点数/总匹配数/潜在好视差数 = " << mnMPsTracked << "/" << mnKPsInline
-         << "/" << mnKPMatches << "/" << mnGoodPrl << endl;
+         << " 追踪匹配情况: 关联/内点数/总匹配数/潜在好视差数 = " << mnMPsTracked << "/"
+         << mnKPsInline << "/" << mnKPMatches << "/" << mnGoodPrl << endl;
 }
 
 void Track::UpdateFramePose()
@@ -387,7 +395,7 @@ bool Track::NeedNewKF()
         c5 = abs(dOdo.theta) >= 0.8727;  // 0.8727(50deg). orig: 0.0349(2deg)
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
         cv::Mat xy = cTc.rowRange(0, 2).col(3);
-        //c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
+        // c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
         c6 = cv::norm(xy) >= (0.05 * Config::UpperDepth);  // 10m高走半米
 
         bNeedKFByOdo = c5 || c6;
@@ -397,15 +405,15 @@ bool Track::NeedNewKF()
     if (mpLocalMapper->acceptNewKF()) {
         cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
              << " 当前帧即将成为新的KF, 其KF条件满足情况: "
-             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少(" << c4
-             << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
+             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少("
+             << c4 << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
         return bNeedNewKF;
     } else if (c0 && (c4 || c3) && bNeedKFByOdo) {
         cout << "[Track][Timer] #" << mCurrentFrame.id << "-#" << mpReferenceKF->id
              << " 强制中断LM的BA过程, 当前帧KF条件满足情况: "
-             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少(" << c4
-             << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
-        //mpLocalMapper->setAbortBA();
+             << "(关联少+视差好(" << c1 << "+" << mnGoodPrl << ")/达上限(" << c3 << ")/匹配少("
+             << c4 << "))&&(旋转大(" << c5 << ")/平移大(" << c6 << "))" << endl;
+        // mpLocalMapper->setAbortBA();
     }
 
     return false;

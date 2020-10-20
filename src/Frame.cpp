@@ -41,7 +41,7 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
     //! 输入图像去畸变
     Mat imgGray, imgUn;
     if (im.channels() != 1)
-        cvtColor(im, imgGray, CV_BGR2GRAY);
+        cvtColor(im, imgGray, COLOR_BGR2GRAY);
     else
         imgGray = im;
     undistort(imgGray, imgUn, K, distCoef);
