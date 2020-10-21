@@ -119,7 +119,7 @@ void Track::ProcessFirstFrame(const Mat& img, const Se2& odo)
     LOGT("--st-- Track::ProcessFirstFrame()");
     mCurrentFrame = Frame(img, odo, mpORBextractor, Config::Kcam, Config::Dcam);
 
-    const size_t th_nMaxFtrNum = (Config::MaxFtrNumber >> 1);
+    const int th_nMaxFtrNum = (Config::MaxFtrNumber >> 1);
     if (mCurrentFrame.N > th_nMaxFtrNum) {  // 首帧特征点需要超过最大点数的一半
         cout << "========================================================" << endl;
         cout << "[Track][Info ] Create first frame with " << mCurrentFrame.N << " features. "
@@ -261,8 +261,8 @@ void Track::CopyForPub()
         }
     }
 
-    mpMapPublisher->mFrontText = string(strMatches);
-    mpMapPublisher->mbFrontUpdated = true;
+    mpMapPublisher->mFrontImageText = string(strMatches);
+    mpMapPublisher->mbFrontEndUpdated = true;
 }
 
 void Track::calcOdoConstraintCam(const Se2& dOdo, Mat& cTc, g2o::Matrix6d& Info_se3)
@@ -394,11 +394,12 @@ bool Track::NeedNewKF()
     bool c5 = false, c6 = false;
     if (mbUseOdometry) {
         Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        c5 = abs(dOdo.theta) >= 0.8727;  // 0.8727(50deg). orig: 0.0349(2deg)
+        c5 = fabs(dOdo.theta) >= 0.8727f;  // 0.8727(50deg). orig: 0.0349(2deg)
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
-        cv::Mat xy = cTc.rowRange(0, 2).col(3);
+        // cv::Mat xy = cTc.rowRange(0, 2).col(3);
+		cv::Mat xy = cTc.rowRange(0, 3).col(3);
         // c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
-        c6 = cv::norm(xy) >= (0.05 * Config::UpperDepth);  // 10m高走半米
+        c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth);  // 10m高走半米
 
         bNeedKFByOdo = c5 || c6;
     }

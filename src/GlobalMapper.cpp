@@ -1090,8 +1090,8 @@ void GlobalMapper::copyForPub(const map<int, int>& mapMatch, bool closed)
     char str[64];
     std::snprintf(str, 64, "CurrKF: %d(%d), LoopKF: %d(%d), Succ: %d, M: %ld", mpKFCurr->id,
                   mpKFCurr->mIdKF, mpKFLoop->id, mpKFLoop->mIdKF, closed, mapMatch.size());
-    mpMapPublisher->mBackText = str;
-    mpMapPublisher->mbBackUpdated = true;
+    mpMapPublisher->mBackImageText = str;
+    mpMapPublisher->mbBackEndUpdated = true;
 }
 
 void GlobalMapper::DrawMatch(const map<int, int>& mapMatch)

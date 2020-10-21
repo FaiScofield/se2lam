@@ -287,9 +287,9 @@ void Config::checkParamValidity()
     assert(MaxLocalFrameNum >= 0);
     assert(LocalFrameSearchLevel > 0);
     assert(LocalFrameSearchRadius > 0.f);
-    assert(MappubScaleRatio >= 1);
-    assert(CameraSize > 0.f);
-    assert(PointSize > 0.f);
+//    assert(MappubScaleRatio >= 1);
+//    assert(CameraSize > 0.f);
+//    assert(PointSize > 0.f);
 }
 
 Se2::Se2() : x(0.f), y(0.f), theta(0.f), timeStamp(0.) {}

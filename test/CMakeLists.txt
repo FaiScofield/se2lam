@@ -40,7 +40,7 @@ target_link_libraries(test_vn
 #)
 
 
-##### 
+#####
 add_executable(test_featureExtract test_featureExtract.cpp)
 target_link_libraries(test_featureExtract
    se2lam

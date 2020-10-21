@@ -25,9 +25,9 @@ MapPublish::MapPublish(Map* pMap)
       mpLocalizer(nullptr), mbFrontEndUpdated(false), mbBackEndUpdated(false), mPointSize(0.1f),
       mCameraSize(0.3f), mScaleRatio(300), mbFinishRequested(false), mbFinished(false)
 {
-    if (Config::PointSize > 0)
+    if (Config::PointSize > 0.f)
         mPointSize = Config::PointSize;
-    if (Config::PointSize > 0)
+    if (Config::CameraSize > 0.f)
         mCameraSize = Config::CameraSize;
     if (Config::MappubScaleRatio > 0)
         mScaleRatio = Config::MappubScaleRatio;
@@ -842,7 +842,7 @@ Mat MapPublish::drawCurrentFrameMatches()
     } else {  // 说明定位丢失且找不到回环帧
         hconcat(imgCur, imgRef, imgOutUp);
     }
-    putText(imgOutUp, mFrontText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
+    putText(imgOutUp, mFrontImageText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
 
     return imgOutUp.clone();
 }
@@ -917,7 +917,7 @@ Mat MapPublish::drawLoopCloseMatches()
             line(imgOut, ptCurr, ptLoopMatch, colorCurr, 1);
         }
     }
-    putText(imgOut, mBackText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
+    putText(imgOut, mBackImageText, Point(100, 40), 1, 2, Scalar(0, 0, 255), 3);
 
     return imgOut.clone();
 }

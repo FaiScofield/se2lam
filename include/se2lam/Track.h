@@ -47,8 +47,8 @@ public:
 
     static bool mbUseOdometry;
     bool mbNeedVisualization;
-    int nMinFrames;
-    int nMaxFrames;
+//    int nMinFrames;
+//    int nMaxFrames;
 
 //    double trackTimeTatal = 0.;
 

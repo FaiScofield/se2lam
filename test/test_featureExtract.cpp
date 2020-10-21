@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
     vector<String> vImgFiles;
     cv::glob(str_folder, vImgFiles);
 //    ReadImageNamesFromFolder(str_folder, vImgFiles);
-    const size_t nImgSize = vImgFiles.size();
+    const int nImgSize = vImgFiles.size();
     if (nImgSize == 0)
         return -1;
     LOGI("Read " << nImgSize << " Images in the folder: " << str_folder);
@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
             pMatcher->match(descriptors1, descriptors2, vRoughMatches);
             drawMatches(image1, vFeatures1, image2, vFeatures2, vRoughMatches, imageOut);
             imshow("Match", imageOut);
-            waitKey(200); 
+            waitKey(200);
         }
 
         // swap data
