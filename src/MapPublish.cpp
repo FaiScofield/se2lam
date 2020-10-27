@@ -832,10 +832,11 @@ Mat MapPublish::drawCurrentFrameMatches()
                 if (mvMatchIdxGood[i] < 0) {  // 只有KP匹配对标绿色
                     circle(imgOutUp, ptL, 3, Scalar(0, 255, 0), -1);
                     circle(imgOutUp, ptR, 3, Scalar(0, 255, 0), -1);
+                    line(imgOutUp, ptL, ptR, Scalar(0, 255, 0));
                 } else {  // KP匹配有MP观测或三角化深度符合的标黄色并连线
                     circle(imgOutUp, ptL, 3, Scalar(0, 255, 255), -1);
                     circle(imgOutUp, ptR, 3, Scalar(0, 255, 255), -1);
-                    line(imgOutUp, ptL, ptR, Scalar(255, 255, 20));
+                    line(imgOutUp, ptL, ptR, Scalar(0, 255, 255));
                 }
             }
         }

@@ -24,6 +24,7 @@
 * along with ORB-SLAM. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "gms_matcher.h"
 #include "ORBmatcher.h"
 
 #include<limits.h>
@@ -278,7 +279,7 @@ int ORBmatcher::SearchByBoW(PtrKeyFrame pKF1, PtrKeyFrame pKF2,
 }
 
 int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
-                                  std::vector<int>& vnMatches12, const int winSize)
+                                  std::vector<int>& vnMatches12, const int winSize, bool withGMS)
 {
     assert(HA12.type() == CV_64FC1);
 
@@ -313,7 +314,7 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         Mat pt2 = H * pt1;
         pt2 /= pt2.at<double>(2);
         vector<size_t> vIndices2 =
-            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level, level);
+            frame2.GetFeaturesInArea(pt2.at<double>(0), pt2.at<double>(1), winSize, level - 1, level);
         if (vIndices2.empty())
             continue;
 
@@ -342,23 +343,36 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
             }
         }
 
+        if (withGMS) {
+            if (bestDist <= TH_LOW && bestDist < (float)bestDist2 * mfNNratio)
+                vnMatches12[i1] = bestIdx2;
+            continue;
+        }
+
         //! 3.最小距离小于TH_LOW且小于mfNNratio倍次小距离，则将此KP与F1中对应的KP视为匹配对
         if (bestDist <= TH_LOW && bestDist < (float)bestDist2 * mfNNratio) {
             // 如果出现F1中多个点匹配到F2中同一个点的情况, 则取消之前的匹配用新的匹配
             //! NOTE 已改成保留汉明距离最小的匹配
-            if (vnMatches21[bestIdx2] >= 0) {
-                if (bestDist < vMatchesDistance[bestIdx2]) {
-                    vnMatches12[vnMatches21[bestIdx2]] = -1;
-                    nmatches--;
-                } else {
-                    vnMatches21[bestIdx2] = -1;
-                    continue;
-                }
+            if (vnMatches21[bestIdx2] == -1) {
+                vnMatches12[i1] = bestIdx2;
+                vnMatches21[bestIdx2] = i1;
+                vMatchesDistance[bestIdx2] = bestDist;
+                nmatches++;
+            } else if (vnMatches21[bestIdx2] >= 0 && bestDist < vMatchesDistance[bestIdx2]) {
+                assert(vnMatches12[vnMatches21[bestIdx2]] == bestIdx2);
+                vnMatches12[vnMatches21[bestIdx2]] = -1;
+
+                vnMatches12[i1] = bestIdx2;
+                vnMatches21[bestIdx2] = i1;
+                vMatchesDistance[bestIdx2] = bestDist;
+            } else {
+                vnMatches12[i1] = -1;
+                continue;
             }
-            vnMatches12[i1] = bestIdx2;
-            vnMatches21[bestIdx2] = i1;
-            vMatchesDistance[bestIdx2] = bestDist;
-            nmatches++;
+            // vnMatches12[i1] = bestIdx2;
+            // vnMatches21[bestIdx2] = i1;
+            // vMatchesDistance[bestIdx2] = bestDist;
+            // nmatches++;
 
             //! for orientation check. 4.统计匹配点对的角度差的直方图, 待下一步做旋转检验
             if (mbCheckOrientation) {
@@ -371,6 +385,18 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
                 rotHist[bin].push_back(i1);
             }
         }
+    }
+
+    if (withGMS) {
+        GMS::gms_matcher gms(frame1.mvKeyPoints, frame1.mImage.size(), frame2.mvKeyPoints, frame2.mImage.size(), vnMatches12);
+        std::vector<bool> vbInliers;
+        nmatches = gms.GetInlierMask(vbInliers, false, true);
+        assert(vbInliers.size() <= vnMatches12.size());
+        for (size_t i = 0, iend = vnMatches12.size(); i < iend; ++i) {
+            if (!vbInliers[i])
+                vnMatches12[i] = -1;
+        }
+        return nmatches;
     }
 
     //! 5.进行旋转一致性检验, 匹配点对角度差不在直方图最大的三个方向上, 则视为误匹配剔除.

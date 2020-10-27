@@ -66,7 +66,7 @@ public:
     bool mbCheckOrientation;
 
     int MatchByWindowWarp(const Frame& frame1, const Frame& frame2, const cv::Mat& HA12,
-                          std::vector<int>& vnMatches12, const int winSize);
+                          std::vector<int>& vnMatches12, const int winSize, bool withGMS = false);
 
     int MatchByWindow(const Frame& frame1, Frame& frame2,
                            std::vector<cv::Point2f>& vbPrevMatched, const int winSize,

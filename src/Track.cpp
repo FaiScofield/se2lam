@@ -158,8 +158,8 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     UpdateFramePose();
 
     //! TODO mPrevMatched 应该是 refKF的KPs 应用了"到lastFrame的仿射变换A"后的预测点位置. 相当于先验了. 起的效果跟MatchByWindowWarp()应该是一致的!  mPrevMatched可以再乘上通过odom算出来的旋转, 会更精确
-    mnKPMatches = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 25, mvKPMatchIdx);
-//    mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 20);
+//    mnKPMatches = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 50, mvKPMatchIdx, true);
+    mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 25, true);
     mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
 
     // Check parallax and do triangulation
@@ -397,7 +397,7 @@ bool Track::NeedNewKF()
         c5 = fabs(dOdo.theta) >= 0.8727f;  // 0.8727(50deg). orig: 0.0349(2deg)
         cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
         // cv::Mat xy = cTc.rowRange(0, 2).col(3);
-		cv::Mat xy = cTc.rowRange(0, 3).col(3);
+    cv::Mat xy = cTc.rowRange(0, 3).col(3);
         // c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
         c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth);  // 10m高走半米
 

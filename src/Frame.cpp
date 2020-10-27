@@ -52,6 +52,10 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
 
     mpORBExtractor = extractor;
     (*mpORBExtractor)(mImage, cv::Mat(), mvKeyPoints, mDescriptors);
+    // vector<Point2f> kps;
+    // goodFeaturesToTrack(mImage, kps, 500, 0.01, 10);
+    // KeyPoint::convert(kps, mvKeyPoints);
+    // computeDescriptors(mImage, mvKeyPoints, mDescriptors, mpORBExtractor->pattern);
 
     N = mvKeyPoints.size();
     if (mvKeyPoints.empty())

@@ -151,7 +151,7 @@ static float IC_Angle(const Mat& image, Point2f pt, const vector<int>& u_max)
     return fastAtan2((float)m_01, (float)m_10);
 }
 
-static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Point* pattern, uchar* desc)
+/* static */ void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Point* pattern, uchar* desc)
 {
     float angle = (float)kpt.angle * factorPI;
     float a = (float)cos(angle), b = (float)sin(angle);
@@ -197,7 +197,7 @@ static void computeOrbDescriptor(const KeyPoint& kpt, const Mat& img, const Poin
 #undef GET_VALUE
 }
 
-static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
+/* static */ void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
                                const vector<Point>& pattern)
 {
     descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
