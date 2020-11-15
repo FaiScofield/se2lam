@@ -56,22 +56,22 @@ find_package(Eigen REQUIRED)
 message("===> Eigen Include DIR: ${EIGEN_INCLUDE_DIRS}")
 
 ## Boost
-find_package(Boost REQUIRED COMPONENTS filesystem)
-if(Boost_FOUND)
-    message("===> Boost Information: Version: ${Boost_VERSION}" )
-    message("===> Boost Information: Include Dir: ${Boost_INCLUDE_DIRS}" )
-    message("===> Boost Information: Libs Dir: ${Boost_LIBRARIES}" )
-else()
-    message("===> Boost Not Found!!!" )
-endif()
+#find_package(Boost REQUIRED COMPONENTS filesystem)
+#if(Boost_FOUND)
+#    message("===> Boost Information: Version: ${Boost_VERSION}" )
+#    message("===> Boost Information: Include Dir: ${Boost_INCLUDE_DIRS}" )
+#    message("===> Boost Information: Libs Dir: ${Boost_LIBRARIES}" )
+#else()
+#    message("===> Boost Not Found!!!" )
+#endif()
 
 # OpenCV
-#set(OpenCV_DIR /home/vance/opt/opencv-4.2.0/build)
-find_package(OpenCV 4)
+# set(OpenCV_DIR /home/vance/opt/opencv-4.5.0/build)
+find_package(OpenCV 3.4.1 QUIET)
 if (OpenCV_FOUND)
-    add_definitions(-DUSE_OPENCV4)
+#    add_definitions(-DUSE_OPENCV4)
 else()
-    set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
+#    set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
     find_package(OpenCV 3.4 REQUIRED)
     add_definitions(-DUSE_OPENCV3)
 endif()
@@ -123,7 +123,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${EIGEN_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS}
+#    ${Boost_INCLUDE_DIRS}
     ${CSPARSE_INCLUDE_DIR}
     ${CHOLMOD_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
@@ -132,7 +132,7 @@ include_directories(
 list(APPEND LINK_LIBS
     ${catkin_LIBRARIES}
     ${OpenCV_LIBS}
-    ${Boost_LIBRARIES}
+#    ${Boost_LIBRARIES}
 )
 
 

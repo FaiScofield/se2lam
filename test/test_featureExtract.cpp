@@ -14,9 +14,9 @@
 #define IMAGE_SUBREGION_NUM_COL 6
 #define IMAGE_SUBREGION_NUM_ROW 4
 #define IMAGE_BORDER 16
-#define MAX_FEATURE_NUM 500
+#define MAX_FEATURE_NUM 300
 #define MAX_PYRAMID_LEVEL 3
-#define PYRAMID_SCALE_FATOR 1.5
+#define PYRAMID_SCALE_FATOR 2
 
 enum FeatureType {
     ORB = 0,
@@ -38,11 +38,6 @@ using namespace se2lam;
 
 int main(int argc, char* argv[])
 {
-    //    const String keys = "{help h usage ? |      | print this message   }"
-    //                        "{t type         | ORB  | value input type: ORB, CV_ORB, CV_SURF, CV_AKAZE}"
-    //                        "{f folder       |<none>| data folder}"
-    //                        "{b begin        |0     | start index for image sequence}"
-    //                        "{e end          |-1    | end index for image sequence}";
     /// parse input arguments
     CommandLineParser parser(argc, argv,
                              "{type      t|ORB|value input type: ORB, CV_ORB, CV_SURF, CV_AKAZE}"
@@ -65,7 +60,7 @@ int main(int argc, char* argv[])
     /// read images
     vector<String> vImgFiles;
     cv::glob(str_folder, vImgFiles);
-    //    ReadImageNamesFromFolder(str_folder, vImgFiles);
+    // ReadImageNamesFromFolder(str_folder, vImgFiles);
     const int nImgSize = vImgFiles.size();
     if (nImgSize == 0)
         return -1;

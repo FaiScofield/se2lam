@@ -24,6 +24,8 @@ set(SRCS_DUTILS
   DUtils/Random.cpp
   DUtils/Timestamp.cpp)
 
+# set(OpenCV_DIR /home/vance/opt/opencv-4.5.0/build)
+# set(OpenCV_DIR /home/vance/opt/opencv-3.4.1/build)
 find_package(OpenCV REQUIRED)
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)

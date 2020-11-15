@@ -44,7 +44,7 @@ public:
     void computeBoundUn(const cv::Mat &K, const cv::Mat &D);
 
     // Image Info
-    cv::Mat mImage;
+    cv::Mat mImage, mMask;
     static float minXUn;
     static float minYUn;
     static float maxXUn;
