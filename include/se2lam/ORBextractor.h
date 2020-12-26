@@ -35,13 +35,26 @@
 namespace se2lam
 {
 
+class ExtractorNode
+{
+public:
+    ExtractorNode():bNoMore(false){}
+
+    void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
+
+    std::vector<cv::KeyPoint> vKeys;
+    cv::Point2i UL, UR, BL, BR;
+    std::list<ExtractorNode>::iterator lit;
+    bool bNoMore;
+};
+
 class ORBextractor
 {
 public:
     enum { HARRIS_SCORE = 0, FAST_SCORE = 1 };
 
-    ORBextractor(int nfeatures = 1000, float scaleFactor = 1.2f, int nlevels = 8,
-                 int scoreType = FAST_SCORE, int fastTh = 20);
+    ORBextractor(int nfeatures = 500, float scaleFactor = 1.2f, int nlevels = 8,
+                 int scoreType = FAST_SCORE, int iniThFAST = 20, int minThFAST = 19);
 
     ~ORBextractor() {}
 
@@ -53,10 +66,32 @@ public:
 
     float inline GetScaleFactor() { return scaleFactor; }
 
+    std::vector<float> inline GetScaleFactors() { return mvScaleFactor; }
+
+    std::vector<float> inline GetInverseScaleFactors() { return mvInvScaleFactor; }
+
+    std::vector<float> inline GetScaleSigmaSquares() { return mvLevelSigma2; }
+
+    std::vector<float> inline GetInverseScaleSigmaSquares() { return mvInvLevelSigma2; }
+
+    /**
+     * In order to adapt the scenarios with bad light condition,
+     * add new feature type here for this system to extract other type features
+     */
+    enum FeatureType_e {ORB = 0, GFTT = 1, SURF = 2} mFeatureType;
+    void SetFeatureType(int var) { mFeatureType = (FeatureType_e)var; }
+    int GetFeatureType() const { return (int)mFeatureType; }
 
 protected:
     void ComputePyramid(const cv::Mat& image, const cv::Mat& Mask = cv::Mat());
-    void ComputeKeyPoints(std::vector<std::vector<cv::KeyPoint>>& allKeypoints);
+    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint>>& allKeypoints);
+    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+
+    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
+                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
+
+    void ComputeKeyPointsGFTT(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+    void ComputeKeyPointsSURF(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
 
     std::vector<cv::Point> pattern;
 
@@ -64,7 +99,8 @@ protected:
     double scaleFactor;
     int nlevels;
     int scoreType;
-    int fastTh;
+    int iniThFAST;
+    int minThFAST;
 
     std::vector<int> mnFeaturesPerLevel;
 
@@ -72,7 +108,9 @@ protected:
 
     std::vector<float> mvScaleFactor;
     std::vector<float> mvInvScaleFactor;
-
+    std::vector<float> mvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;
+    
     std::vector<cv::Mat> mvImagePyramid;
     std::vector<cv::Mat> mvMaskPyramid;
 };

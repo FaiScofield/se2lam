@@ -15,11 +15,17 @@ namespace se2lam
 {
 
 // LOG define
-#define LOGT(msg) (std::cout << "\033[32m" << "-- |T| " << msg << "\033[0m" << std::endl)
-#define LOGI(msg) (std::cout << "\033[00m" << "-- |I| " << msg << "\033[0m" << std::endl)
-#define LOGW(msg) (std::cerr << "\033[33m" << "-- |W| " << msg << "\033[0m" << std::endl)
-#define LOGE(msg) (std::cerr << "\033[31m" << "-- |E| " << msg << "\033[0m" << std::endl)
-#define LOGF(msg) (std::cerr << "\033[35m" << "-- |F| " << msg << "\033[0m" << std::endl)
+#define LOGF(msg) (std::cerr << "\033[41m-- |F| " << msg << "\033[0m" << std::endl)
+#define LOGE(msg) (std::cerr << "\033[31m-- |E| " << msg << "\033[0m" << std::endl)
+#define LOGW(msg) (std::cerr << "\033[33m-- |W| " << msg << "\033[0m" << std::endl)
+#define LOGI(msg) (std::cout << "\033[00m-- |I| " << msg << "\033[0m" << std::endl)
+#define LOGD(msg) (std::cout << "\033[34m-- |D| " << msg << "\033[0m" << std::endl)
+#define LOGT(msg) (std::cout << "\033[32m-- |T| " << msg << "\033[0m" << std::endl)
+#define K_LOGE(id, msg) (std::cerr << "\033[31m-- |E| #" << id << " " << msg << "\033[0m" << std::endl)
+#define K_LOGW(id, msg) (std::cerr << "\033[33m-- |W| #" << id << " " << msg << "\033[0m" << std::endl)
+#define K_LOGI(id, msg) (std::cout << "\033[00m-- |I| #" << id << " " << msg << "\033[0m" << std::endl)
+#define K_LOGD(id, msg) (std::cout << "\033[34m-- |D| #" << id << " " << msg << "\033[0m" << std::endl)
+#define K_LOGT(id, msg) (std::cout << "\033[32m-- |T| #" << id << " " << msg << "\033[0m" << std::endl)
 
 
 // -pi ~ +pi

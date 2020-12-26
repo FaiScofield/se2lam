@@ -38,7 +38,7 @@ Track::Track()
     mnMPsTracked = 0;
 
     mpORBextractor = new ORBextractor(Config::MaxFtrNumber, Config::ScaleFactor, Config::MaxLevel);
-    mpORBmatcher = new ORBmatcher(0.9, true);
+    mpORBmatcher = new ORBmatcher(0.8, true);
 
     mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
 

@@ -115,7 +115,7 @@ vector<string> readImageTimestamp(const vector<string>& vTimes) {
     return times;
 }
 
-double normalizeAngle(double angle) {
+static double normalizeAngle(double angle) {
     return angle + 2*M_PI*floor((M_PI - angle)/(2*M_PI));
 }
 
@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
                  << vOdomRaws[r].x << " " << vOdomRaws[r].y << " " << normalizeAngle(vOdomRaws[r].theta) << "\n";
             continue;
         }
-        //! FIXME 插值方式需要改进，目前是直接线性插值，可能要改成Eular法
+        //! TODO 插值方式需要改进，目前是直接线性插值，可能要改成Eular法
         auto l = r - 1;
         double alpha = (t - vOdomRaws[l].timestamp)/(vOdomRaws[r].timestamp - vOdomRaws[l].timestamp);
         double x = vOdomRaws[l].x + alpha * (vOdomRaws[r].x - vOdomRaws[l].x);
