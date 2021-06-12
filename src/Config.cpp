@@ -100,7 +100,7 @@ void Config::readConfig(const std::string& path)
     DataPath = path;
 
     //! read camera config
-    std::string camParaPath = path + "../config/CamConfig.yml";
+    std::string camParaPath = path + "../se2lam_CamConfig.yml";
     cv::FileStorage camPara(camParaPath, cv::FileStorage::READ);
     assert(camPara.isOpened());
 
@@ -139,7 +139,7 @@ void Config::readConfig(const std::string& path)
     camPara.release();
 
     //! read setting
-    std::string settingsPath = path + "../config/Settings.yml";
+    std::string settingsPath = path + "../se2lam_Settings.yml";
     cv::FileStorage settings(settingsPath, cv::FileStorage::READ);
     assert(settings.isOpened());
 

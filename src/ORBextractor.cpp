@@ -288,7 +288,7 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int
 
     mvInvScaleFactor.resize(nlevels);
     mvInvLevelSigma2.resize(nlevels);
-    for (int i = 1; i < nlevels; i++) {
+    for (int i = 0; i < nlevels; i++) {
         mvInvScaleFactor[i] = 1.0f / mvScaleFactor[i];
         mvInvLevelSigma2[i] = 1.0f / mvLevelSigma2[i];
     }
@@ -407,11 +407,13 @@ void ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoi
     }
 }
 
+
 void ORBextractor::ComputePyramid(const cv::Mat& image, const cv::Mat& Mask)
 {
     for (int level = 0; level < nlevels; ++level) {
         float scale = mvInvScaleFactor[level];
         Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
+        assert(sz.width > 0 && sz.height > 0);
         Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
         Mat temp(wholeSize, image.type()), masktemp;
         mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));

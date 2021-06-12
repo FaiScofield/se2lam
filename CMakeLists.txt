@@ -115,7 +115,7 @@ if (G2O_FOUND)
 else()
     message("===> G2O Not Found!!!" )
 endif()
-
+set(G2O_USE_OPENGL ON)
 
 include_directories(
     ${PROJECT_SOURCE_DIR}

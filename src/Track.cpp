@@ -160,7 +160,12 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
     //! TODO mPrevMatched 应该是 refKF的KPs 应用了"到lastFrame的仿射变换A"后的预测点位置. 相当于先验了. 起的效果跟MatchByWindowWarp()应该是一致的!  mPrevMatched可以再乘上通过odom算出来的旋转, 会更精确
 //    mnKPMatches = mpORBmatcher->MatchByWindow(mLastFrame, mCurrentFrame, mPrevMatched, 50, mvKPMatchIdx, true);
     mnKPMatches = mpORBmatcher->MatchByWindowWarp(mLastFrame, mCurrentFrame, mAffineMatrix, mvKPMatchIdx, 25, true);
-    mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
+    if (mnKPMatches < 5 || mAffineMatrix.empty()) {
+        mAffineMatrix = Mat::eye(2, 3, CV_64FC1);
+        LOGW("KPMatches too less!! " << mnKPMatches);
+    } else {
+        mnKPsInline = RemoveOutliers(mLastFrame.keyPointsUn, mCurrentFrame.keyPointsUn, mvKPMatchIdx);
+    }
 
     // Check parallax and do triangulation
     mnMPsTracked = DoTriangulate();
@@ -172,11 +177,23 @@ void Track::TrackReferenceKF(const Mat& img, const Se2& odo)
 
 void Track::UpdateFramePose()
 {
-    mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;
-    Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;
+#if 1
+    mCurrentFrame.Trb = mCurrentFrame.odom - mpReferenceKF->odom;   // b2 - b1 = b1.inv() + b2 = Twb1,inv()*Twb2 = o_Tb1b2
+    // cout << "Trb = O2 - O1:  " << mCurrentFrame.Trb << endl;
+    Se2 dOdo = mpReferenceKF->odom - mCurrentFrame.odom;            // b1 - b2 = b2.inv() + b1 = Twb2.inv()*Twb1 = o_Tb2b1
+    // cout << "Tb2b1, O1 - O2: " << dOdo << endl;
     mCurrentFrame.Tcr = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
     mCurrentFrame.Tcw = mCurrentFrame.Tcr * mpReferenceKF->Tcw;
     mCurrentFrame.Twb = mpReferenceKF->Twb + mCurrentFrame.Trb;
+    // correction
+    // Se2 tmpTrb, tmpdOdo; 
+    // tmpTrb.fromCvSE3(mpReferenceKF->odom.toCvSE3().inv() * mCurrentFrame.odom.toCvSE3()); // Twb1.inv() * Twb2 = Tb1b2
+    // cout << "Trb, TO1.inv * TO2: " << endl << tmpTrb << endl;
+    // tmpdOdo.fromCvSE3(mCurrentFrame.odom.toCvSE3().inv() * mpReferenceKF->odom.toCvSE3());// Twb2.inv() * Twb1 = Tb2b1
+    // cout << "dOdo, TO2.inv * TO1: " << endl << tmpdOdo << endl;
+    // Se2 o_Tb2b1 = mCurrentFrame.odom.inv() + mpReferenceKF->odom;
+    // cout << "o_Tb2b1, O2.inv + O1 == O1 - O2 ?: " << endl << o_Tb2b1 << endl;
+#endif
 
     // preintegration
     Eigen::Map<Vector3d> meas(preSE2.meas);
@@ -203,7 +220,8 @@ void Track::UpdateFramePose()
 void Track::ResetLocalTrack()
 {
     // Need new KeyFrame decision
-    if (NeedNewKF()) {
+    bool bNeedNewKF = NeedNewKF();
+    if (bNeedNewKF) {
         assert(mpMap->getCurrentKF()->mIdKF == mpReferenceKF->mIdKF);
 
         // Insert KeyFrame
@@ -393,13 +411,12 @@ bool Track::NeedNewKF()
     bool bNeedKFByOdo = true;
     bool c5 = false, c6 = false;
     if (mbUseOdometry) {
-        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;
-        c5 = fabs(dOdo.theta) >= 0.8727f;  // 0.8727(50deg). orig: 0.0349(2deg)
-        cv::Mat cTc = Config::Tcb * Se2(dOdo.x, dOdo.y, dOdo.theta).toCvSE3() * Config::Tbc;
-        // cv::Mat xy = cTc.rowRange(0, 2).col(3);
-    cv::Mat xy = cTc.rowRange(0, 3).col(3);
+        Se2 dOdo = mCurrentFrame.odom - mpReferenceKF->odom;    // o_Tb1b2
+        c5 = fabs(dOdo.theta) >= 0.0349f;  // 0.8727(50deg). orig: 0.0349(2deg)
+        cv::Mat cTc = Config::Tcb * dOdo.toCvSE3() * Config::Tbc;
+        cv::Mat xy = cTc.rowRange(0, 3).col(3);
         // c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // orig: 3deg*0.1*UpperDepth
-        c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth);  // 10m高走半米
+        c6 = cv::norm(xy) >= (0.0523f * Config::UpperDepth * 0.1f);  // 10m高走半米
 
         bNeedKFByOdo = c5 || c6;
     }

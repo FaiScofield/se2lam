@@ -6,6 +6,13 @@ target_link_libraries(test_vn
     ${G2O_LIBS}
 )
 
+add_executable(run_pipeline_fzu_dataset run_pipeline_fzu_dataset.cpp)
+target_link_libraries(run_pipeline_fzu_dataset
+    se2lam
+    ${LINK_LIBS}
+    ${G2O_LIBS}
+)
+
 #add_executable(datapub datapub.cpp)
 #target_link_libraries(datapub
 #    se2lam
@@ -33,11 +40,11 @@ target_link_libraries(test_vn
 #     ${G2O_LIBS}
 # )
 
-add_executable(rkOdomToSE2 rkOdomToSE2.cpp)
-target_link_libraries(rkOdomToSE2
-   se2lam
-   ${LINK_LIBS}
-)
+#add_executable(rkOdomToSE2 rkOdomToSE2.cpp)
+#target_link_libraries(rkOdomToSE2
+#   se2lam
+#   ${LINK_LIBS}
+#)
 
 
 #####

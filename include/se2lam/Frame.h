@@ -74,14 +74,13 @@ public:
     // Compute the cell of a keypoint (return false if outside the grid)
     bool PosInGrid(cv::KeyPoint &kp, int &posX, int &posY);
 
-
-    // pose info: pose to ref KF, pose to World, odometry raw.
+    // pose info
     cv::Mat Tcr;
     cv::Mat Tcw;
 
-    Se2 Trb;     // ref KF to body
-    Se2 Twb;     // world to body
-    Se2 odom;    // odometry raw
+    Se2 Trb;     // 
+    Se2 Twb;     // calc from camera pose, starts from 0, same to `odom` in physics.
+    Se2 odom;    // odometry raw, not always starts from 0, same to `Twb` in physics.
 
     int id;
     static int nextId;

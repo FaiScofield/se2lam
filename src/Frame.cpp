@@ -96,8 +96,8 @@ Frame::Frame(const Mat& im, const Se2& odo, ORBextractor* extractor, const Mat& 
     }
 
     odom = odo;
-    // Tcw = cv::Mat::eye(4,4,CV_32FC1);
-    // Tcr = cv::Mat::eye(4,4,CV_32FC1);
+    Tcw = cv::Mat::eye(4,4,CV_32FC1);
+    Tcr = cv::Mat::eye(4,4,CV_32FC1);
 }
 
 Frame::Frame(const Frame& f)

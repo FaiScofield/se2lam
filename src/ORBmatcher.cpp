@@ -382,10 +382,12 @@ int ORBmatcher::MatchByWindowWarp(const Frame& frame1, const Frame& frame2, cons
         GMS::gms_matcher gms(frame1.mvKeyPoints, frame1.mImage.size(), frame2.mvKeyPoints, frame2.mImage.size(), vnMatches12);
         std::vector<bool> vbInliers;
         nmatches = gms.GetInlierMask(vbInliers, false, true);
-        assert(vbInliers.size() <= vnMatches12.size());
-        for (size_t i = 0, iend = vnMatches12.size(); i < iend; ++i) {
-            if (!vbInliers[i])
-                vnMatches12[i] = -1;
+        if (!vbInliers.empty()) {
+            assert(vbInliers.size() <= vnMatches12.size());
+            for (size_t i = 0, iend = vnMatches12.size(); i < iend; ++i) {
+                if (!vbInliers[i])
+                    vnMatches12[i] = -1;
+            }
         }
         return nmatches;
     }
